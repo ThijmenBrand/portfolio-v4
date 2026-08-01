@@ -1,0 +1,64 @@
+.window {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid #000;
+    position: absolute;
+    background-color: #fff;
+}
+
+.top-bar {
+    display: flex;
+    justify-content: space-between;
+    background-color: #777;
+    color: #fff;
+    padding: 5px;
+}
+
+.window.focused > .top-bar {
+    background-color: #0078d7;
+    color: #fff;
+}
+
+.window-button {
+    margin-left: 5px;
+    cursor: pointer;
+}
+
+.resize-handle[data-direction="se"] {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    right: 0;
+    bottom: 0;
+    cursor: se-resize;
+}
+
+.resize-handle[data-direction="e"] {
+    position: absolute;
+    width: 10px;
+    height: 95%;
+    right: 0;
+    top: 0;
+    cursor: e-resize;
+}
+
+.resize-handle[data-direction="s"] {
+    position: absolute;
+    width: 95%;
+    height: 10px;
+    bottom: 0;
+    left: 0;
+    cursor: s-resize;
+}
+
+.maximized {
+    width: 100% !important;
+    height: 100% !important;
+    top: 0 !important;
+    left: 0 !important;
+}
+
+.minimized {
+    display: none;
+}

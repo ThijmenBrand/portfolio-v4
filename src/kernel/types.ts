@@ -1,18 +1,4 @@
-export interface WindowOptions {
-  title: string;
-  width?: number;
-  height?: number;
-  x?: number;
-  y?: number;
-}
-
-export interface WindowHandle {
-  readonly id: number;
-  readonly body: HTMLElement;
-  setTitle(title: string): void;
-  close(): void;
-  onCloseRequest(callback: () => void): void;
-}
+import type { WindowHandle, WindowOptions } from "./windows/types";
 
 export interface KernelInterface {
   display: { root(): HTMLElement };

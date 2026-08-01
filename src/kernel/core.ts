@@ -1,15 +1,15 @@
 import { Display, type DisplayInterface } from "./display";
 import { isExecutable, resolve } from "./fs";
 import { ProcessManager, type ProcessManagerInterface } from "./processes";
-import { createSyscalls, type SyscallTarget } from "./syscalls";
-import type {
-  Executable,
-  KernelInterface,
-  Process,
-  WindowHandle,
-  WindowOptions,
-} from "./types";
-import { WindowManager, type WindowManagerInterface } from "./windows";
+import {
+  createSyscalls,
+  createWindowHandle,
+  type SyscallTarget,
+} from "./syscalls";
+import type { Executable, KernelInterface, Process } from "./types";
+import type { WindowHandle, WindowOptions } from "./windows/types";
+import { WindowManager } from "./windows/manager";
+import type { WindowManagerInterface } from "./windows/managerInterface";
 
 export class KernelCore implements SyscallTarget {
   public readonly os: KernelInterface;
@@ -43,10 +43,6 @@ export class KernelCore implements SyscallTarget {
       throw new Error(`ENOENT: No such file or directory, ${path}`);
     }
 
-    console.log(
-      `Spawning process at ${path} with args ${args} and parent PID ${parentPid}`,
-    );
-
     const process = this.processManager.allocate({
       parentPid,
       args,
@@ -64,26 +60,48 @@ export class KernelCore implements SyscallTarget {
   }
 
   public createWindow(options: WindowOptions, ownerPid: number): WindowHandle {
-    return {
-      id: Math.floor(Math.random() * 1000000),
-      body: document.createElement("div"),
-      setTitle(title: string) {
-        console.log(`Setting window title to ${title}`);
-      },
-      close() {
-        console.log(`Closing window with id ${this.id}`);
-      },
-      onCloseRequest(callback: () => void) {
-        console.log(
-          `Registering onCloseRequest callback for window with id ${this.id}`,
-        );
-      },
-    };
+    const proc = this.processManager.get(ownerPid);
+    if (!proc) {
+      throw new Error(`ESRCH: No such process, ${ownerPid}`);
+    }
+
+    const windowRecord = this.windowManager.createWindow(options, ownerPid);
+    proc.windowIds.push(windowRecord.id);
+
+    return createWindowHandle(
+      this,
+      ownerPid,
+      windowRecord.id,
+      windowRecord.bodyEl,
+    );
+  }
+
+  public setWindowTitle(windowId: number, pid: number, title: string): void {
+    this.windowManager.validateWindowOwnership(windowId, pid);
+    this.windowManager.setTitle(windowId, title);
+  }
+
+  public closeWindow(windowId: number, pid: number): void {
+    this.windowManager.validateWindowOwnership(windowId, pid);
+    const proc = this.processManager.get(pid);
+    if (proc) {
+      proc.windowIds = proc.windowIds.filter((id) => id !== windowId);
+    }
+    this.windowManager.destroy(windowId);
+  }
+
+  public onWindowCloseRequest(
+    windowId: number,
+    pid: number,
+    callback: () => void,
+  ): void {
+    this.windowManager.validateWindowOwnership(windowId, pid);
+    this.windowManager.addCloseRequestHandler(windowId, callback);
   }
 
   public getDisplayRoot(pid: number): HTMLElement {
     this.requirePrivilege(pid, this.getDisplayRoot.name);
-    return this.display.getRoot();
+    return this.display.getDesktopLayer();
   }
 
   private requirePrivilege(pid: number, syscall: string): Process {

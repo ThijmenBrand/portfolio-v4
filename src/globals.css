@@ -6,5 +6,12 @@
     background-color: black;
 }
 
-#layer-windows { pointer-events: none; }
-#layer-windows > .window { pointer-events: auto; }
+#desktop-layer, #window-layer {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    user-select: none;
+}
+
+#window-layer { pointer-events: none; }
+#window-layer > .window { pointer-events: auto; }

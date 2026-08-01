@@ -4,7 +4,30 @@ export interface SyscallTarget {
   spawn(path: string, args: string[], parentPid: number): number;
   exit(pid: number, code: number): void;
   createWindow(options: WindowOptions, ownerPid: number): WindowHandle;
+  setWindowTitle(windowId: number, pid: number, title: string): void;
+  closeWindow(windowId: number, pid: number): void;
+  onWindowCloseRequest(
+    windowId: number,
+    pid: number,
+    callback: () => void,
+  ): void;
   getDisplayRoot(pid: number): HTMLElement;
+}
+
+export function createWindowHandle(
+  target: SyscallTarget,
+  pid: number,
+  windowId: number,
+  body: HTMLElement,
+): WindowHandle {
+  return {
+    id: windowId,
+    body: body,
+    setTitle: (title: string) => target.setWindowTitle(windowId, pid, title),
+    close: () => target.closeWindow(windowId, pid),
+    onCloseRequest: (callback: () => void) =>
+      target.onWindowCloseRequest(windowId, pid, callback),
+  };
 }
 
 export function createSyscalls(

@@ -4,6 +4,10 @@ import type { KernelInterface } from "../../kernel/types";
 import desktopHTML from "./desktop.html?raw";
 import appIconHTML from "./app-icon.html?raw";
 import "./desktop.css";
+import {
+  htmlStringToTemplate,
+  selectElementFromTemplate,
+} from "../../utils/html";
 
 export function main(os: KernelInterface): void {
   const root = os.display.root();
@@ -49,21 +53,18 @@ class Desktop {
   }
 
   private renderAppIcon(app: AppEntry): HTMLElement {
-    const template = document.createElement("template");
-    template.innerHTML = appIconHTML.trim();
-    const appIcon = template.content.firstElementChild as HTMLElement;
-    const icon = appIcon.querySelector(
+    const appIcon = htmlStringToTemplate(appIconHTML);
+    const icon = selectElementFromTemplate<HTMLImageElement>(
+      appIcon,
       "#desktop-app-icon-img",
-    ) as HTMLImageElement;
-    if (icon) {
-      icon.src = app.icon;
-    }
-    const name = appIcon.querySelector(
+    );
+    icon.src = app.icon;
+
+    const name = selectElementFromTemplate<HTMLParagraphElement>(
+      appIcon,
       "#desktop-app-name",
-    ) as HTMLParagraphElement;
-    if (name) {
-      name.textContent = app.name;
-    }
+    );
+    name.textContent = app.name;
 
     appIcon.addEventListener("dblclick", () => {
       this.os.process.spawn(app.exec);
