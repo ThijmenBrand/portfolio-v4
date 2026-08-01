@@ -10,7 +10,13 @@ export interface KernelInterface {
     wait(pid: number): Promise<Termination>;
     spawn(path: string, args?: string[]): number;
     exit(code?: number): void;
-    list(): { pid: number; path: string; status: string }[];
+    list(): ProcessInfo[];
+    kill(pid: number, signal: Signal, code?: number): void;
+    history(): readonly ExitRecord[];
+  };
+  timers: {
+    setInterval(callback: () => void, ms: number): number;
+    clearInterval(id: number): void;
   };
 }
 
@@ -77,6 +83,15 @@ export interface Process {
   waiters: Array<(termination: Termination) => void>;
   abortController: AbortController;
   signalHandlers: Map<Signal, () => void>;
+}
+
+export interface ProcessInfo {
+  pid: number;
+  parentPid: number;
+  path: string;
+  status: ProcessStatus;
+  startedAt: number;
+  termination?: Termination;
 }
 
 export interface ProcessInit {

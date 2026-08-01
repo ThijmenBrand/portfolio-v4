@@ -130,7 +130,7 @@ export class ProcessManager implements ProcessManagerInterface {
     }
   }
 
-  reap(pid: number): void {
+  public reap(pid: number): void {
     const process = this.processes.get(pid);
     if (!process || !process.termination) {
       return;

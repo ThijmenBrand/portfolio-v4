@@ -6,6 +6,7 @@ import type {
   WindowCommmands,
   WindowOptions,
   WindowRecord,
+  WindowSystemActions,
 } from "./types";
 import { WindowGeometry, type WindowGeometryInterface } from "./geometry";
 import { WindowChrome, type WindowChromeInterface } from "./windowChrome";
@@ -19,17 +20,19 @@ export class WindowManager implements WindowManagerInterface {
   private readonly WindowChrome: WindowChromeInterface;
 
   private readonly windowLayer: HTMLElement;
+  private readonly actions: WindowSystemActions;
 
   private windows: Map<number, WindowRecord> = new Map();
   private nextWindowId: number = 1;
   private zCounter: number = 0;
   private focusedId: number | null = null;
 
-  constructor(windowLayer: HTMLElement) {
+  constructor(windowLayer: HTMLElement, actions: WindowSystemActions) {
     this.WindowGeometry = new WindowGeometry();
     this.WindowChrome = new WindowChrome();
 
     this.windowLayer = windowLayer;
+    this.actions = actions;
   }
 
   public createWindow(options: WindowOptions, ownerPid: number): WindowRecord {
@@ -154,21 +157,6 @@ export class WindowManager implements WindowManagerInterface {
     windowRecord.closeRequestHandlers.push(handler);
   }
 
-  public requestClose(windowId: number): void {
-    const windowRecord = this.getWindowRecord(windowId);
-
-    windowRecord.closeRequestHandlers.forEach((handler) => {
-      try {
-        handler();
-      } catch (error) {
-        console.error(
-          `Error in close request handler for window ${windowId}:`,
-          error,
-        );
-      }
-    });
-  }
-
   public validateWindowOwnership(windowId: number, pid: number): void {
     const windowRecord = this.getWindowRecord(windowId);
     if (windowRecord.ownerPid !== pid) {
@@ -215,6 +203,38 @@ export class WindowManager implements WindowManagerInterface {
     }
 
     this.focusTopmostWindow();
+  }
+
+  public requestClose(windowId: number): void {
+    const record = this.getWindowRecord(windowId);
+
+    if (record.closeRequestHandlers.length === 0) {
+      this.actions.defaultClose(windowId, record.ownerPid);
+      return;
+    }
+
+    if (record.closeRequestedAt !== undefined) {
+      this.actions.forceClose(windowId, record.ownerPid);
+      return;
+    }
+
+    record.closeRequestedAt = Date.now();
+    for (const handler of [...record.closeRequestHandlers]) {
+      try {
+        handler();
+      } catch (error) {
+        console.error(
+          `Error in close request handler for window ${windowId}:`,
+          error,
+        );
+      }
+    }
+  }
+
+  public windowCountFor(pid: number): number {
+    return Array.from(this.windows.values()).filter(
+      (record) => record.ownerPid === pid,
+    ).length;
   }
 
   private focusTopmostWindow(): void {

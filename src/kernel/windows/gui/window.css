@@ -7,6 +7,12 @@
     background-color: #fff;
 }
 
+#window-content {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+}
+
 .top-bar {
     display: flex;
     justify-content: space-between;

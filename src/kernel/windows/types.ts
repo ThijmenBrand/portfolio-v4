@@ -18,6 +18,7 @@ export interface WindowRecord {
   bodyEl: HTMLElement;
   zIndex: number;
   closeRequestHandlers: Array<() => void>;
+  closeRequestedAt?: number;
   frame: Rect;
   restoreFrame?: Rect;
   state: "normal" | "maximized";
@@ -55,4 +56,9 @@ export interface WindowCommmands {
   minimizeWindow(): void;
   focusWindow(): void;
   requestClose(): void;
+}
+
+export interface WindowSystemActions {
+  defaultClose(windowId: number, ownerPid: number): void;
+  forceClose(windowId: number, ownerPid: number): void;
 }

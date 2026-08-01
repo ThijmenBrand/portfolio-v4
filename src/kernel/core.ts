@@ -14,6 +14,8 @@ import type {
   KernelInterface,
   ProcessSignal,
   Termination,
+  ProcessInfo,
+  ExitRecord,
 } from "./types";
 import type { WindowHandle, WindowOptions } from "./windows/types";
 import { WindowManager } from "./windows/manager";
@@ -31,7 +33,12 @@ export class KernelCore implements SyscallTarget {
   constructor(screen: HTMLElement) {
     this.display = new Display(screen);
     this.processManager = new ProcessManager();
-    this.windowManager = new WindowManager(this.display.getWindowLayer());
+    this.windowManager = new WindowManager(this.display.getWindowLayer(), {
+      defaultClose: (windowId: number, ownerPid: number) =>
+        this.defaultClose(windowId, ownerPid),
+      forceClose: (windowId: number, ownerPid: number) =>
+        this.forceClose(windowId, ownerPid),
+    });
 
     this.processManager.allocate({
       parentPid: 0,
@@ -71,7 +78,7 @@ export class KernelCore implements SyscallTarget {
     this.terminate(pid, code, "exit");
   }
 
-  public ps(): { pid: number; path: string; status: string }[] {
+  public ps(): ProcessInfo[] {
     return this.processManager.list().map((p) => ({
       pid: p.pid,
       parentPid: p.parentPid,
@@ -187,6 +194,27 @@ export class KernelCore implements SyscallTarget {
     });
   }
 
+  public setInterval(pid: number, fn: () => void, ms: number): number {
+    this.requireAlive(pid);
+    const timer = window.setInterval(() => {
+      try {
+        fn();
+      } catch (error) {
+        console.error(`interval in process ${pid}:`, error);
+      }
+    }, ms);
+
+    return this.processManager.registerResource(pid, "interval", () =>
+      window.clearInterval(timer),
+    );
+  }
+
+  public clearInterval(pid: number, resourceId: number): void {
+    const proc = this.processManager.get(pid);
+    proc?.resources.get(resourceId)?.dispose();
+    this.processManager.unregisterResource(pid, resourceId);
+  }
+
   public kill(pid: number, signal: Signal, senderPid: number): void {
     this.requireAlive(pid);
     // check if senderPid is parent of pid or senderPid is privileged
@@ -213,8 +241,8 @@ export class KernelCore implements SyscallTarget {
       case "SIGTERM":
       case "SIGINT":
       case "SIGHUP":
-        if (this.deliver(targetProc, signal)) this.armWatchdog(pid, signal);
-        else this.terminate(pid, 143, "signal", signal);
+        if (!this.deliver(targetProc, signal))
+          this.terminate(pid, 143, "signal", signal);
         return;
       case "SIGCHLD":
         this.deliver(targetProc, signal);
@@ -224,6 +252,10 @@ export class KernelCore implements SyscallTarget {
         throw new Error(`EINVAL: Unknown signal ${exhaustive}`);
       }
     }
+  }
+
+  public history(): readonly ExitRecord[] {
+    return this.processManager.history();
   }
 
   private deliver(proc: Process, signal: Signal): boolean {
@@ -325,6 +357,23 @@ export class KernelCore implements SyscallTarget {
     ) {
       this.processManager.reap(pid);
     }
+
+    console.log(
+      `Process ${pid} terminated with code ${code}, reason: ${reason}${
+        signal ? `, signal: ${signal}` : ""
+      }`,
+    );
+  }
+
+  private defaultClose(windowId: number, ownerPid: number): void {
+    this.windowManager.destroy(windowId);
+    if (this.windowManager.windowCountFor(ownerPid) === 0) {
+      this.kill(ownerPid, "SIGTERM", 0);
+    }
+  }
+
+  private forceClose(_windowId: number, ownerPid: number): void {
+    this.kill(ownerPid, "SIGKILL", 0);
   }
 
   private requireAlive(pid: number): Process {

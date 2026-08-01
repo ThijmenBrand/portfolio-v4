@@ -12,6 +12,28 @@ import {
 export function main(os: KernelInterface): void {
   const root = os.display.root();
   new Desktop(os, registry, root);
+
+  os.process.onSignal("SIGTERM", () => {
+    root.innerHTML = "";
+    os.process.exit(0);
+  });
+
+  os.process.onSignal("SIGCHLD", () => {
+    const zombies = os.process
+      .list()
+      .filter(
+        (proc) => proc.parentPid === os.process.pid && proc.status === "zombie",
+      );
+
+    for (const child of zombies) {
+      os.process
+        .wait(child.pid)
+        .then((t) =>
+          console.log(`[init] reaped ${child.pid} ${child.path} → ${t.code}`),
+        )
+        .catch(() => {});
+    }
+  });
 }
 
 class Desktop {

@@ -1,11 +1,6 @@
 import type { KernelInterface } from "../../kernel/types";
-import { Signal } from "../../kernel/types";
 
 export function main(os: KernelInterface): void {
-  os.process.onSignal(Signal.SIGTERM, () => {
-    console.log(`Process ${os.process.pid} received SIGTERM signal`);
-  });
-
   const handle = os.windows.create({
     title: "Terminal",
     width: 600,
@@ -15,9 +10,12 @@ export function main(os: KernelInterface): void {
     maxWidth: 1200,
     maxHeight: 800,
   });
+
   handle.onCloseRequest(() => {
     handle.close();
+    os.process.exit(0);
   });
+
   handle.setTitle("Terminal");
   handle.body.innerHTML = "<h1>Welcome to the Terminal</h1>";
   const processList = os.process.list();

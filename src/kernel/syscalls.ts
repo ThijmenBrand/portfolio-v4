@@ -1,5 +1,7 @@
 import type {
+  ExitRecord,
   KernelInterface,
+  ProcessInfo,
   ProcessSignal,
   Signal,
   Termination,
@@ -18,10 +20,14 @@ export interface SyscallTarget {
     callback: () => void,
   ): void;
   getDisplayRoot(pid: number): HTMLElement;
-  ps(): { pid: number; path: string; status: string }[];
+  ps(): ProcessInfo[];
   getProcessSignal(pid: number): ProcessSignal;
   onSignal(pid: number, signal: Signal, handler: () => void): void;
   wait(pid: number, callerPid: number): Promise<Termination>;
+  setInterval(pid: number, callback: () => void, ms: number): number;
+  clearInterval(pid: number, id: number): void;
+  kill(pid: number, signal: Signal, senderPid: number): void;
+  history(): readonly ExitRecord[];
 }
 
 export function createWindowHandle(
@@ -65,6 +71,14 @@ export function createSyscalls(
       list: () => target.ps(),
       onSignal: (signal: Signal, handler: () => void) =>
         target.onSignal(pid, signal, handler),
+      kill: (targetPid: number, signal: Signal) =>
+        target.kill(targetPid, signal, pid),
+      history: () => target.history(),
+    },
+    timers: {
+      setInterval: (callback: () => void, ms: number) =>
+        target.setInterval(pid, callback, ms),
+      clearInterval: (id: number) => target.clearInterval(pid, id),
     },
   };
 }

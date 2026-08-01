@@ -13,6 +13,10 @@ const files: Record<string, FileEntry> = {
   "/ProgramFiles/terminal": {
     load: () => import("../apps/terminal/main"),
   },
+  "/ProgramFiles/debug-ps": {
+    load: () => import("../System/DebugPs/debug-ps"),
+    privileged: true,
+  },
 };
 
 export function resolve(path: string): FileEntry | undefined {

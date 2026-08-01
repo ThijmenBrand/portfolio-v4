@@ -8,4 +8,5 @@ export interface WindowManagerInterface {
   requestClose(windowId: number): void;
   validateWindowOwnership(windowId: number, pid: number): void;
   releaseFor(pid: number): void;
+  windowCountFor(pid: number): number;
 }
