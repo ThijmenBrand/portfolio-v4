@@ -157,9 +157,16 @@ export class WindowManager implements WindowManagerInterface {
   public requestClose(windowId: number): void {
     const windowRecord = this.getWindowRecord(windowId);
 
-    console.log(`Requesting close for window ${windowId}`);
-
-    windowRecord.closeRequestHandlers.forEach((handler) => handler());
+    windowRecord.closeRequestHandlers.forEach((handler) => {
+      try {
+        handler();
+      } catch (error) {
+        console.error(
+          `Error in close request handler for window ${windowId}:`,
+          error,
+        );
+      }
+    });
   }
 
   public validateWindowOwnership(windowId: number, pid: number): void {
@@ -189,6 +196,25 @@ export class WindowManager implements WindowManagerInterface {
     }
 
     this.WindowChrome.applyStateToWindow(record, true);
+  }
+
+  public releaseFor(pid: number): void {
+    const windowsToRelease = Array.from(this.windows.values()).filter(
+      (record) => record.ownerPid === pid,
+    );
+
+    for (const record of windowsToRelease) {
+      try {
+        this.destroy(record.id);
+      } catch (error) {
+        console.error(
+          `Error destroying window ${record.id} for PID ${pid}:`,
+          error,
+        );
+      }
+    }
+
+    this.focusTopmostWindow();
   }
 
   private focusTopmostWindow(): void {

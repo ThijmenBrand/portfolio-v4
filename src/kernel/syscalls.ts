@@ -1,4 +1,10 @@
-import type { KernelInterface, WindowHandle, WindowOptions } from "./types";
+import type {
+  KernelInterface,
+  ProcessSignal,
+  Signal,
+  Termination,
+} from "./types";
+import type { WindowHandle, WindowOptions } from "./windows/types";
 
 export interface SyscallTarget {
   spawn(path: string, args: string[], parentPid: number): number;
@@ -12,6 +18,10 @@ export interface SyscallTarget {
     callback: () => void,
   ): void;
   getDisplayRoot(pid: number): HTMLElement;
+  ps(): { pid: number; path: string; status: string }[];
+  getProcessSignal(pid: number): ProcessSignal;
+  onSignal(pid: number, signal: Signal, handler: () => void): void;
+  wait(pid: number, callerPid: number): Promise<Termination>;
 }
 
 export function createWindowHandle(
@@ -42,12 +52,19 @@ export function createSyscalls(
       create: (options: WindowOptions) => target.createWindow(options, pid),
     },
     process: {
+      get signal() {
+        return target.getProcessSignal(pid);
+      },
       get pid() {
         return pid;
       },
       spawn: (path: string, args: string[] = []) =>
         target.spawn(path, args, pid),
+      wait: (childPid: number) => target.wait(childPid, pid),
       exit: (code?: number) => target.exit(pid, code ?? 0),
+      list: () => target.ps(),
+      onSignal: (signal: Signal, handler: () => void) =>
+        target.onSignal(pid, signal, handler),
     },
   };
 }

@@ -7,4 +7,5 @@ export interface WindowManagerInterface {
   addCloseRequestHandler(windowId: number, handler: () => void): void;
   requestClose(windowId: number): void;
   validateWindowOwnership(windowId: number, pid: number): void;
+  releaseFor(pid: number): void;
 }
