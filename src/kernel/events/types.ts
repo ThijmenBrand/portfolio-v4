@@ -26,12 +26,32 @@ type window_destroyed = {
   pid: Pid;
   windowId: WindowId;
 };
+type window_title_changed = {
+  type: "window.titleChanged";
+  pid: Pid;
+  windowId: WindowId;
+  title: string;
+};
+type window_focused = {
+  type: "window.focused";
+  pid: Pid;
+  windowId: WindowId;
+};
+type window_minimized = {
+  type: "window.minimized";
+  pid: Pid;
+  windowId: WindowId;
+  minimized: boolean;
+};
 
 export type KernelEvent =
   | process_spawned
   | process_exited
   | window_created
-  | window_destroyed;
+  | window_destroyed
+  | window_title_changed
+  | window_focused
+  | window_minimized;
 
 export type EventType = KernelEvent["type"];
 

@@ -1,0 +1,54 @@
+.taskbar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 48px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  background: #1e1e1e;
+  border-top: 1px solid #3a3a3a;
+  pointer-events: auto; /* the layer itself is pointer-events: none */
+}
+
+.taskbar-tasks {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+}
+
+.task-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 4px;
+  background: #2b2b2b;
+  color: #e6e6e6;
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.task-button:hover { background: #383838; }
+.task-button.is-active { background: #3d3d3d; border-bottom-color: #4c9aff; }
+.task-button.is-minimized { opacity: 0.55; }
+
+.task-button-icon { width: 18px; height: 18px; }
+
+.task-button-count {
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: #4c4c4c;
+  font-size: 11px;
+  text-align: center;
+}
+.task-button-count:empty { display: none; }

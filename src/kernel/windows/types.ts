@@ -71,3 +71,12 @@ export type WindowEvent = Extract<KernelEvent, { type: `window.${string}` }>;
 export interface WindowEvents {
   emit(event: WindowEvent): void;
 }
+
+export interface WindowInfo {
+  windowId: WindowId;
+  pid: Pid;
+  title: string;
+  minimized: boolean;
+  state: "normal" | "maximized";
+  focused: boolean;
+}

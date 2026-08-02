@@ -3,6 +3,7 @@ import { kernelError } from "./errors";
 export interface DisplayInterface {
   getDesktopLayer(): HTMLElement;
   getWindowLayer(): HTMLElement;
+  getTaskbarLayer(): HTMLElement;
 }
 
 export class Display {
@@ -26,5 +27,13 @@ export class Display {
       throw kernelError("ENODEV", "Window layer not found");
     }
     return windowLayer;
+  }
+
+  public getTaskbarLayer(): HTMLElement {
+    let taskbarLayer = this.screen.querySelector<HTMLElement>("#taskbar-layer");
+    if (!taskbarLayer) {
+      throw kernelError("ENODEV", "Taskbar layer not found");
+    }
+    return taskbarLayer;
   }
 }

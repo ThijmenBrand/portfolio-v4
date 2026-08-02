@@ -1,32 +1,5 @@
-import type { EventHandler, EventType } from "./events/types";
 import type { Signal } from "./proc/signals";
-import type { WindowHandle, WindowOptions } from "./windows/types";
-
-export interface KernelInterface {
-  display: { root(): HTMLElement };
-  windows: { create(options: WindowOptions): WindowHandle };
-  process: {
-    readonly signal: ProcessSignal;
-    readonly pid: Pid;
-    onSignal(signal: Signal, handler: () => void): void;
-    wait(pid: Pid): Promise<Termination>;
-    spawn(path: string, args?: string[]): Pid;
-    exit(code?: number): void;
-    list(): ProcessInfo[];
-    kill(pid: Pid, signal: Signal, code?: number): void;
-    history(): readonly ExitRecord[];
-  };
-  timers: {
-    setInterval(callback: () => void, ms: number): number;
-    clearInterval(id: number): void;
-  };
-  events: {
-    subscribe<T extends EventType>(
-      types: readonly T[],
-      handler: EventHandler<T>,
-    ): () => void;
-  };
-}
+import type { KernelInterface } from "./syscalls/api";
 
 export type Pid = number & { readonly __brand: "pid" };
 export type WindowId = number & { readonly __brand: "windowId" };

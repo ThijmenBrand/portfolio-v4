@@ -17,6 +17,10 @@ const files: Record<string, FileEntry> = {
     load: () => import("../System/DebugPs/debug-ps"),
     privileged: true,
   },
+  "/ProgramFiles/taskbar": {
+    load: () => import("../System/Taskbar/main"),
+    privileged: true,
+  },
 };
 
 export function resolve(path: string): FileEntry | undefined {

@@ -2,7 +2,7 @@ import type { KernelContext } from "../context";
 import type { Pid, WindowId } from "../types";
 import type { WindowOptions } from "../windows/types";
 import { bindWindowHandle } from "./api";
-import { alive } from "./guards";
+import { alive, requirePrivilege } from "./guards";
 import type { SyscallTable } from "./table";
 
 export type WindowHandleCommands = Pick<
@@ -12,12 +12,35 @@ export type WindowHandleCommands = Pick<
 
 export function windowSyscalls(
   ctx: KernelContext,
-): Pick<SyscallTable, "createWindow"> & WindowHandleCommands {
-  const slice: Pick<SyscallTable, "createWindow"> & WindowHandleCommands = {
+): Pick<
+  SyscallTable,
+  "createWindow" | "listWindows" | "focusWindow" | "setMinimized"
+> &
+  WindowHandleCommands {
+  const slice: Pick<
+    SyscallTable,
+    "createWindow" | "listWindows" | "focusWindow" | "setMinimized"
+  > &
+    WindowHandleCommands = {
     createWindow: alive(ctx, (pid: Pid, windowOptions: WindowOptions) => {
       const windowRecord = ctx.windows.createWindow(windowOptions, pid);
       return bindWindowHandle(pid, slice, windowRecord.id, windowRecord.bodyEl);
     }),
+    listWindows: alive(ctx, (pid: Pid) => {
+      requirePrivilege(ctx, pid, "listWindows");
+      return ctx.windows.listWindows();
+    }),
+    focusWindow: alive(ctx, (pid: Pid, windowId: WindowId) => {
+      requirePrivilege(ctx, pid, "focusWindow");
+      ctx.windows.focusWindow(windowId);
+    }),
+    setMinimized: alive(
+      ctx,
+      (pid: Pid, windowId: WindowId, minimized: boolean) => {
+        requirePrivilege(ctx, pid, "setMinimized");
+        ctx.windows.setMinimized(windowId, minimized);
+      },
+    ),
     setWindowTitle: alive(
       ctx,
       (pid: Pid, windowId: WindowId, title: string) => {

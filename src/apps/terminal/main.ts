@@ -1,4 +1,4 @@
-import type { KernelInterface } from "../../kernel/types";
+import type { KernelInterface } from "../../kernel/syscalls/api";
 
 export function main(os: KernelInterface): void {
   const handle = os.windows.create({

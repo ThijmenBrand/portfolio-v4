@@ -1,5 +1,5 @@
 import type { Pid, WindowId } from "../types";
-import type { WindowOptions, WindowRecord } from "./types";
+import type { WindowInfo, WindowOptions, WindowRecord } from "./types";
 
 export interface WindowManagerInterface {
   createWindow(options: WindowOptions, ownerPid: Pid): WindowRecord;
@@ -10,4 +10,7 @@ export interface WindowManagerInterface {
   validateWindowOwnership(windowId: WindowId, pid: Pid): void;
   releaseFor(pid: Pid): void;
   windowCountFor(pid: Pid): number;
+  listWindows(): Array<WindowInfo>;
+  focusWindow(windowId: WindowId): void;
+  setMinimized(windowId: WindowId, minimized: boolean): void;
 }

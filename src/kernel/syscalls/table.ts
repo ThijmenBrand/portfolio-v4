@@ -9,7 +9,7 @@ import type {
   Termination,
   WindowId,
 } from "../types";
-import type { WindowHandle, WindowOptions } from "../windows/types";
+import type { WindowHandle, WindowInfo, WindowOptions } from "../windows/types";
 import { displaySyscalls } from "./display";
 import { eventsSyscalls } from "./events";
 import { processSyscalls } from "./process";
@@ -21,6 +21,9 @@ export interface SyscallTable {
   exit(callerPid: Pid, code: number): void;
   createWindow(callerPid: Pid, options: WindowOptions): WindowHandle;
   setWindowTitle(callerPid: Pid, windowId: WindowId, title: string): void;
+  listWindows(callerPid: Pid): Array<WindowInfo>;
+  focusWindow(callerPid: Pid, windowId: WindowId): void;
+  setMinimized(callerPid: Pid, windowId: WindowId, minimized: boolean): void;
   closeWindow(callerPid: Pid, windowId: WindowId): void;
   onWindowCloseRequest(
     callerPid: Pid,
@@ -28,6 +31,7 @@ export interface SyscallTable {
     db: () => void,
   ): void;
   getDisplayRoot(callerPid: Pid): HTMLElement;
+  getTaskbarRoot(callerPid: Pid): HTMLElement;
   list(callerPid: Pid): ProcessInfo[];
   getSignal(callerPid: Pid): ProcessSignal;
   onSignal(callerPid: Pid, signal: Signal, handler: () => void): void;

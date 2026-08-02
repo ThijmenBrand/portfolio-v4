@@ -5,6 +5,7 @@ import type {
   Rect,
   WindowCommmands,
   WindowEvents,
+  WindowInfo,
   WindowOptions,
   WindowRecord,
   WindowSystemActions,
@@ -89,7 +90,7 @@ export class WindowManager implements WindowManagerInterface {
       title: options.title,
     });
 
-    this.handleWindowFocus(record.id);
+    this.focusWindow(record.id);
     return record;
   }
 
@@ -100,6 +101,13 @@ export class WindowManager implements WindowManagerInterface {
     }
 
     windowRecord.titleEl.textContent = title;
+
+    this.events.emit({
+      type: "window.titleChanged",
+      pid: windowRecord.ownerPid,
+      windowId: windowRecord.id,
+      title: title,
+    });
   }
 
   public moveWindow(windowId: WindowId, x: number, y: number): void {
@@ -160,6 +168,13 @@ export class WindowManager implements WindowManagerInterface {
     }
 
     this.WindowChrome.applyStateToWindow(record, this.focusedId === windowId);
+
+    this.events.emit({
+      type: "window.minimized",
+      pid: record.ownerPid,
+      windowId: record.id,
+      minimized: minimized,
+    });
   }
 
   public destroy(windowId: WindowId): void {
@@ -205,7 +220,7 @@ export class WindowManager implements WindowManagerInterface {
     }
   }
 
-  public handleWindowFocus(windowId: WindowId): void {
+  public focusWindow(windowId: WindowId): void {
     if (this.focusedId === windowId) return;
 
     const record = this.getWindowRecord(windowId);
@@ -223,6 +238,18 @@ export class WindowManager implements WindowManagerInterface {
     }
 
     this.WindowChrome.applyStateToWindow(record, true);
+
+    this.events.emit({
+      type: "window.focused",
+      pid: record.ownerPid,
+      windowId: record.id,
+    });
+    this.events.emit({
+      type: "window.minimized",
+      pid: record.ownerPid,
+      windowId: record.id,
+      minimized: false,
+    });
   }
 
   public releaseFor(pid: Pid): void {
@@ -274,6 +301,17 @@ export class WindowManager implements WindowManagerInterface {
     ).length;
   }
 
+  public listWindows(): WindowInfo[] {
+    return Array.from(this.windows.values()).map((record) => ({
+      windowId: record.id,
+      pid: record.ownerPid,
+      title: record.titleEl.textContent || "",
+      minimized: record.minimized,
+      state: record.state,
+      focused: this.focusedId === record.id,
+    }));
+  }
+
   private focusTopmostWindow(): void {
     let topmost: WindowRecord | null = null;
 
@@ -283,7 +321,7 @@ export class WindowManager implements WindowManagerInterface {
     }
 
     if (topmost) {
-      this.handleWindowFocus(topmost.id);
+      this.focusWindow(topmost.id);
     }
   }
 
@@ -295,7 +333,7 @@ export class WindowManager implements WindowManagerInterface {
       setWindowState: (state: "normal" | "maximized") =>
         this.setWindowState(windowRecord.id, state),
       minimizeWindow: () => this.setMinimized(windowRecord.id, true),
-      focusWindow: () => this.handleWindowFocus(windowRecord.id),
+      focusWindow: () => this.focusWindow(windowRecord.id),
       requestClose: () => this.requestClose(windowRecord.id),
     };
   }

@@ -1,5 +1,4 @@
 import { registry, type AppEntry } from "../../apps/registry";
-import type { KernelInterface } from "../../kernel/types";
 
 import desktopHTML from "./desktop.html?raw";
 import appIconHTML from "./app-icon.html?raw";
@@ -9,13 +8,17 @@ import {
   selectElementFromTemplate,
 } from "../../utils/html";
 import { kernelError } from "../../kernel/errors";
+import type { KernelInterface } from "../../kernel/syscalls/api";
 
 export function main(os: KernelInterface): void {
   const root = os.display.root();
   new Desktop(os, registry, root);
 
+  const taskbarPid = os.process.spawn("/ProgramFiles/taskbar");
+
   os.process.onSignal("SIGTERM", () => {
     root.innerHTML = "";
+    os.process.kill(taskbarPid, "SIGTERM");
     os.process.exit(0);
   });
 

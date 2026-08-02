@@ -5,11 +5,15 @@ import type { SyscallTable } from "./table";
 
 export function displaySyscalls(
   ctx: KernelContext,
-): Pick<SyscallTable, "getDisplayRoot"> {
+): Pick<SyscallTable, "getDisplayRoot" | "getTaskbarRoot"> {
   return {
     getDisplayRoot: alive(ctx, (pid: Pid) => {
       requirePrivilege(ctx, pid, "getDisplayRoot");
       return ctx.display.getDesktopLayer();
+    }),
+    getTaskbarRoot: alive(ctx, (pid: Pid) => {
+      requirePrivilege(ctx, pid, "getTaskbarRoot");
+      return ctx.display.getTaskbarLayer();
     }),
   };
 }

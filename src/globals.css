@@ -13,5 +13,13 @@
     user-select: none;
 }
 
+#taskbar-layer {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    user-select: none;
+    pointer-events: none;
+}
+
 #window-layer { pointer-events: none; }
 #window-layer > .window { pointer-events: auto; }

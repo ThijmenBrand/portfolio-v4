@@ -1,7 +1,8 @@
 import type { DisplayInterface } from "./display";
 import type { EventBusInterface } from "./events/bus";
 import type { ProcessManagerInterface } from "./proc/manager";
-import type { KernelInterface, Pid } from "./types";
+import type { KernelInterface } from "./syscalls/api";
+import type { Pid } from "./types";
 import type { WindowManagerInterface } from "./windows/managerInterface";
 
 export interface KernelContext {
