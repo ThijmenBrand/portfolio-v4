@@ -1,4 +1,5 @@
 import type { Signal } from "./proc/signals";
+import type { FaultInfo } from "./proc/types";
 import type { KernelInterface } from "./syscalls/api";
 
 export type Pid = number & { readonly __brand: "pid" };
@@ -58,6 +59,7 @@ export interface Process {
   abortController: AbortController;
   signalHandlers: Map<Signal, () => void>;
   faults: number;
+  lastFault?: FaultInfo;
 }
 
 export interface ProcessInfo {
@@ -67,6 +69,8 @@ export interface ProcessInfo {
   status: ProcessStatus;
   startedAt: number;
   termination?: Termination;
+  faults: number;
+  lastFault?: FaultInfo;
 }
 
 export interface ProcessInit {

@@ -9,6 +9,7 @@ import type {
   Termination,
 } from "../types";
 import type { Signal } from "./signals";
+import type { FaultInfo } from "./types";
 
 export interface ProcessManagerInterface {
   allocate(init: ProcessInit): Process;
@@ -27,7 +28,7 @@ export interface ProcessManagerInterface {
   addWaiter(pid: Pid, waiter: (termination: Termination) => void): () => void;
   reap(pid: Pid): void;
   history(): readonly ExitRecord[];
-  addFault(pid: Pid): void;
+  addFault(pid: Pid, fault: FaultInfo): void;
 }
 
 export class ProcessManager implements ProcessManagerInterface {
@@ -83,6 +84,9 @@ export class ProcessManager implements ProcessManagerInterface {
       path: p.path,
       status: p.status,
       startedAt: p.startedAt,
+      termination: p.termination,
+      faults: p.faults,
+      lastFault: p.lastFault,
     }));
   }
 
@@ -252,10 +256,11 @@ export class ProcessManager implements ProcessManagerInterface {
     return [...this.exitHistory];
   }
 
-  public addFault(pid: Pid): void {
+  public addFault(pid: Pid, fault: FaultInfo): void {
     const process = this.processes.get(pid);
-    if (!process) throw esrch(pid);
+    if (!process) return;
 
     process.faults += 1;
+    process.lastFault = fault;
   }
 }

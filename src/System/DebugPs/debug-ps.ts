@@ -1,4 +1,4 @@
-import type { ExitRecord, KernelInterface, Pid } from "../../kernel/types";
+import type { ExitRecord, Pid } from "../../kernel/types";
 
 import debugPsHTML from "./debug-ps.html?raw";
 import processRowHTML from "./process-row.html?raw";
@@ -10,6 +10,7 @@ import {
 } from "../../utils/html";
 import type { Signal } from "../../kernel/proc/signals";
 import { logError } from "../../kernel/errors";
+import type { KernelInterface } from "../../kernel/syscalls/api";
 
 type Tab = "running" | "terminated";
 type Direction = "ascending" | "descending";

@@ -1,10 +1,11 @@
 import type { KernelContext } from "./context";
 import { Display } from "./display";
 import { EventBus } from "./events/bus";
+import { faultProcess } from "./proc/faultproc";
 import { ProcessManager } from "./proc/manager";
-import { bindSyscalls } from "./syscalls/api";
+import { bindSyscalls, type KernelInterface } from "./syscalls/api";
 import { createSyscallTable } from "./syscalls/table";
-import type { KernelInterface, Pid, WindowId } from "./types";
+import type { Pid } from "./types";
 import { defaultClose, forceClose } from "./windowPolicy";
 import { WindowManager } from "./windows/manager";
 
@@ -19,10 +20,10 @@ export function createKernel(screen: HTMLElement): {
   const windows = new WindowManager(
     display.getWindowLayer(),
     {
-      defaultClose: (windowId: WindowId, ownerPid: Pid) =>
+      defaultClose: (windowId, ownerPid) =>
         defaultClose(ctx, windowId, ownerPid),
-      forceClose: (windowId: WindowId, ownerPid: Pid) =>
-        forceClose(ctx, windowId, ownerPid),
+      forceClose: (windowId, ownerPid) => forceClose(ctx, windowId, ownerPid),
+      fault: (pid, error, site) => faultProcess(ctx, pid, error, site),
     },
     { emit: (event) => events.emit(event) },
   );

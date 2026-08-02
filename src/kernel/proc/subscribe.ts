@@ -2,6 +2,7 @@ import type { KernelContext } from "../context";
 import { requireAlive } from "../syscalls/guards";
 import type { Pid } from "../types";
 import type { EventHandler, EventType } from "../events/types";
+import { faultProcess } from "./faultproc";
 
 export function subscribeEvents<T extends EventType>(
   ctx: KernelContext,
@@ -13,7 +14,11 @@ export function subscribeEvents<T extends EventType>(
 
   const unsubscribe = ctx.events.on(types, (event) => {
     if (!privileged && event.pid !== pid) return;
-    handler(event);
+    try {
+      handler(event);
+    } catch (error) {
+      faultProcess(ctx, pid, error, "event");
+    }
   });
 
   const resourceId = ctx.processes.registerResource(

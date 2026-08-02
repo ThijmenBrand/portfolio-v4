@@ -11,10 +11,10 @@ export class KernelError extends Error {
     this.details = details;
     this.code = code;
   }
+}
 
-  public isKernelError(): this is KernelError {
-    return true;
-  }
+export function isKernelError(error: unknown): error is KernelError {
+  return error instanceof KernelError;
 }
 
 export function logError(error: unknown): void {

@@ -2,7 +2,7 @@ import type { KernelContext } from "../context";
 import type { Pid, WindowId } from "../types";
 import type { WindowOptions } from "../windows/types";
 import { bindWindowHandle } from "./api";
-import { alive, requirePrivilege } from "./guards";
+import { alive, requireAlive } from "./guards";
 import type { SyscallTable } from "./table";
 
 export type WindowHandleCommands = Pick<
@@ -26,36 +26,35 @@ export function windowSyscalls(
       const windowRecord = ctx.windows.createWindow(windowOptions, pid);
       return bindWindowHandle(pid, slice, windowRecord.id, windowRecord.bodyEl);
     }),
-    listWindows: alive(ctx, (pid: Pid) => {
+    listWindows: (pid: Pid) => {
+      const proc = requireAlive(ctx, pid);
       const windows = ctx.windows.listWindows();
-      try {
-        requirePrivilege(ctx, pid, "listWindows");
+      if (proc.privileged) {
         return windows;
-      } catch {
-        return windows.filter((w) => w.pid === pid);
       }
-    }),
-    focusWindow: alive(ctx, (pid: Pid, windowId: WindowId) => {
-      try {
-        requirePrivilege(ctx, pid, "focusWindow");
+
+      return windows.filter((w) => w.pid === pid);
+    },
+    focusWindow: (pid: Pid, windowId: WindowId) => {
+      const proc = requireAlive(ctx, pid);
+      if (proc.privileged) {
         ctx.windows.focusWindow(windowId);
-      } catch {
-        ctx.windows.validateWindowOwnership(windowId, pid);
-        ctx.windows.focusWindow(windowId);
+        return;
       }
-    }),
-    setMinimized: alive(
-      ctx,
-      (pid: Pid, windowId: WindowId, minimized: boolean) => {
-        try {
-          requirePrivilege(ctx, pid, "setMinimized");
-          ctx.windows.setMinimized(windowId, minimized);
-        } catch {
-          ctx.windows.validateWindowOwnership(windowId, pid);
-          ctx.windows.setMinimized(windowId, minimized);
-        }
-      },
-    ),
+
+      ctx.windows.validateWindowOwnership(windowId, pid);
+      ctx.windows.focusWindow(windowId);
+    },
+    setMinimized: (pid: Pid, windowId: WindowId, minimized: boolean) => {
+      const proc = requireAlive(ctx, pid);
+      if (proc.privileged) {
+        ctx.windows.setMinimized(windowId, minimized);
+        return;
+      }
+
+      ctx.windows.validateWindowOwnership(windowId, pid);
+      ctx.windows.setMinimized(windowId, minimized);
+    },
     setWindowTitle: alive(
       ctx,
       (pid: Pid, windowId: WindowId, title: string) => {

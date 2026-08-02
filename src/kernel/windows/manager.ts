@@ -262,7 +262,7 @@ export class WindowManager implements WindowManagerInterface {
         this.destroy(record.id);
       } catch (error) {
         logError(
-          `Error destroying window ${record.id} for PID ${pid}: ${error}`,
+          `Error destroying window ${record.id} for process ${pid}: ${error}`,
         );
       }
     }
@@ -288,9 +288,7 @@ export class WindowManager implements WindowManagerInterface {
       try {
         handler();
       } catch (error) {
-        logError(
-          `Error in close request handler for window ${windowId}: ${error}`,
-        );
+        this.actions.fault(record.ownerPid, error, "window");
       }
     }
   }
