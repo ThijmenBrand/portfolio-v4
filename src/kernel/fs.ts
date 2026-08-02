@@ -1,4 +1,4 @@
-import type { Executable } from "./types";
+import type { Executable } from "./proc/exec";
 
 export interface FileEntry {
   load: Executable;
@@ -21,9 +21,4 @@ const files: Record<string, FileEntry> = {
 
 export function resolve(path: string): FileEntry | undefined {
   return files[path];
-}
-
-export function isExecutable(mod: unknown): mod is Executable {
-  // check if its a function and has a main property that is a function
-  return typeof mod === "object" && typeof (mod as any).main === "function";
 }

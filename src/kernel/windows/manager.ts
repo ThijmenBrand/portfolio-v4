@@ -14,6 +14,7 @@ import { enableResize } from "./interactions/resize";
 import { enableFocus } from "./interactions/focus";
 import { enableDrag } from "./interactions/drag";
 import { enableControls } from "./interactions/controls";
+import type { Pid, WindowId } from "../types";
 
 export class WindowManager implements WindowManagerInterface {
   private readonly WindowGeometry: WindowGeometryInterface;
@@ -35,15 +36,19 @@ export class WindowManager implements WindowManagerInterface {
     this.actions = actions;
   }
 
-  public createWindow(options: WindowOptions, ownerPid: number): WindowRecord {
+  public createWindow(options: WindowOptions, ownerPid: Pid): WindowRecord {
+    if (!this.windowLayer.isConnected) {
+      console.warn("WindowManager: window layer is detached from the document");
+    }
+
     const initialFrame = this.WindowGeometry.initialFrame(options);
     const initialConstraints = this.WindowGeometry.initialConstraints(options);
 
     const elements = this.WindowChrome.buildWindowChrome(windowHTML);
 
     const record: WindowRecord = {
-      id: this.nextWindowId++,
-      ownerPid,
+      id: this.nextWindowId++ as WindowId,
+      ownerPid: ownerPid as Pid,
       root: elements.rootElement,
       titleEl: elements.titleElement,
       bodyEl: elements.bodyElement,
@@ -73,7 +78,7 @@ export class WindowManager implements WindowManagerInterface {
     return record;
   }
 
-  public setTitle(windowId: number, title: string): void {
+  public setTitle(windowId: WindowId, title: string): void {
     const windowRecord = this.windows.get(windowId);
     if (!windowRecord) {
       throw new Error(`Window with ID ${windowId} not found`);
@@ -82,9 +87,12 @@ export class WindowManager implements WindowManagerInterface {
     windowRecord.titleEl.textContent = title;
   }
 
-  public moveWindow(windowId: number, x: number, y: number): void {
+  public moveWindow(windowId: WindowId, x: number, y: number): void {
     const windowRecord = this.getWindowRecord(windowId);
     if (windowRecord.state === "maximized") return;
+
+    // prevent frame from going y negative (off the top of the screen)
+    if (y < 0) y = 0;
 
     windowRecord.frame.x = x;
     windowRecord.frame.y = y;
@@ -92,7 +100,7 @@ export class WindowManager implements WindowManagerInterface {
     this.WindowChrome.applyFrameToWindow(windowRecord);
   }
 
-  public resizeWindow(windowId: number, frame: Rect): void {
+  public resizeWindow(windowId: WindowId, frame: Rect): void {
     const windowRecord = this.getWindowRecord(windowId);
     if (windowRecord.state === "maximized") return;
 
@@ -104,7 +112,10 @@ export class WindowManager implements WindowManagerInterface {
     this.WindowChrome.applyFrameToWindow(windowRecord);
   }
 
-  public setWindowState(windowId: number, state: "normal" | "maximized"): void {
+  public setWindowState(
+    windowId: WindowId,
+    state: "normal" | "maximized",
+  ): void {
     const windowRecord = this.getWindowRecord(windowId);
     windowRecord.restoreFrame ??= { ...windowRecord.frame };
 
@@ -124,7 +135,7 @@ export class WindowManager implements WindowManagerInterface {
     );
   }
 
-  public setMinimized(windowId: number, minimized: boolean): void {
+  public setMinimized(windowId: WindowId, minimized: boolean): void {
     const record = this.getWindowRecord(windowId);
     record.minimized = minimized;
 
@@ -136,7 +147,7 @@ export class WindowManager implements WindowManagerInterface {
     this.WindowChrome.applyStateToWindow(record, this.focusedId === windowId);
   }
 
-  public destroy(windowId: number): void {
+  public destroy(windowId: WindowId): void {
     const record = this.getWindowRecord(windowId);
 
     record.disposers.forEach((dispose) => dispose());
@@ -151,13 +162,13 @@ export class WindowManager implements WindowManagerInterface {
     }
   }
 
-  public addCloseRequestHandler(windowId: number, handler: () => void): void {
+  public addCloseRequestHandler(windowId: WindowId, handler: () => void): void {
     const windowRecord = this.getWindowRecord(windowId);
 
     windowRecord.closeRequestHandlers.push(handler);
   }
 
-  public validateWindowOwnership(windowId: number, pid: number): void {
+  public validateWindowOwnership(windowId: WindowId, pid: Pid): void {
     const windowRecord = this.getWindowRecord(windowId);
     if (windowRecord.ownerPid !== pid) {
       throw new Error(
@@ -166,7 +177,7 @@ export class WindowManager implements WindowManagerInterface {
     }
   }
 
-  public handleWindowFocus(windowId: number): void {
+  public handleWindowFocus(windowId: WindowId): void {
     if (this.focusedId === windowId) return;
 
     const record = this.getWindowRecord(windowId);
@@ -186,7 +197,7 @@ export class WindowManager implements WindowManagerInterface {
     this.WindowChrome.applyStateToWindow(record, true);
   }
 
-  public releaseFor(pid: number): void {
+  public releaseFor(pid: Pid): void {
     const windowsToRelease = Array.from(this.windows.values()).filter(
       (record) => record.ownerPid === pid,
     );
@@ -205,7 +216,7 @@ export class WindowManager implements WindowManagerInterface {
     this.focusTopmostWindow();
   }
 
-  public requestClose(windowId: number): void {
+  public requestClose(windowId: WindowId): void {
     const record = this.getWindowRecord(windowId);
 
     if (record.closeRequestHandlers.length === 0) {
@@ -231,7 +242,7 @@ export class WindowManager implements WindowManagerInterface {
     }
   }
 
-  public windowCountFor(pid: number): number {
+  public windowCountFor(pid: Pid): number {
     return Array.from(this.windows.values()).filter(
       (record) => record.ownerPid === pid,
     ).length;
@@ -263,7 +274,7 @@ export class WindowManager implements WindowManagerInterface {
     };
   }
 
-  private getWindowRecord(windowId: number): WindowRecord {
+  private getWindowRecord(windowId: WindowId): WindowRecord {
     const windowRecord = this.windows.get(windowId);
     if (!windowRecord) {
       throw new Error(`Window with ID ${windowId} not found`);

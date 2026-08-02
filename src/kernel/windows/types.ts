@@ -1,3 +1,5 @@
+import type { Pid, WindowId } from "../types";
+
 export interface WindowOptions {
   title: string;
   width?: number;
@@ -11,8 +13,8 @@ export interface WindowOptions {
 }
 
 export interface WindowRecord {
-  id: number;
-  ownerPid: number;
+  id: WindowId;
+  ownerPid: Pid;
   root: HTMLElement;
   titleEl: HTMLElement;
   bodyEl: HTMLElement;
@@ -28,7 +30,7 @@ export interface WindowRecord {
 }
 
 export interface WindowHandle {
-  readonly id: number;
+  readonly id: WindowId;
   readonly body: HTMLElement;
   setTitle(title: string): void;
   close(): void;
@@ -59,6 +61,6 @@ export interface WindowCommmands {
 }
 
 export interface WindowSystemActions {
-  defaultClose(windowId: number, ownerPid: number): void;
-  forceClose(windowId: number, ownerPid: number): void;
+  defaultClose(windowId: WindowId, ownerPid: Pid): void;
+  forceClose(windowId: WindowId, ownerPid: Pid): void;
 }

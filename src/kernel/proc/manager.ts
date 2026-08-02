@@ -1,40 +1,47 @@
-import type { ExitRecord, Process, ProcessInit, Termination } from "./types";
+import type {
+  ExitRecord,
+  Pid,
+  Process,
+  ProcessInit,
+  ProcessSignal,
+  Termination,
+} from "../types";
+import type { Signal } from "./signals";
 
 export interface ProcessManagerInterface {
   allocate(init: ProcessInit): Process;
-  get(pid: number): Process | undefined;
+  get(pid: Pid): Process | undefined;
   list(): Process[];
-  setStatus(pid: number, status: Process["status"]): void;
-  childrenOf(pid: number): Process[];
-  reparentChildren(from: number, to: number): void;
-  registerResource(pid: number, kind: string, dispose: () => void): number;
-  unregisterResource(pid: number, resourceId: number): void;
-  disposeResources(pid: number): void;
-  setTermination(pid: number, termination: Termination): void;
-  resolveWaiters(pid: number): void;
-  addWaiter(
-    pid: number,
-    waiter: (termination: Termination) => void,
-  ): () => void;
-  reap(pid: number): void;
+  setStatus(pid: Pid, status: Process["status"]): void;
+  childrenOf(pid: Pid): Process[];
+  reparentChildren(from: Pid, to: Pid): void;
+  registerResource(pid: Pid, kind: string, dispose: () => void): number;
+  unregisterResource(pid: Pid, resourceId: number): void;
+  disposeResources(pid: Pid): void;
+  setTermination(pid: Pid, termination: Termination): void;
+  setSignalHandler(pid: Pid, signal: Signal, handler: () => void): () => void;
+  getSignal(pid: Pid): ProcessSignal;
+  resolveWaiters(pid: Pid): void;
+  addWaiter(pid: Pid, waiter: (termination: Termination) => void): () => void;
+  reap(pid: Pid): void;
   history(): readonly ExitRecord[];
 }
 
 export class ProcessManager implements ProcessManagerInterface {
-  private readonly processes: Map<number, Process>;
+  private readonly processes: Map<Pid, Process>;
 
-  private nextProcessId: number;
+  private nextProcessId: Pid;
   private exitHistory: ExitRecord[];
   private static readonly HISTORY_LIMIT = 50;
 
   constructor() {
-    this.nextProcessId = 0;
+    this.nextProcessId = 0 as Pid;
     this.processes = new Map();
     this.exitHistory = [];
   }
 
   public allocate(init: ProcessInit): Process {
-    const pid = this.nextProcessId++;
+    const pid = this.nextProcessId++ as Pid;
     const process: Process = {
       pid,
       parentPid: init.parentPid,
@@ -59,7 +66,7 @@ export class ProcessManager implements ProcessManagerInterface {
     return process;
   }
 
-  public get(pid: number): Process | undefined {
+  public get(pid: Pid): Process | undefined {
     return this.processes.get(pid);
   }
 
@@ -67,20 +74,20 @@ export class ProcessManager implements ProcessManagerInterface {
     return Array.from(this.processes.values());
   }
 
-  public setStatus(pid: number, status: Process["status"]): void {
+  public setStatus(pid: Pid, status: Process["status"]): void {
     const process = this.processes.get(pid);
     if (process) {
       process.status = status;
     }
   }
 
-  public childrenOf(pid: number): Process[] {
+  public childrenOf(pid: Pid): Process[] {
     return Array.from(this.processes.values()).filter(
       (proc) => proc.parentPid === pid,
     );
   }
 
-  public reparentChildren(from: number, to: number): void {
+  public reparentChildren(from: Pid, to: Pid): void {
     for (const proc of this.processes.values()) {
       if (proc.parentPid === from) {
         proc.parentPid = to;
@@ -88,11 +95,7 @@ export class ProcessManager implements ProcessManagerInterface {
     }
   }
 
-  public registerResource(
-    pid: number,
-    kind: string,
-    dispose: () => void,
-  ): number {
+  public registerResource(pid: Pid, kind: string, dispose: () => void): number {
     const process = this.processes.get(pid);
     if (!process) {
       throw new Error(`ESRCH: No such process, ${pid}`);
@@ -103,7 +106,7 @@ export class ProcessManager implements ProcessManagerInterface {
     return resourceId;
   }
 
-  public unregisterResource(pid: number, resourceId: number): void {
+  public unregisterResource(pid: Pid, resourceId: number): void {
     const process = this.processes.get(pid);
     if (!process) {
       throw new Error(`ESRCH: No such process, ${pid}`);
@@ -112,7 +115,7 @@ export class ProcessManager implements ProcessManagerInterface {
     process.resources.delete(resourceId);
   }
 
-  public disposeResources(pid: number): void {
+  public disposeResources(pid: Pid): void {
     const process = this.processes.get(pid);
     if (!process) {
       throw new Error(`ESRCH: No such process, ${pid}`);
@@ -130,7 +133,7 @@ export class ProcessManager implements ProcessManagerInterface {
     }
   }
 
-  public reap(pid: number): void {
+  public reap(pid: Pid): void {
     const process = this.processes.get(pid);
     if (!process || !process.termination) {
       return;
@@ -158,7 +161,35 @@ export class ProcessManager implements ProcessManagerInterface {
     this.processes.delete(pid);
   }
 
-  setTermination(pid: number, termination: Termination): void {
+  public setSignalHandler(
+    pid: Pid,
+    signal: Signal,
+    handler: () => void,
+  ): () => void {
+    const proc = this.processes.get(pid);
+    if (!proc) {
+      throw new Error(`ESRCH: No such process, ${pid}`);
+    }
+
+    proc.signalHandlers.set(signal, handler);
+
+    return () => {
+      if (proc.signalHandlers.get(signal) === handler) {
+        proc.signalHandlers.delete(signal);
+      }
+    };
+  }
+
+  public getSignal(pid: Pid): ProcessSignal {
+    const proc = this.processes.get(pid);
+    if (!proc) {
+      throw new Error(`ESRCH: No such process, ${pid}`);
+    }
+
+    return proc.abortController.signal;
+  }
+
+  public setTermination(pid: Pid, termination: Termination): void {
     const process = this.processes.get(pid);
     if (!process) {
       throw new Error(`ESRCH: No such process, ${pid}`);
@@ -167,7 +198,7 @@ export class ProcessManager implements ProcessManagerInterface {
     process.termination = termination;
   }
 
-  resolveWaiters(pid: number): void {
+  public resolveWaiters(pid: Pid): void {
     const process = this.processes.get(pid);
     if (!process) {
       throw new Error(`ESRCH: No such process, ${pid}`);
@@ -189,8 +220,8 @@ export class ProcessManager implements ProcessManagerInterface {
     }
   }
 
-  addWaiter(
-    pid: number,
+  public addWaiter(
+    pid: Pid,
     waiter: (termination: Termination) => void,
   ): () => void {
     const process = this.processes.get(pid);

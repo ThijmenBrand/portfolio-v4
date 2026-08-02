@@ -1,3 +1,4 @@
+import type { Signal } from "./proc/signals";
 import type { WindowHandle, WindowOptions } from "./windows/types";
 
 export interface KernelInterface {
@@ -5,13 +6,13 @@ export interface KernelInterface {
   windows: { create(options: WindowOptions): WindowHandle };
   process: {
     readonly signal: ProcessSignal;
-    readonly pid: number;
+    readonly pid: Pid;
     onSignal(signal: Signal, handler: () => void): void;
-    wait(pid: number): Promise<Termination>;
-    spawn(path: string, args?: string[]): number;
+    wait(pid: Pid): Promise<Termination>;
+    spawn(path: string, args?: string[]): Pid;
     exit(code?: number): void;
     list(): ProcessInfo[];
-    kill(pid: number, signal: Signal, code?: number): void;
+    kill(pid: Pid, signal: Signal, code?: number): void;
     history(): readonly ExitRecord[];
   };
   timers: {
@@ -20,16 +21,19 @@ export interface KernelInterface {
   };
 }
 
+export type Pid = number & { readonly __brand: "pid" };
+export type WindowId = number & { readonly __brand: "windowId" };
+
 export type ExitRecord = {
-  pid: number;
-  parentPid: number;
+  pid: Pid;
+  parentPid: Pid;
   path: string;
   startedAt: number;
   termination: Termination;
 };
 
 export type ProcessSignal = {
-  readonly reason?: Signal;
+  readonly reason?: Signal | ExitReason;
   readonly aborted: boolean;
   addEventListener(type: "abort", listener: () => void): void;
   removeEventListener(type: "abort", listener: () => void): void;
@@ -59,19 +63,9 @@ export type ResourceEntry = {
   dispose(): void; // method to clean up the resource
 };
 
-export const Signal = {
-  SIGTERM: "SIGTERM",
-  SIGKILL: "SIGKILL",
-  SIGHUP: "SIGHUP",
-  SIGINT: "SIGINT",
-  SIGCHLD: "SIGCHLD",
-} as const;
-
-export type Signal = (typeof Signal)[keyof typeof Signal];
-
 export interface Process {
-  pid: number;
-  parentPid: number;
+  pid: Pid;
+  parentPid: Pid;
   privileged: boolean;
   path: string;
   args: string[];
@@ -86,8 +80,8 @@ export interface Process {
 }
 
 export interface ProcessInfo {
-  pid: number;
-  parentPid: number;
+  pid: Pid;
+  parentPid: Pid;
   path: string;
   status: ProcessStatus;
   startedAt: number;
@@ -95,7 +89,7 @@ export interface ProcessInfo {
 }
 
 export interface ProcessInit {
-  parentPid: number;
+  parentPid: Pid;
   path: string;
   args: string[];
   privileged: boolean;
@@ -104,5 +98,3 @@ export interface ProcessInit {
 export type AppModule = {
   main(os: KernelInterface, args: string[]): void | Promise<void>;
 };
-
-export type Executable = () => Promise<AppModule>;

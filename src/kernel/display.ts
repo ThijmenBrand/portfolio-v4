@@ -1,5 +1,4 @@
 export interface DisplayInterface {
-  getRoot(): HTMLElement;
   getDesktopLayer(): HTMLElement;
   getWindowLayer(): HTMLElement;
 }
@@ -9,10 +8,6 @@ export class Display {
 
   constructor(screen: HTMLElement) {
     this.screen = screen;
-  }
-
-  public getRoot(): HTMLElement {
-    return this.screen;
   }
 
   public getDesktopLayer(): HTMLElement {

@@ -1,8 +1,8 @@
 import type {
   ExitRecord,
   KernelInterface,
+  Pid,
   ProcessInfo,
-  Signal,
 } from "../../kernel/types";
 
 import debugPsHTML from "./debug-ps.html?raw";
@@ -13,6 +13,7 @@ import {
   htmlStringToTemplate,
   selectElementFromTemplate,
 } from "../../utils/html";
+import type { Signal } from "../../kernel/proc/signals";
 
 const REFRESH_MS = 500;
 
@@ -25,8 +26,8 @@ interface SortState {
 }
 
 interface RunningRow {
-  pid: number;
-  parentPid: number;
+  pid: Pid;
+  parentPid: Pid;
   path: string;
   status: string;
   windows: number;
@@ -34,8 +35,8 @@ interface RunningRow {
 }
 
 interface TerminatedRow {
-  pid: number;
-  parentPid: number;
+  pid: Pid;
+  parentPid: Pid;
   path: string;
   code: number;
   reason: string;
@@ -303,7 +304,7 @@ class DebugPs {
       button.dataset.action === "sigkill" ? "SIGKILL" : "SIGTERM";
 
     try {
-      this.os.process.kill(pid, signal);
+      this.os.process.kill(pid as Pid, signal);
     } catch (error) {
       console.error(`Failed to send ${signal} to ${pid}:`, error);
     }

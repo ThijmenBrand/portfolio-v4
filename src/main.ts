@@ -1,16 +1,14 @@
-import { KernelCore } from "./kernel/core";
 import "./globals.css";
+import { createKernel } from "./kernel/core";
 
-async function boot() {
+function boot() {
   const screen = document.querySelector<HTMLElement>("#screen");
   if (!screen) {
     throw new Error("Screen element not found");
   }
 
-  const kernel = new KernelCore(screen);
+  const kernel = createKernel(screen);
   kernel.boot();
 }
 
-boot().catch((error) => {
-  console.error("Failed to boot the system:", error);
-});
+boot();
