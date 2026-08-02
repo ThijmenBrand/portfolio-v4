@@ -46,7 +46,7 @@ export function privileged(
   fn: (pid: Pid, ...args: any[]) => any,
 ) {
   return (pid: Pid, ...args: any[]) => {
-    requirePrivilege(ctx, pid, fn.name);
+    requirePrivilege(ctx, pid, "privileged guard");
     return fn(pid, ...args);
   };
 }

@@ -15,7 +15,7 @@ export class Display {
   public getDesktopLayer(): HTMLElement {
     let desktopLayer = this.screen.querySelector<HTMLElement>("#desktop-layer");
     if (!desktopLayer) {
-      throw kernelError("Desktop layer not found");
+      throw kernelError("ENODEV", "Desktop layer not found");
     }
     return desktopLayer;
   }
@@ -23,7 +23,7 @@ export class Display {
   public getWindowLayer(): HTMLElement {
     let windowLayer = this.screen.querySelector<HTMLElement>("#window-layer");
     if (!windowLayer) {
-      throw kernelError("Window layer not found");
+      throw kernelError("ENODEV", "Window layer not found");
     }
     return windowLayer;
   }

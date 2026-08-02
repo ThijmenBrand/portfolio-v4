@@ -1,10 +1,14 @@
 export class KernelError extends Error {
   public readonly code: string;
+  public readonly name: string;
+  public readonly message: string;
+  public readonly details?: any;
 
-  constructor(code: string, message: string) {
-    message = `[${code}] ${message}`;
+  constructor(code: string, message: string, details?: any) {
     super(message);
     this.name = "KernelError";
+    this.message = message;
+    this.details = details;
     this.code = code;
   }
 
@@ -23,36 +27,47 @@ export function logError(error: unknown): void {
   }
 }
 
-export function kernelError(
-  message: string,
-  code: string = "ERROR",
-): KernelError {
+export function kernelError(code: string, message: string): KernelError {
   return new KernelError(code, message);
 }
 
 export function enoent(path: string): KernelError {
-  return new KernelError("ENOENT", `No such file or directory: ${path}`);
+  return new KernelError("ENOENT", `No such file or directory: ${path}`, {
+    path,
+  });
 }
 
 export function esrch(pid: number): KernelError {
-  return new KernelError("ESRCH", `No such process: ${pid}`);
+  return new KernelError("ESRCH", `No such process: ${pid}`, {
+    pid,
+  });
 }
 
 export function einval(arg: string): KernelError {
-  return new KernelError("EINVAL", `Invalid argument: ${arg}`);
+  return new KernelError("EINVAL", `Invalid argument: ${arg}`, {
+    arg,
+  });
 }
 
 export function eperm(pid: number, syscall?: string): KernelError {
   return new KernelError(
     "EPERM",
     `Operation not permitted for process: ${pid}${syscall ? ` (${syscall})` : ""}`,
+    {
+      pid,
+      syscall,
+    },
   );
 }
 
-export function noexec(path: string): KernelError {
-  return new KernelError("NOEXEC", `File is not executable: ${path}`);
+export function enoexec(path: string): KernelError {
+  return new KernelError("ENOEXEC", `File is not executable: ${path}`, {
+    path,
+  });
 }
 
 export function eintr(pid: number): KernelError {
-  return new KernelError("EINTR", `Process ${pid} was interrupted`);
+  return new KernelError("EINTR", `Process ${pid} was interrupted`, {
+    pid,
+  });
 }

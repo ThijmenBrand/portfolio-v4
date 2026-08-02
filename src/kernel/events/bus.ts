@@ -54,6 +54,7 @@ export class EventBus implements EventBusInterface {
           subscription.handler(event);
         } catch (error) {
           throw kernelError(
+            "ENODEV",
             `Error in event handler for subscription ${subscription.id} (${event.type}): ${error}`,
           );
         }

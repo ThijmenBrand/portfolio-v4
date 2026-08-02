@@ -1,5 +1,5 @@
 import type { KernelContext } from "../context";
-import { logError, noexec } from "../errors";
+import { logError, enoexec } from "../errors";
 import type { AppModule, Process } from "../types";
 import { terminateProcess } from "./terminate";
 
@@ -22,7 +22,7 @@ export async function execute(
     const module = await executable();
     if (proc.status !== "loading") return;
     if (!isExecutable(module)) {
-      console.error(noexec(proc.path));
+      console.error(enoexec(proc.path));
       terminateProcess(ctx, proc.pid, 1, "crash");
       return;
     }

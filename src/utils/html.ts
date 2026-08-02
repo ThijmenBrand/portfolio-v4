@@ -13,6 +13,7 @@ export function selectElementFromTemplate<T extends HTMLElement>(
   const element = template.querySelector<T>(selector);
   if (!element) {
     throw kernelError(
+      "ENODEV",
       `Element with selector "${selector}" not found in template`,
     );
   }

@@ -57,7 +57,7 @@ class Desktop {
       this.desktopLayer.querySelector<HTMLDivElement>("#desktop");
 
     if (!desktopElement) {
-      throw kernelError("Desktop element not found");
+      throw kernelError("ENODEV", "Desktop element not found");
     }
     return desktopElement;
   }
@@ -66,7 +66,7 @@ class Desktop {
     const appContainer =
       desktopElement.querySelector<HTMLDivElement>("#app-container");
     if (!appContainer) {
-      throw kernelError("App container not found");
+      throw kernelError("ENODEV", "App container not found");
     }
 
     this.registry.forEach((app) => {

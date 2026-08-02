@@ -5,7 +5,7 @@ import { kernelError } from "./kernel/errors";
 function boot() {
   const screen = document.querySelector<HTMLElement>("#screen");
   if (!screen) {
-    throw kernelError("Screen element not found");
+    throw kernelError("ENODEV", "Screen element not found");
   }
 
   const kernel = createKernel(screen);

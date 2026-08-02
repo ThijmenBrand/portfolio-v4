@@ -217,7 +217,7 @@ export class ProcessManager implements ProcessManagerInterface {
     }
 
     if (!process.termination) {
-      throw kernelError(`Process ${pid} has no termination record`);
+      throw kernelError("ERROR", `Process ${pid} has no termination record`);
     }
 
     const waiters = Array.from(process.waiters);
