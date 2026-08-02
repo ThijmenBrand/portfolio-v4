@@ -1,11 +1,6 @@
-import { kernelError, logError } from "./errors";
-import type { Rect, StrutEdge } from "./types";
-
-interface Strut {
-  id: number;
-  edge: StrutEdge;
-  size: number;
-}
+import { kernelError, logError } from "../errors";
+import type { Rect, StrutEdge } from "../types";
+import type { Strut } from "./types";
 
 export interface DisplayInterface {
   getDesktopLayer(): HTMLElement;

@@ -1,5 +1,5 @@
 import type { KernelContext } from "../context";
-import { releaseStrut, reserveStrut } from "../struts";
+import { releaseStrut, reserveStrut } from "./struts";
 import type { Pid, StrutEdge } from "../types";
 import { alive, requirePrivilege } from "./guards";
 import type { SyscallTable } from "./table";

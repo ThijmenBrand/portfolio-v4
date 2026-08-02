@@ -1,6 +1,8 @@
 import type { KernelContext } from "./context";
-import { Display } from "./display";
+import { Display } from "./display/display";
 import { EventBus } from "./events/bus";
+import { MemFS } from "./fs/drivers/memfs";
+import { VFS } from "./fs/vfs";
 import { faultProcess } from "./proc/faultproc";
 import { ProcessManager } from "./proc/manager";
 import { bindSyscalls, type KernelInterface } from "./syscalls/api";
@@ -16,6 +18,13 @@ export function createKernel(screen: HTMLElement): {
   const display = new Display(screen);
   const processes = new ProcessManager();
   const events = new EventBus();
+  const fs = new VFS();
+
+  fs.mount({
+    path: "/",
+    driver: new MemFS(),
+    readonly: false,
+  });
 
   const windows = new WindowManager(
     display.getWindowLayer(),

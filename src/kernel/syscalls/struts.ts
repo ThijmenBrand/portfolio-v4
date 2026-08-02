@@ -1,5 +1,5 @@
-import type { KernelContext } from "./context";
-import type { Pid, StrutEdge } from "./types";
+import type { KernelContext } from "../context";
+import type { Pid, StrutEdge } from "../types";
 
 export function reserveStrut(
   ctx: KernelContext,

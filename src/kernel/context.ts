@@ -1,4 +1,4 @@
-import type { DisplayInterface } from "./display";
+import type { DisplayInterface } from "./display/display";
 import type { EventBusInterface } from "./events/bus";
 import type { ProcessManagerInterface } from "./proc/manager";
 import type { KernelInterface } from "./syscalls/api";

@@ -1,6 +1,6 @@
 import type { KernelContext } from "../context";
 import { einval, enoent } from "../errors";
-import { resolve } from "../fs";
+import { resolve } from "../binfmt";
 import { execute } from "../proc/exec";
 import { sendSignal } from "../proc/signals";
 import { terminateProcess } from "../proc/terminate";

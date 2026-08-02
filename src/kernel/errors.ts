@@ -71,3 +71,45 @@ export function eintr(pid: number): KernelError {
     pid,
   });
 }
+
+export function eexist(path: string): KernelError {
+  return new KernelError("EEXIST", `File already exists: ${path}`, {
+    path,
+  });
+}
+
+export function enotdir(path: string): KernelError {
+  return new KernelError("ENOTDIR", `Not a directory: ${path}`, {
+    path,
+  });
+}
+
+export function eisdir(path: string): KernelError {
+  return new KernelError("EISDIR", `Is a directory: ${path}`, {
+    path,
+  });
+}
+
+export function enotempty(path: string): KernelError {
+  return new KernelError("ENOTEMPTY", `Directory not empty: ${path}`, {
+    path,
+  });
+}
+
+export function ebadf(path: string): KernelError {
+  return new KernelError("EBADF", `Bad file descriptor: ${path}`, {
+    path,
+  });
+}
+
+export function erofs(path: string): KernelError {
+  return new KernelError("EROFS", `Read-only file system: ${path}`, {
+    path,
+  });
+}
+
+export function ebusy(path: string): KernelError {
+  return new KernelError("EBUSY", `Resource busy: ${path}`, {
+    path,
+  });
+}
