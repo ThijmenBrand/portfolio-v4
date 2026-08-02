@@ -1,4 +1,4 @@
-import { kernelError } from "../errors";
+import { logError } from "../errors";
 import type {
   EventHandler,
   EventType,
@@ -53,10 +53,7 @@ export class EventBus implements EventBusInterface {
         try {
           subscription.handler(event);
         } catch (error) {
-          throw kernelError(
-            "ENODEV",
-            `Error in event handler for subscription ${subscription.id} (${event.type}): ${error}`,
-          );
+          logError(`Error in event handler for event ${event.type}: ${error}`);
         }
       }
     });

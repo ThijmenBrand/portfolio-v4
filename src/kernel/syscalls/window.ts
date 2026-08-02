@@ -27,18 +27,33 @@ export function windowSyscalls(
       return bindWindowHandle(pid, slice, windowRecord.id, windowRecord.bodyEl);
     }),
     listWindows: alive(ctx, (pid: Pid) => {
-      requirePrivilege(ctx, pid, "listWindows");
-      return ctx.windows.listWindows();
+      const windows = ctx.windows.listWindows();
+      try {
+        requirePrivilege(ctx, pid, "listWindows");
+        return windows;
+      } catch {
+        return windows.filter((w) => w.pid === pid);
+      }
     }),
     focusWindow: alive(ctx, (pid: Pid, windowId: WindowId) => {
-      requirePrivilege(ctx, pid, "focusWindow");
-      ctx.windows.focusWindow(windowId);
+      try {
+        requirePrivilege(ctx, pid, "focusWindow");
+        ctx.windows.focusWindow(windowId);
+      } catch {
+        ctx.windows.validateWindowOwnership(windowId, pid);
+        ctx.windows.focusWindow(windowId);
+      }
     }),
     setMinimized: alive(
       ctx,
       (pid: Pid, windowId: WindowId, minimized: boolean) => {
-        requirePrivilege(ctx, pid, "setMinimized");
-        ctx.windows.setMinimized(windowId, minimized);
+        try {
+          requirePrivilege(ctx, pid, "setMinimized");
+          ctx.windows.setMinimized(windowId, minimized);
+        } catch {
+          ctx.windows.validateWindowOwnership(windowId, pid);
+          ctx.windows.setMinimized(windowId, minimized);
+        }
       },
     ),
     setWindowTitle: alive(

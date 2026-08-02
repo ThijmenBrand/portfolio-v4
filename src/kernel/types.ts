@@ -57,6 +57,7 @@ export interface Process {
   waiters: Array<(termination: Termination) => void>;
   abortController: AbortController;
   signalHandlers: Map<Signal, () => void>;
+  faults: number;
 }
 
 export interface ProcessInfo {

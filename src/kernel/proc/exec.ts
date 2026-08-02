@@ -1,6 +1,7 @@
 import type { KernelContext } from "../context";
-import { logError, enoexec } from "../errors";
+import { enoexec } from "../errors";
 import type { AppModule, Process } from "../types";
+import { faultProcess } from "./faultproc";
 import { terminateProcess } from "./terminate";
 
 export type Executable = () => Promise<AppModule>;
@@ -29,7 +30,6 @@ export async function execute(
     ctx.processes.setStatus(proc.pid, "running");
     await module.main(ctx.createOs(proc.pid), proc.args);
   } catch (error) {
-    logError(`Error executing process ${proc.pid}: ${error}`);
-    terminateProcess(ctx, proc.pid, 1, "crash");
+    faultProcess(ctx, proc.pid, error as Error, "main");
   }
 }

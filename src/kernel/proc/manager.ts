@@ -27,6 +27,7 @@ export interface ProcessManagerInterface {
   addWaiter(pid: Pid, waiter: (termination: Termination) => void): () => void;
   reap(pid: Pid): void;
   history(): readonly ExitRecord[];
+  addFault(pid: Pid): void;
 }
 
 export class ProcessManager implements ProcessManagerInterface {
@@ -62,6 +63,7 @@ export class ProcessManager implements ProcessManagerInterface {
       waiters: [],
       abortController: new AbortController(),
       signalHandlers: new Map(),
+      faults: 0,
     };
 
     this.processes.set(pid, process);
@@ -246,7 +248,14 @@ export class ProcessManager implements ProcessManagerInterface {
     };
   }
 
-  history(): readonly ExitRecord[] {
+  public history(): readonly ExitRecord[] {
     return [...this.exitHistory];
+  }
+
+  public addFault(pid: Pid): void {
+    const process = this.processes.get(pid);
+    if (!process) throw esrch(pid);
+
+    process.faults += 1;
   }
 }

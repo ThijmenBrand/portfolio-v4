@@ -1,6 +1,6 @@
 import type { KernelContext } from "../context";
-import { logError } from "../errors";
 import type { Pid } from "../types";
+import { faultProcess } from "./faultproc";
 
 export function setInterval(
   ctx: KernelContext,
@@ -12,7 +12,7 @@ export function setInterval(
     try {
       callback();
     } catch (error) {
-      logError(`Error in interval callback for process ${pid}: ${error}`);
+      faultProcess(ctx, pid, error as Error, "interval");
     }
   }, ms);
 
@@ -31,7 +31,7 @@ export function setTimeout(
     try {
       callback();
     } catch (error) {
-      logError(`Error in timeout callback for process ${pid}: ${error}`);
+      faultProcess(ctx, pid, error as Error, "timeout");
     }
   }, ms);
 
