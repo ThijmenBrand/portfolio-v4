@@ -1,0 +1,29 @@
+:root {
+  --app-bg: #1a1a1e;
+  --app-surface: #232328;
+  --app-surface-hi: #2b2b31;
+  --app-well: #161619;
+  --app-border: #33333b;
+  --app-border-hi: #45454f;
+
+  --app-text: #e9e9ee;
+  --app-text-dim: #9b9ba6;
+  --app-text-faint: #6d6d78;
+
+  --app-accent: #5a9cff;
+  --app-accent-soft: rgba(90, 156, 255, 0.16);
+  --app-ok: #6cd39a;
+  --app-warn: #e2b95f;
+  --app-danger: #ff7676;
+  --app-danger-soft: rgba(255, 118, 118, 0.16);
+
+  --app-radius: 6px;
+  --app-radius-sm: 4px;
+  --app-row: 30px;
+  --app-control: 27px;
+
+  --app-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --app-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --app-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}

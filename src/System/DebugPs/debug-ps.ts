@@ -4,6 +4,9 @@ import debugPsHTML from "./debug-ps.html?raw";
 import processRowHTML from "./process-row.html?raw";
 import historyRowHTML from "./history-row.html?raw";
 
+import "./debug-ps.css";
+import "../../ui/theme.css";
+
 import {
   htmlStringToTemplate,
   selectElementFromTemplate,
