@@ -16,7 +16,7 @@ import { enableFocus } from "./interactions/focus";
 import { enableDrag } from "./interactions/drag";
 import { enableControls } from "./interactions/controls";
 import type { Pid, WindowId } from "../types";
-import { enoent, eperm, kernelError } from "../errors";
+import { enoent, eperm, logError } from "../errors";
 
 export class WindowManager implements WindowManagerInterface {
   private readonly WindowGeometry: WindowGeometryInterface;
@@ -169,9 +169,7 @@ export class WindowManager implements WindowManagerInterface {
       try {
         dispose();
       } catch (error) {
-        kernelError(
-          `Error disposing resources for window ${windowId}: ${error}`,
-        );
+        logError(`Error disposing resources for window ${windowId}: ${error}`);
       }
     });
     record.disposers.length = 0;
@@ -233,7 +231,7 @@ export class WindowManager implements WindowManagerInterface {
       try {
         this.destroy(record.id);
       } catch (error) {
-        kernelError(
+        logError(
           `Error destroying window ${record.id} for PID ${pid}: ${error}`,
         );
       }
@@ -260,7 +258,7 @@ export class WindowManager implements WindowManagerInterface {
       try {
         handler();
       } catch (error) {
-        kernelError(
+        logError(
           `Error in close request handler for window ${windowId}: ${error}`,
         );
       }

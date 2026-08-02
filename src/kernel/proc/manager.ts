@@ -1,4 +1,4 @@
-import { eperm, esrch, kernelError } from "../errors";
+import { eperm, esrch, kernelError, logError } from "../errors";
 import type {
   ExitRecord,
   Pid,
@@ -138,7 +138,7 @@ export class ProcessManager implements ProcessManagerInterface {
       try {
         resource.dispose();
       } catch (error) {
-        kernelError(
+        logError(
           `Error disposing resource ${resource.id} of kind ${resource.kind}: ${error}`,
         );
       }
@@ -227,7 +227,7 @@ export class ProcessManager implements ProcessManagerInterface {
       try {
         waiter(process.termination);
       } catch (error) {
-        kernelError(`Error occurred while resolving waiter: ${error}`);
+        logError(`Error occurred while resolving waiter: ${error}`);
       }
     }
   }

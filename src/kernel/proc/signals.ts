@@ -1,5 +1,5 @@
 import type { KernelContext } from "../context";
-import { einval, esrch, kernelError } from "../errors";
+import { einval, esrch, logError } from "../errors";
 import type { Pid } from "../types";
 import { terminateProcess } from "./terminate";
 
@@ -26,7 +26,7 @@ export function deliver(ctx: KernelContext, pid: Pid, signal: Signal): boolean {
     try {
       handler();
     } catch (error) {
-      kernelError(
+      logError(
         `Error in signal handler for process ${proc.pid} (${signal}): ${error}`,
       );
     }

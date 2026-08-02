@@ -1,5 +1,5 @@
 import type { KernelContext } from "../context";
-import { eperm, kernelError } from "../errors";
+import { eperm, logError } from "../errors";
 import type { ExitReason, Pid } from "../types";
 import { sendSignal, Signal } from "./signals";
 
@@ -21,7 +21,7 @@ export function terminateProcess(
   try {
     proc.abortController.abort(signal ?? reason);
   } catch (error) {
-    kernelError(`Error aborting process ${pid}: ${error}`);
+    logError(`Error aborting process ${pid}: ${error}`);
   }
 
   const children = ctx.processes.childrenOf(pid);

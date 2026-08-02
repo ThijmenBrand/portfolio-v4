@@ -1,5 +1,5 @@
-class KernelError extends Error {
-  private readonly code: string;
+export class KernelError extends Error {
+  public readonly code: string;
 
   constructor(code: string, message: string) {
     message = `[${code}] ${message}`;
@@ -7,13 +7,26 @@ class KernelError extends Error {
     this.name = "KernelError";
     this.code = code;
   }
+
+  public isKernelError(): this is KernelError {
+    return true;
+  }
+}
+
+export function logError(error: unknown): void {
+  if (error instanceof KernelError) {
+    console.error(`KernelError: ${error.code} - ${error.message}`);
+  } else if (error instanceof Error) {
+    console.error(`Error: ${error.name} - ${error.message}`);
+  } else {
+    console.error(`Unknown error: ${String(error)}`);
+  }
 }
 
 export function kernelError(
   message: string,
   code: string = "ERROR",
 ): KernelError {
-  console.error(`[${code}] ${message}`);
   return new KernelError(code, message);
 }
 

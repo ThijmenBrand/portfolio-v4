@@ -9,7 +9,7 @@ import {
   selectElementFromTemplate,
 } from "../../utils/html";
 import type { Signal } from "../../kernel/proc/signals";
-import { kernelError } from "../../kernel/errors";
+import { logError } from "../../kernel/errors";
 
 type Tab = "running" | "terminated";
 type Direction = "ascending" | "descending";
@@ -322,7 +322,7 @@ class DebugPs {
     try {
       this.os.process.kill(pid as Pid, signal);
     } catch (error) {
-      kernelError(`Failed to send ${signal} to ${pid}: ${error}`);
+      logError(`Failed to send ${signal} to ${pid}: ${error}`);
     }
   }
 
