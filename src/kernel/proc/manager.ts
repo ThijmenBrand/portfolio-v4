@@ -1,3 +1,4 @@
+import { eperm, esrch, kernelError } from "../errors";
 import type {
   ExitRecord,
   Pid,
@@ -107,7 +108,7 @@ export class ProcessManager implements ProcessManagerInterface {
   public registerResource(pid: Pid, kind: string, dispose: () => void): number {
     const process = this.processes.get(pid);
     if (!process) {
-      throw new Error(`ESRCH: No such process, ${pid}`);
+      throw esrch(pid);
     }
 
     const resourceId = process.nextResourceId++;
@@ -118,7 +119,7 @@ export class ProcessManager implements ProcessManagerInterface {
   public unregisterResource(pid: Pid, resourceId: number): void {
     const process = this.processes.get(pid);
     if (!process) {
-      throw new Error(`ESRCH: No such process, ${pid}`);
+      throw esrch(pid);
     }
 
     process.resources.delete(resourceId);
@@ -127,7 +128,7 @@ export class ProcessManager implements ProcessManagerInterface {
   public disposeResources(pid: Pid): void {
     const process = this.processes.get(pid);
     if (!process) {
-      throw new Error(`ESRCH: No such process, ${pid}`);
+      throw esrch(pid);
     }
 
     const resources = Array.from(process.resources.values());
@@ -137,7 +138,9 @@ export class ProcessManager implements ProcessManagerInterface {
       try {
         resource.dispose();
       } catch (error) {
-        console.error(`Error occurred while disposing resource: ${error}`);
+        kernelError(
+          `Error disposing resource ${resource.id} of kind ${resource.kind}: ${error}`,
+        );
       }
     }
   }
@@ -145,11 +148,11 @@ export class ProcessManager implements ProcessManagerInterface {
   public reap(pid: Pid): void {
     const process = this.processes.get(pid);
     if (!process || !process.termination) {
-      return;
+      throw esrch(pid);
     }
 
     if (process.status !== "zombie") {
-      throw new Error(`Cannot reap process ${pid} that is not a zombie`);
+      throw eperm(pid);
     }
 
     // Add to exit history
@@ -177,7 +180,7 @@ export class ProcessManager implements ProcessManagerInterface {
   ): () => void {
     const proc = this.processes.get(pid);
     if (!proc) {
-      throw new Error(`ESRCH: No such process, ${pid}`);
+      throw esrch(pid);
     }
 
     proc.signalHandlers.set(signal, handler);
@@ -192,7 +195,7 @@ export class ProcessManager implements ProcessManagerInterface {
   public getSignal(pid: Pid): ProcessSignal {
     const proc = this.processes.get(pid);
     if (!proc) {
-      throw new Error(`ESRCH: No such process, ${pid}`);
+      throw esrch(pid);
     }
 
     return proc.abortController.signal;
@@ -201,7 +204,7 @@ export class ProcessManager implements ProcessManagerInterface {
   public setTermination(pid: Pid, termination: Termination): void {
     const process = this.processes.get(pid);
     if (!process) {
-      throw new Error(`ESRCH: No such process, ${pid}`);
+      throw esrch(pid);
     }
 
     process.termination = termination;
@@ -210,11 +213,11 @@ export class ProcessManager implements ProcessManagerInterface {
   public resolveWaiters(pid: Pid): void {
     const process = this.processes.get(pid);
     if (!process) {
-      throw new Error(`ESRCH: No such process, ${pid}`);
+      throw esrch(pid);
     }
 
     if (!process.termination) {
-      throw new Error(`Process ${pid} has no termination record`);
+      throw kernelError(`Process ${pid} has no termination record`);
     }
 
     const waiters = Array.from(process.waiters);
@@ -224,7 +227,7 @@ export class ProcessManager implements ProcessManagerInterface {
       try {
         waiter(process.termination);
       } catch (error) {
-        console.error(`Error occurred while resolving waiter: ${error}`);
+        kernelError(`Error occurred while resolving waiter: ${error}`);
       }
     }
   }
@@ -234,7 +237,7 @@ export class ProcessManager implements ProcessManagerInterface {
     waiter: (termination: Termination) => void,
   ): () => void {
     const process = this.processes.get(pid);
-    if (!process) throw new Error(`ESRCH: No such process, ${pid}`);
+    if (!process) throw esrch(pid);
 
     process.waiters.push(waiter);
     return () => {

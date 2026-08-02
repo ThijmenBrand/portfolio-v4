@@ -1,4 +1,5 @@
 import type { KernelContext } from "../context";
+import { einval, enoent } from "../errors";
 import { resolve } from "../fs";
 import { execute } from "../proc/exec";
 import { sendSignal } from "../proc/signals";
@@ -16,7 +17,7 @@ function startProcess(
 ): Pid {
   const file = resolve(path);
   if (!file) {
-    throw new Error(`ENOENT: No such file or directory, ${path}`);
+    throw enoent(path);
   }
 
   const process = ctx.processes.allocate({
@@ -64,7 +65,7 @@ export function processSyscalls(
     onSignal: (callerPid, signal, handler) => {
       requireAlive(ctx, callerPid);
       if (signal === "SIGKILL") {
-        throw new Error(`EINVAL: Cannot register handler for SIGKILL`);
+        throw einval(`Cannot register handler for SIGKILL`);
       }
 
       return ctx.processes.setSignalHandler(callerPid, signal, handler);

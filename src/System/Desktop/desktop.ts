@@ -8,6 +8,7 @@ import {
   htmlStringToTemplate,
   selectElementFromTemplate,
 } from "../../utils/html";
+import { kernelError } from "../../kernel/errors";
 
 export function main(os: KernelInterface): void {
   const root = os.display.root();
@@ -56,7 +57,7 @@ class Desktop {
       this.desktopLayer.querySelector<HTMLDivElement>("#desktop");
 
     if (!desktopElement) {
-      throw new Error("Desktop element not found");
+      throw kernelError("Desktop element not found");
     }
     return desktopElement;
   }
@@ -65,7 +66,7 @@ class Desktop {
     const appContainer =
       desktopElement.querySelector<HTMLDivElement>("#app-container");
     if (!appContainer) {
-      throw new Error("App container not found");
+      throw kernelError("App container not found");
     }
 
     this.registry.forEach((app) => {

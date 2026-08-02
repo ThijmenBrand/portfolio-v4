@@ -1,4 +1,5 @@
 import type { KernelContext } from "../context";
+import { eintr } from "../errors";
 import {
   rejectOnThrow,
   requireAlive,
@@ -15,7 +16,7 @@ export function waitFor(
     requireAlive(ctx, callerPid);
 
     if (callerPid === targetPid) {
-      throw new Error(`EINVAL: Process ${callerPid} cannot wait for itself`);
+      throw eintr(callerPid);
     }
 
     const target = requireControl(ctx, callerPid, targetPid);
@@ -37,9 +38,7 @@ export function waitFor(
 
       resourceId = ctx.processes.registerResource(callerPid, "wait", () => {
         removeWaiter();
-        reject(
-          new Error(`EINTR: Wait for process ${targetPid} was interrupted`),
-        );
+        reject(eintr(callerPid));
       });
     });
   });

@@ -16,6 +16,7 @@ import { enableFocus } from "./interactions/focus";
 import { enableDrag } from "./interactions/drag";
 import { enableControls } from "./interactions/controls";
 import type { Pid, WindowId } from "../types";
+import { enoent, eperm, kernelError } from "../errors";
 
 export class WindowManager implements WindowManagerInterface {
   private readonly WindowGeometry: WindowGeometryInterface;
@@ -95,7 +96,7 @@ export class WindowManager implements WindowManagerInterface {
   public setTitle(windowId: WindowId, title: string): void {
     const windowRecord = this.windows.get(windowId);
     if (!windowRecord) {
-      throw new Error(`Window with ID ${windowId} not found`);
+      throw enoent(`Window with ID ${windowId} not found`);
     }
 
     windowRecord.titleEl.textContent = title;
@@ -168,9 +169,8 @@ export class WindowManager implements WindowManagerInterface {
       try {
         dispose();
       } catch (error) {
-        console.error(
-          `Error disposing resources for window ${windowId}:`,
-          error,
+        kernelError(
+          `Error disposing resources for window ${windowId}: ${error}`,
         );
       }
     });
@@ -200,9 +200,7 @@ export class WindowManager implements WindowManagerInterface {
   public validateWindowOwnership(windowId: WindowId, pid: Pid): void {
     const windowRecord = this.getWindowRecord(windowId);
     if (windowRecord.ownerPid !== pid) {
-      throw new Error(
-        `Process ${pid} does not own window ${windowId} (owned by ${windowRecord.ownerPid})`,
-      );
+      throw eperm(pid, `validateWindowOwnership for window ${windowId}`);
     }
   }
 
@@ -235,9 +233,8 @@ export class WindowManager implements WindowManagerInterface {
       try {
         this.destroy(record.id);
       } catch (error) {
-        console.error(
-          `Error destroying window ${record.id} for PID ${pid}:`,
-          error,
+        kernelError(
+          `Error destroying window ${record.id} for PID ${pid}: ${error}`,
         );
       }
     }
@@ -263,9 +260,8 @@ export class WindowManager implements WindowManagerInterface {
       try {
         handler();
       } catch (error) {
-        console.error(
-          `Error in close request handler for window ${windowId}:`,
-          error,
+        kernelError(
+          `Error in close request handler for window ${windowId}: ${error}`,
         );
       }
     }
@@ -306,7 +302,7 @@ export class WindowManager implements WindowManagerInterface {
   private getWindowRecord(windowId: WindowId): WindowRecord {
     const windowRecord = this.windows.get(windowId);
     if (!windowRecord) {
-      throw new Error(`Window with ID ${windowId} not found`);
+      throw enoent(`Window with ID ${windowId} not found`);
     }
     return windowRecord;
   }

@@ -1,3 +1,5 @@
+import { kernelError } from "./errors";
+
 export interface DisplayInterface {
   getDesktopLayer(): HTMLElement;
   getWindowLayer(): HTMLElement;
@@ -13,7 +15,7 @@ export class Display {
   public getDesktopLayer(): HTMLElement {
     let desktopLayer = this.screen.querySelector<HTMLElement>("#desktop-layer");
     if (!desktopLayer) {
-      throw new Error("Desktop layer not found");
+      throw kernelError("Desktop layer not found");
     }
     return desktopLayer;
   }
@@ -21,7 +23,7 @@ export class Display {
   public getWindowLayer(): HTMLElement {
     let windowLayer = this.screen.querySelector<HTMLElement>("#window-layer");
     if (!windowLayer) {
-      throw new Error("Window layer not found");
+      throw kernelError("Window layer not found");
     }
     return windowLayer;
   }

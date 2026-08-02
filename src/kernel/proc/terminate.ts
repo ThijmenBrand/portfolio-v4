@@ -1,4 +1,5 @@
 import type { KernelContext } from "../context";
+import { eperm, kernelError } from "../errors";
 import type { ExitReason, Pid } from "../types";
 import { sendSignal, Signal } from "./signals";
 
@@ -13,14 +14,14 @@ export function terminateProcess(
   if (!proc) return;
   if (proc.status === "exiting" || proc.status === "zombie") return;
   if (pid === 0) {
-    throw new Error("EPERM: Cannot terminate the kernel process");
+    throw eperm(pid);
   }
 
   ctx.processes.setStatus(pid, "exiting");
   try {
     proc.abortController.abort(signal ?? reason);
   } catch (error) {
-    console.error(`Error aborting process ${pid}:`, error);
+    kernelError(`Error aborting process ${pid}: ${error}`);
   }
 
   const children = ctx.processes.childrenOf(pid);

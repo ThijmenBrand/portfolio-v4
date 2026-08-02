@@ -1,12 +1,13 @@
 import type { KernelContext } from "../context";
+import { eperm, esrch } from "../errors";
 import type { Pid, Process } from "../types";
 
 export function requireAlive(ctx: KernelContext, pid: Pid): Process {
   const proc = ctx.processes.get(pid);
 
-  if (!proc) throw new Error(`ESRCH: No such process, ${pid}`);
+  if (!proc) throw esrch(pid);
   if (proc.status === "exiting" || proc.status === "zombie") {
-    throw new Error(`ESRCH: Process ${pid} is not alive`);
+    throw esrch(pid);
   }
 
   return proc;
@@ -18,9 +19,8 @@ export function requirePrivilege(
   syscall: string,
 ): void {
   const proc = ctx.processes.get(pid);
-  if (!proc) throw new Error(`ESRCH: No such process, ${pid}`);
-  if (!proc.privileged)
-    throw new Error(`EPERM: Operation not permitted for ${pid}, ${syscall}`);
+  if (!proc) throw esrch(pid);
+  if (!proc.privileged) throw eperm(pid, syscall);
 }
 
 export function rejectOnThrow<T = unknown>(fn: () => Promise<T>): Promise<T> {
@@ -59,9 +59,9 @@ export function requireControl(
   const caller = ctx.processes.get(callerPid);
   const target = ctx.processes.get(targetPid);
 
-  if (!caller || !target) throw new Error(`ESRCH: No such process`);
+  if (!caller || !target) throw esrch(targetPid);
   if (target.parentPid !== callerPid && !caller.privileged)
-    throw new Error(`EPERM: Operation not permitted for ${callerPid}`);
+    throw eperm(callerPid, "requireControl");
 
   return target;
 }

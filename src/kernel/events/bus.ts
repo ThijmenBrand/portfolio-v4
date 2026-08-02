@@ -1,3 +1,4 @@
+import { kernelError } from "../errors";
 import type {
   EventHandler,
   EventType,
@@ -52,9 +53,8 @@ export class EventBus implements EventBusInterface {
         try {
           subscription.handler(event);
         } catch (error) {
-          console.error(
-            `Error in event handler for subscription ${subscription.id} (${event.type}):`,
-            error,
+          throw kernelError(
+            `Error in event handler for subscription ${subscription.id} (${event.type}): ${error}`,
           );
         }
       }

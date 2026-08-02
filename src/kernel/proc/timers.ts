@@ -1,4 +1,5 @@
 import type { KernelContext } from "../context";
+import { kernelError } from "../errors";
 import type { Pid } from "../types";
 
 export function setInterval(
@@ -11,7 +12,7 @@ export function setInterval(
     try {
       callback();
     } catch (error) {
-      console.error(`interval in process ${pid}:`, error);
+      kernelError(`Error in interval callback for process ${pid}: ${error}`);
     }
   }, ms);
 
@@ -30,7 +31,7 @@ export function setTimeout(
     try {
       callback();
     } catch (error) {
-      console.error(`timeout in process ${pid}:`, error);
+      kernelError(`Error in timeout callback for process ${pid}: ${error}`);
     }
   }, ms);
 

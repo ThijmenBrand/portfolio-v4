@@ -1,4 +1,5 @@
 import type { KernelContext } from "../context";
+import { einval, esrch, kernelError } from "../errors";
 import type { Pid } from "../types";
 import { terminateProcess } from "./terminate";
 
@@ -15,7 +16,7 @@ export type Signal = (typeof Signal)[keyof typeof Signal];
 export function deliver(ctx: KernelContext, pid: Pid, signal: Signal): boolean {
   const proc = ctx.processes.get(pid);
   if (!proc) {
-    throw new Error(`ESRCH: No such process, ${pid}`);
+    throw esrch(pid);
   }
 
   const handler = proc.signalHandlers.get(signal);
@@ -25,9 +26,8 @@ export function deliver(ctx: KernelContext, pid: Pid, signal: Signal): boolean {
     try {
       handler();
     } catch (error) {
-      console.error(
-        `Error in signal handler for process ${proc.pid} (${signal}):`,
-        error,
+      kernelError(
+        `Error in signal handler for process ${proc.pid} (${signal}): ${error}`,
       );
     }
   });
@@ -49,7 +49,6 @@ export function sendSignal(ctx: KernelContext, pid: Pid, signal: Signal): void {
       deliver(ctx, pid, signal); // Default action: ignore
       return;
     default:
-      const exaustive: never = signal;
-      throw new Error(`EINVAL: Unknown signal: ${exaustive}`);
+      throw einval(signal);
   }
 }

@@ -1,3 +1,5 @@
+import { kernelError } from "../kernel/errors";
+
 export function htmlStringToTemplate(html: string): HTMLElement {
   const template = document.createElement("template");
   template.innerHTML = html.trim();
@@ -10,7 +12,7 @@ export function selectElementFromTemplate<T extends HTMLElement>(
 ): T {
   const element = template.querySelector<T>(selector);
   if (!element) {
-    throw new Error(
+    throw kernelError(
       `Element with selector "${selector}" not found in template`,
     );
   }
