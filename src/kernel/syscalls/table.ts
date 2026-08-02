@@ -6,6 +6,8 @@ import type {
   Pid,
   ProcessInfo,
   ProcessSignal,
+  Rect,
+  StrutEdge,
   Termination,
   WindowId,
 } from "../types";
@@ -32,6 +34,9 @@ export interface SyscallTable {
   ): void;
   getDisplayRoot(callerPid: Pid): HTMLElement;
   getTaskbarRoot(callerPid: Pid): HTMLElement;
+  getWorkArea(callerPid: Pid): Rect;
+  reserveStrut(callerPid: Pid, edge: StrutEdge, size: number): number;
+  releaseStrut(callerPid: Pid, resourceId: number): void;
   list(callerPid: Pid): ProcessInfo[];
   getSignal(callerPid: Pid): ProcessSignal;
   onSignal(callerPid: Pid, signal: Signal, handler: () => void): void;

@@ -13,4 +13,5 @@ export interface WindowManagerInterface {
   listWindows(): Array<WindowInfo>;
   focusWindow(windowId: WindowId): void;
   setMinimized(windowId: WindowId, minimized: boolean): void;
+  reflowMaximized(): void;
 }

@@ -21,5 +21,14 @@
     pointer-events: none;
 }
 
+.desktop-icons {
+  position: absolute;
+  pointer-events: none;
+}
+
+.desktop-icons > .app-icon {
+  pointer-events: auto;
+}
+
 #window-layer { pointer-events: none; }
 #window-layer > .window { pointer-events: auto; }

@@ -13,7 +13,9 @@ export function subscribeEvents<T extends EventType>(
   const { privileged } = requireAlive(ctx, pid);
 
   const unsubscribe = ctx.events.on(types, (event) => {
-    if (!privileged && event.pid !== pid) return;
+    const subject = "pid" in event ? event.pid : undefined;
+    if (!privileged && subject !== undefined && subject !== pid) return;
+
     try {
       handler(event);
     } catch (error) {

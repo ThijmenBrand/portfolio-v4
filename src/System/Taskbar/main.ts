@@ -52,6 +52,11 @@ class Taskbar {
     if (!taskList) throw kernelError("ENODEV", "Taskbar task list not found");
     this.taskList = taskList;
 
+    const bar = this.root.querySelector<HTMLElement>("#taskbar");
+    if (!bar) throw kernelError("ENODEV", "Taskbar element not found");
+
+    os.display.reserveStrut("bottom", bar.offsetHeight || 48);
+
     this.seed();
     this.subscribe();
 

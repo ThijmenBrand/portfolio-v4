@@ -5,6 +5,8 @@ import type {
   Pid,
   ProcessInfo,
   ProcessSignal,
+  Rect,
+  StrutEdge,
   Termination,
   WindowId,
 } from "../types";
@@ -13,7 +15,13 @@ import type { SyscallTable } from "./table";
 import type { WindowHandleCommands } from "./window";
 
 export interface KernelInterface {
-  display: { root(): HTMLElement; taskbar(): HTMLElement };
+  display: {
+    root(): HTMLElement;
+    taskbar(): HTMLElement;
+    workArea(): Rect;
+    reserveStrut(edge: StrutEdge, size: number): number;
+    releaseStrut(resourceId: number): void;
+  };
   windows: {
     create(options: WindowOptions): WindowHandle;
     list(): WindowInfo[];
@@ -48,6 +56,9 @@ export function bindSyscalls(target: SyscallTable, pid: Pid): KernelInterface {
     display: {
       root: () => target.getDisplayRoot(pid),
       taskbar: () => target.getTaskbarRoot(pid),
+      workArea: () => target.getWorkArea(pid),
+      reserveStrut: (edge, size) => target.reserveStrut(pid, edge, size),
+      releaseStrut: (resourceId) => target.releaseStrut(pid, resourceId),
     },
     windows: {
       create: (options) => target.createWindow(pid, options),

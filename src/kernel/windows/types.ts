@@ -1,6 +1,6 @@
 import type { KernelEvent } from "../events/types";
 import type { FaultSite } from "../proc/types";
-import type { Pid, WindowId } from "../types";
+import type { Pid, Rect, WindowId } from "../types";
 
 export interface WindowOptions {
   title: string;
@@ -39,13 +39,6 @@ export interface WindowHandle {
   onCloseRequest(callback: () => void): void;
 }
 
-export interface Rect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
 export interface Constraints {
   minWidth: number;
   minHeight: number;
@@ -60,6 +53,10 @@ export interface WindowCommmands {
   minimizeWindow(): void;
   focusWindow(): void;
   requestClose(): void;
+}
+
+export interface WorkArea {
+  get(): Rect;
 }
 
 export interface WindowSystemActions {

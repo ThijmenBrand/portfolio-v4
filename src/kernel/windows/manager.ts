@@ -2,13 +2,13 @@ import windowHTML from "./gui/window.html?raw";
 import "./gui/window.css";
 import type { WindowManagerInterface } from "./managerInterface";
 import type {
-  Rect,
   WindowCommmands,
   WindowEvents,
   WindowInfo,
   WindowOptions,
   WindowRecord,
   WindowSystemActions,
+  WorkArea,
 } from "./types";
 import { WindowGeometry, type WindowGeometryInterface } from "./geometry";
 import { WindowChrome, type WindowChromeInterface } from "./windowChrome";
@@ -16,7 +16,7 @@ import { enableResize } from "./interactions/resize";
 import { enableFocus } from "./interactions/focus";
 import { enableDrag } from "./interactions/drag";
 import { enableControls } from "./interactions/controls";
-import type { Pid, WindowId } from "../types";
+import type { Pid, Rect, WindowId } from "../types";
 import { kernelError, logError } from "../errors";
 
 export class WindowManager implements WindowManagerInterface {
@@ -26,6 +26,7 @@ export class WindowManager implements WindowManagerInterface {
   private readonly windowLayer: HTMLElement;
   private readonly actions: WindowSystemActions;
   private readonly events: WindowEvents;
+  private readonly workArea: WorkArea;
 
   private windows: Map<number, WindowRecord> = new Map();
   private nextWindowId: number = 1;
@@ -36,6 +37,7 @@ export class WindowManager implements WindowManagerInterface {
     windowLayer: HTMLElement,
     actions: WindowSystemActions,
     events: WindowEvents,
+    workArea: WorkArea,
   ) {
     this.WindowGeometry = new WindowGeometry();
     this.WindowChrome = new WindowChrome();
@@ -43,6 +45,7 @@ export class WindowManager implements WindowManagerInterface {
     this.windowLayer = windowLayer;
     this.actions = actions;
     this.events = events;
+    this.workArea = workArea;
   }
 
   public createWindow(options: WindowOptions, ownerPid: Pid): WindowRecord {
@@ -147,7 +150,7 @@ export class WindowManager implements WindowManagerInterface {
       windowRecord.frame = { ...windowRecord.restoreFrame };
       windowRecord.restoreFrame = undefined;
     } else if (state === "maximized") {
-      windowRecord.frame = this.WindowGeometry.maximizedFrame(this.windowLayer);
+      windowRecord.frame = { ...this.workArea.get() };
       windowRecord.state = "maximized";
     }
 
@@ -308,6 +311,16 @@ export class WindowManager implements WindowManagerInterface {
       state: record.state,
       focused: this.focusedId === record.id,
     }));
+  }
+
+  public reflowMaximized(): void {
+    const area = this.workArea.get();
+
+    for (const record of this.windows.values()) {
+      if (record.state !== "maximized") continue;
+      record.frame = { ...area };
+      this.WindowChrome.applyFrameToWindow(record);
+    }
   }
 
   private focusTopmostWindow(): void {

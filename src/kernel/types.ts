@@ -13,6 +13,15 @@ export type ExitRecord = {
   termination: Termination;
 };
 
+export interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export type StrutEdge = "top" | "right" | "bottom" | "left";
+
 export type ProcessSignal = {
   readonly reason?: Signal | ExitReason;
   readonly aborted: boolean;

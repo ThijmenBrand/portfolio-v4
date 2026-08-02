@@ -1,4 +1,4 @@
-import type { Pid, Termination, WindowId } from "../types";
+import type { Pid, Rect, Termination, WindowId } from "../types";
 
 type process_spawned = {
   type: "process.spawned";
@@ -43,6 +43,10 @@ type window_minimized = {
   windowId: WindowId;
   minimized: boolean;
 };
+type display_work_area_changed = {
+  type: "display.workAreaChanged";
+  area: Rect;
+};
 
 export type KernelEvent =
   | process_spawned
@@ -51,7 +55,8 @@ export type KernelEvent =
   | window_destroyed
   | window_title_changed
   | window_focused
-  | window_minimized;
+  | window_minimized
+  | display_work_area_changed;
 
 export type EventType = KernelEvent["type"];
 

@@ -1,4 +1,5 @@
-import type { Constraints, Rect, WindowOptions } from "./types";
+import type { Rect } from "../types";
+import type { Constraints, WindowOptions } from "./types";
 
 export interface WindowGeometryInterface {
   initialFrame(options: WindowOptions): Rect;
@@ -7,7 +8,6 @@ export interface WindowGeometryInterface {
   maximizeFrame(constraints: Constraints): Rect;
   cascadePosition(previousFrame: Rect, constraints: Constraints): Rect;
   clampToConstraints(frame: Rect, constraints: Constraints): Rect;
-  maximizedFrame(windowLayer: HTMLElement): Rect;
 }
 
 export class WindowGeometry implements WindowGeometryInterface {
@@ -92,15 +92,6 @@ export class WindowGeometry implements WindowGeometryInterface {
         constraints.minHeight,
         Math.min(frame.height, constraints.maxHeight),
       ),
-    };
-  }
-
-  public maximizedFrame(windowLayer: HTMLElement): Rect {
-    return {
-      x: 0,
-      y: 0,
-      width: windowLayer.offsetWidth,
-      height: windowLayer.offsetHeight,
     };
   }
 }

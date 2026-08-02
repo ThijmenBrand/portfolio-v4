@@ -26,7 +26,13 @@ export function createKernel(screen: HTMLElement): {
       fault: (pid, error, site) => faultProcess(ctx, pid, error, site),
     },
     { emit: (event) => events.emit(event) },
+    { get: () => display.workArea() },
   );
+
+  display.onWorkAreaChange(() => {
+    windows.reflowMaximized();
+    events.emit({ type: "display.workAreaChanged", area: display.workArea() });
+  });
 
   const ctx: KernelContext = {
     processes,

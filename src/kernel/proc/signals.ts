@@ -10,7 +10,6 @@ export const Signal = {
   SIGHUP: "SIGHUP",
   SIGINT: "SIGINT",
   SIGCHLD: "SIGCHLD",
-  SIGABRT: "SIGABRT",
 } as const;
 
 export type Signal = (typeof Signal)[keyof typeof Signal];
