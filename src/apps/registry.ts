@@ -13,6 +13,11 @@ export const registry: AppEntry[] = [
   {
     name: "Task Manager",
     icon: "/src/System/DebugPs/icon.png",
-    exec: "/ProgramFiles/debug-ps",
+    exec: "/System/DebugPs",
+  },
+  {
+    name: "Files",
+    icon: "/assets/icons/default-app.svg",
+    exec: "/ProgramFiles/fs-debug",
   },
 ];

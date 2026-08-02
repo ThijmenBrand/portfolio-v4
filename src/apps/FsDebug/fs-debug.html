@@ -1,0 +1,48 @@
+<div class="fsd">
+  <div class="fsd-toolbar">
+    <button
+      type="button"
+      class="fsd-btn"
+      data-field="up"
+      title="Parent directory"
+    >
+      ↑
+    </button>
+    <input class="fsd-input fsd-path" data-field="path" spellcheck="false" />
+    <button type="button" class="fsd-btn" data-field="go">Go</button>
+    <span class="fsd-sep"></span>
+    <input
+      class="fsd-input fsd-name"
+      data-field="name"
+      placeholder="name"
+      spellcheck="false"
+    />
+    <button type="button" class="fsd-btn" data-field="new-dir">+ Folder</button>
+    <button type="button" class="fsd-btn" data-field="new-file">+ File</button>
+    <button type="button" class="fsd-btn fsd-danger" data-field="delete">
+      Delete
+    </button>
+    <span class="fsd-sep"></span>
+    <button type="button" class="fsd-btn" data-field="seed">Seed</button>
+  </div>
+
+  <div class="fsd-main">
+    <div class="fsd-list" data-field="list"></div>
+    <div class="fsd-side">
+      <div class="fsd-side-head" data-field="selection">No selection</div>
+      <textarea
+        class="fsd-editor"
+        data-field="editor"
+        spellcheck="false"
+        disabled
+      ></textarea>
+      <div class="fsd-side-foot">
+        <button type="button" class="fsd-btn" data-field="save" disabled>
+          Save
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="fsd-status" data-field="status">ready</div>
+</div>

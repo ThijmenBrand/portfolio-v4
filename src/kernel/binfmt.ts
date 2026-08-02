@@ -13,13 +13,16 @@ const files: Record<string, FileEntry> = {
   "/ProgramFiles/terminal": {
     load: () => import("../apps/terminal/main"),
   },
-  "/ProgramFiles/debug-ps": {
+  "/System/DebugPs": {
     load: () => import("../System/DebugPs/debug-ps"),
     privileged: true,
   },
-  "/ProgramFiles/taskbar": {
+  "/System/Taskbar": {
     load: () => import("../System/Taskbar/main"),
     privileged: true,
+  },
+  "/ProgramFiles/fs-debug": {
+    load: () => import("../apps/FsDebug/main"),
   },
 };
 

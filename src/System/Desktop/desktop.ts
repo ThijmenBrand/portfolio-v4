@@ -35,7 +35,7 @@ import "./desktop.css";
 export function main(os: KernelInterface): void {
   const desktop = new Desktop(os, registry, os.display.root());
 
-  os.process.spawn("/ProgramFiles/taskbar");
+  os.process.spawn("/System/Taskbar");
 
   os.process.onSignal("SIGTERM", () => {
     desktop.destroy();

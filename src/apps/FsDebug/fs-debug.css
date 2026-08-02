@@ -1,0 +1,121 @@
+.fsd {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  font: 13px/1.4 ui-sans-serif, system-ui, sans-serif;
+  color: #e6e6e6;
+  background: #1b1b1b;
+}
+
+.fsd-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  border-bottom: 1px solid #333;
+  background: #232323;
+}
+
+.fsd-sep { width: 1px; height: 20px; background: #3a3a3a; margin: 0 2px; }
+
+.fsd-input {
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid #3a3a3a;
+  border-radius: 4px;
+  background: #171717;
+  color: #e6e6e6;
+  font: inherit;
+  font-family: ui-monospace, monospace;
+}
+
+.fsd-path { flex: 1; min-width: 120px; }
+.fsd-name { width: 120px; }
+
+.fsd-btn {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid #3a3a3a;
+  border-radius: 4px;
+  background: #2c2c2c;
+  color: #e6e6e6;
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.fsd-btn:hover:not(:disabled) { background: #383838; }
+.fsd-btn:disabled { opacity: 0.45; cursor: default; }
+.fsd-danger:hover:not(:disabled) { background: #6b2a2a; }
+
+.fsd-main { display: flex; flex: 1; min-height: 0; }
+
+.fsd-list { flex: 1; min-width: 0; overflow: auto; padding: 4px; }
+
+.fsd-row {
+  display: grid;
+  grid-template-columns: 20px 1fr 80px 150px;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: default;
+  user-select: none;
+}
+
+.fsd-row:hover { background: #2a2a2a; }
+.fsd-row.is-selected { background: #2f5486; }
+.fsd-row-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fsd-row-size,
+.fsd-row-time { color: #9a9a9a; font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+
+.fsd-empty { padding: 16px; color: #8a8a8a; }
+
+.fsd-side {
+  display: flex;
+  flex-direction: column;
+  width: 46%;
+  min-width: 0;
+  border-left: 1px solid #333;
+  background: #1f1f1f;
+}
+
+.fsd-side-head {
+  padding: 8px;
+  border-bottom: 1px solid #333;
+  color: #b9b9b9;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fsd-editor {
+  flex: 1;
+  min-height: 0;
+  padding: 8px;
+  border: 0;
+  resize: none;
+  outline: none;
+  background: #171717;
+  color: #dcdcdc;
+  font: 12px/1.5 ui-monospace, monospace;
+}
+
+.fsd-side-foot { padding: 8px; border-top: 1px solid #333; }
+
+.fsd-status {
+  padding: 6px 10px;
+  border-top: 1px solid #333;
+  background: #232323;
+  color: #9fd39f;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fsd-status.is-error { color: #ff8f8f; }
