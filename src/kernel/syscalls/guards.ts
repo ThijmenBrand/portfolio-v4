@@ -1,13 +1,15 @@
 import type { KernelContext } from "../context";
 import type { Pid, Process } from "../types";
 
-export function requireAlive(ctx: KernelContext, pid: Pid): void {
+export function requireAlive(ctx: KernelContext, pid: Pid): Process {
   const proc = ctx.processes.get(pid);
 
   if (!proc) throw new Error(`ESRCH: No such process, ${pid}`);
   if (proc.status === "exiting" || proc.status === "zombie") {
     throw new Error(`ESRCH: Process ${pid} is not alive`);
   }
+
+  return proc;
 }
 
 export function requirePrivilege(

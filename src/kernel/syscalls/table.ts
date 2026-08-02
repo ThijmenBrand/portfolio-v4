@@ -1,4 +1,5 @@
 import type { KernelContext } from "../context";
+import type { EventHandler, EventType } from "../events/types";
 import type { Signal } from "../proc/signals";
 import type {
   ExitRecord,
@@ -10,6 +11,7 @@ import type {
 } from "../types";
 import type { WindowHandle, WindowOptions } from "../windows/types";
 import { displaySyscalls } from "./display";
+import { eventsSyscalls } from "./events";
 import { processSyscalls } from "./process";
 import { timersSyscalls } from "./timers";
 import { windowSyscalls } from "./window";
@@ -36,6 +38,11 @@ export interface SyscallTable {
   clearTimeout(callerPid: Pid, id: number): void;
   kill(callerPid: Pid, targetPid: Pid, signal: Signal): void;
   history(callerPid: Pid): readonly ExitRecord[];
+  subscribe<T extends EventType>(
+    callerPid: Pid,
+    types: readonly T[],
+    handler: EventHandler<T>,
+  ): () => void;
 }
 
 export function createSyscallTable(ctx: KernelContext): SyscallTable {
@@ -44,5 +51,6 @@ export function createSyscallTable(ctx: KernelContext): SyscallTable {
     ...windowSyscalls(ctx),
     ...timersSyscalls(ctx),
     ...displaySyscalls(ctx),
+    ...eventsSyscalls(ctx),
   };
 }

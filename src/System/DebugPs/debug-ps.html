@@ -36,7 +36,12 @@
         autocomplete="off"
         spellcheck="false"
       />
-      <button type="button" class="search-clear" data-action="clear-search" title="Clear filter">
+      <button
+        type="button"
+        class="search-clear"
+        data-action="clear-search"
+        title="Clear filter"
+      >
         ×
       </button>
     </div>
@@ -52,18 +57,39 @@
     <table class="ps-table">
       <thead>
         <tr>
-          <th class="col-num" data-sort="pid" aria-sort="ascending"><button type="button" class="th-sort">PID<span class="th-arrow"></span></button></th>
-          <th class="col-num" data-sort="parentPid" aria-sort="none"><button type="button" class="th-sort">PPID<span class="th-arrow"></span></button></th>
-          <th class="col-path" data-sort="path" aria-sort="none"><button type="button" class="th-sort">Path<span class="th-arrow"></span></button></th>
-          <th data-sort="status" aria-sort="none"><button type="button" class="th-sort">Status<span class="th-arrow"></span></button></th>
-          <th class="col-num" data-sort="windows" aria-sort="none"><button type="button" class="th-sort">Wins<span class="th-arrow"></span></button></th>
-          <th class="col-num" data-sort="uptime" aria-sort="none"><button type="button" class="th-sort">Uptime<span class="th-arrow"></span></button></th>
+          <th class="col-num" data-sort="pid" aria-sort="ascending">
+            <button type="button" class="th-sort">
+              PID<span class="th-arrow"></span>
+            </button>
+          </th>
+          <th class="col-num" data-sort="parentPid" aria-sort="none">
+            <button type="button" class="th-sort">
+              PPID<span class="th-arrow"></span>
+            </button>
+          </th>
+          <th class="col-path" data-sort="path" aria-sort="none">
+            <button type="button" class="th-sort">
+              Path<span class="th-arrow"></span>
+            </button>
+          </th>
+          <th data-sort="status" aria-sort="none">
+            <button type="button" class="th-sort">
+              Status<span class="th-arrow"></span>
+            </button>
+          </th>
+          <th class="col-num" data-sort="uptime" aria-sort="none">
+            <button type="button" class="th-sort">
+              Uptime<span class="th-arrow"></span>
+            </button>
+          </th>
           <th class="col-actions">Actions</th>
         </tr>
       </thead>
       <tbody data-field="running-rows"></tbody>
     </table>
-    <p class="table-empty" data-field="running-empty" hidden>No matching processes.</p>
+    <p class="table-empty" data-field="running-empty" hidden>
+      No matching processes.
+    </p>
   </section>
 
   <section
@@ -78,19 +104,53 @@
     <table class="ps-table">
       <thead>
         <tr>
-          <th class="col-num" data-sort="pid" aria-sort="none"><button type="button" class="th-sort">PID<span class="th-arrow"></span></button></th>
-          <th class="col-num" data-sort="parentPid" aria-sort="none"><button type="button" class="th-sort">PPID<span class="th-arrow"></span></button></th>
-          <th class="col-path" data-sort="path" aria-sort="none"><button type="button" class="th-sort">Path<span class="th-arrow"></span></button></th>
-          <th class="col-num" data-sort="code" aria-sort="none"><button type="button" class="th-sort">Code<span class="th-arrow"></span></button></th>
-          <th data-sort="reason" aria-sort="none"><button type="button" class="th-sort">Reason<span class="th-arrow"></span></button></th>
-          <th data-sort="signal" aria-sort="none"><button type="button" class="th-sort">Signal<span class="th-arrow"></span></button></th>
-          <th class="col-num" data-sort="lifetime" aria-sort="none"><button type="button" class="th-sort">Lifetime<span class="th-arrow"></span></button></th>
-          <th class="col-num" data-sort="at" aria-sort="descending"><button type="button" class="th-sort">Exited<span class="th-arrow"></span></button></th>
+          <th class="col-num" data-sort="pid" aria-sort="none">
+            <button type="button" class="th-sort">
+              PID<span class="th-arrow"></span>
+            </button>
+          </th>
+          <th class="col-num" data-sort="parentPid" aria-sort="none">
+            <button type="button" class="th-sort">
+              PPID<span class="th-arrow"></span>
+            </button>
+          </th>
+          <th class="col-path" data-sort="path" aria-sort="none">
+            <button type="button" class="th-sort">
+              Path<span class="th-arrow"></span>
+            </button>
+          </th>
+          <th class="col-num" data-sort="code" aria-sort="none">
+            <button type="button" class="th-sort">
+              Code<span class="th-arrow"></span>
+            </button>
+          </th>
+          <th data-sort="reason" aria-sort="none">
+            <button type="button" class="th-sort">
+              Reason<span class="th-arrow"></span>
+            </button>
+          </th>
+          <th data-sort="signal" aria-sort="none">
+            <button type="button" class="th-sort">
+              Signal<span class="th-arrow"></span>
+            </button>
+          </th>
+          <th class="col-num" data-sort="lifetime" aria-sort="none">
+            <button type="button" class="th-sort">
+              Lifetime<span class="th-arrow"></span>
+            </button>
+          </th>
+          <th class="col-num" data-sort="at" aria-sort="descending">
+            <button type="button" class="th-sort">
+              Exited<span class="th-arrow"></span>
+            </button>
+          </th>
         </tr>
       </thead>
       <tbody data-field="terminated-rows"></tbody>
     </table>
-    <p class="table-empty" data-field="terminated-empty" hidden>No terminated processes yet.</p>
+    <p class="table-empty" data-field="terminated-empty" hidden>
+      No terminated processes yet.
+    </p>
   </section>
 
   <footer class="statusbar">

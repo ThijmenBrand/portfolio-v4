@@ -57,4 +57,13 @@ export function terminateProcess(
   ) {
     ctx.processes.reap(pid);
   }
+
+  ctx.events.emit({
+    type: "process.exited",
+    pid: proc.pid,
+    parentPid: proc.parentPid,
+    path: proc.path,
+    startedAt: proc.startedAt,
+    termination,
+  });
 }

@@ -4,6 +4,7 @@ import type { WindowManagerInterface } from "./managerInterface";
 import type {
   Rect,
   WindowCommmands,
+  WindowEvents,
   WindowOptions,
   WindowRecord,
   WindowSystemActions,
@@ -22,18 +23,24 @@ export class WindowManager implements WindowManagerInterface {
 
   private readonly windowLayer: HTMLElement;
   private readonly actions: WindowSystemActions;
+  private readonly events: WindowEvents;
 
   private windows: Map<number, WindowRecord> = new Map();
   private nextWindowId: number = 1;
   private zCounter: number = 0;
   private focusedId: number | null = null;
 
-  constructor(windowLayer: HTMLElement, actions: WindowSystemActions) {
+  constructor(
+    windowLayer: HTMLElement,
+    actions: WindowSystemActions,
+    events: WindowEvents,
+  ) {
     this.WindowGeometry = new WindowGeometry();
     this.WindowChrome = new WindowChrome();
 
     this.windowLayer = windowLayer;
     this.actions = actions;
+    this.events = events;
   }
 
   public createWindow(options: WindowOptions, ownerPid: Pid): WindowRecord {
@@ -73,6 +80,13 @@ export class WindowManager implements WindowManagerInterface {
       enableDrag(record, windowCommands),
       enableControls(record, windowCommands),
     );
+
+    this.events.emit({
+      type: "window.created",
+      pid: ownerPid,
+      windowId: record.id,
+      title: options.title,
+    });
 
     this.handleWindowFocus(record.id);
     return record;
@@ -150,7 +164,16 @@ export class WindowManager implements WindowManagerInterface {
   public destroy(windowId: WindowId): void {
     const record = this.getWindowRecord(windowId);
 
-    record.disposers.forEach((dispose) => dispose());
+    record.disposers.forEach((dispose) => {
+      try {
+        dispose();
+      } catch (error) {
+        console.error(
+          `Error disposing resources for window ${windowId}:`,
+          error,
+        );
+      }
+    });
     record.disposers.length = 0;
 
     record.root.remove();
@@ -160,6 +183,12 @@ export class WindowManager implements WindowManagerInterface {
       this.focusedId = null;
       this.focusTopmostWindow();
     }
+
+    this.events.emit({
+      type: "window.destroyed",
+      pid: record.ownerPid,
+      windowId: record.id,
+    });
   }
 
   public addCloseRequestHandler(windowId: WindowId, handler: () => void): void {

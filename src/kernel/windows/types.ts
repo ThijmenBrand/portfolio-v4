@@ -1,3 +1,4 @@
+import type { KernelEvent } from "../events/types";
 import type { Pid, WindowId } from "../types";
 
 export interface WindowOptions {
@@ -63,4 +64,10 @@ export interface WindowCommmands {
 export interface WindowSystemActions {
   defaultClose(windowId: WindowId, ownerPid: Pid): void;
   forceClose(windowId: WindowId, ownerPid: Pid): void;
+}
+
+export type WindowEvent = Extract<KernelEvent, { type: `window.${string}` }>;
+
+export interface WindowEvents {
+  emit(event: WindowEvent): void;
 }

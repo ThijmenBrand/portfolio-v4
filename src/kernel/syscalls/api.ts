@@ -1,6 +1,5 @@
-import type { Signal } from "../proc/signals";
 import type { KernelInterface, Pid, WindowId } from "../types";
-import type { WindowHandle, WindowOptions } from "../windows/types";
+import type { WindowHandle } from "../windows/types";
 import type { SyscallTable } from "./table";
 import type { WindowHandleCommands } from "./window";
 
@@ -10,7 +9,7 @@ export function bindSyscalls(target: SyscallTable, pid: Pid): KernelInterface {
       root: () => target.getDisplayRoot(pid),
     },
     windows: {
-      create: (options: WindowOptions) => target.createWindow(pid, options),
+      create: (options) => target.createWindow(pid, options),
     },
     process: {
       get signal() {
@@ -19,21 +18,20 @@ export function bindSyscalls(target: SyscallTable, pid: Pid): KernelInterface {
       get pid() {
         return pid;
       },
-      spawn: (path: string, args: string[] = []) =>
-        target.spawn(pid, path, args),
-      wait: (childPid: Pid) => target.wait(pid, childPid),
-      exit: (code?: number) => target.exit(pid, code ?? 0),
+      spawn: (path, args) => target.spawn(pid, path, args),
+      wait: (childPid) => target.wait(pid, childPid),
+      exit: (code?) => target.exit(pid, code ?? 0),
       list: () => target.list(pid),
-      onSignal: (signal: Signal, handler: () => void) =>
-        target.onSignal(pid, signal, handler),
-      kill: (targetPid: Pid, signal: Signal) =>
-        target.kill(pid, targetPid, signal),
+      onSignal: (signal, handler) => target.onSignal(pid, signal, handler),
+      kill: (targetPid, signal) => target.kill(pid, targetPid, signal),
       history: () => target.history(pid),
     },
     timers: {
-      setInterval: (callback: () => void, ms: number) =>
-        target.setInterval(pid, callback, ms),
+      setInterval: (callback, ms) => target.setInterval(pid, callback, ms),
       clearInterval: (id: number) => target.clearInterval(pid, id),
+    },
+    events: {
+      subscribe: (types, handler) => target.subscribe(pid, types, handler),
     },
   };
 }

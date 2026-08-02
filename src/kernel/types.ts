@@ -1,3 +1,4 @@
+import type { EventHandler, EventType } from "./events/types";
 import type { Signal } from "./proc/signals";
 import type { WindowHandle, WindowOptions } from "./windows/types";
 
@@ -18,6 +19,12 @@ export interface KernelInterface {
   timers: {
     setInterval(callback: () => void, ms: number): number;
     clearInterval(id: number): void;
+  };
+  events: {
+    subscribe<T extends EventType>(
+      types: readonly T[],
+      handler: EventHandler<T>,
+    ): () => void;
   };
 }
 

@@ -1,8 +1,7 @@
 import type { KernelContext } from "./context";
 import { Display } from "./display";
+import { EventBus } from "./events/bus";
 import { ProcessManager } from "./proc/manager";
-import type { Signal } from "./proc/signals";
-import { terminateProcess } from "./proc/terminate";
 import { bindSyscalls } from "./syscalls/api";
 import { createSyscallTable } from "./syscalls/table";
 import type { KernelInterface, Pid, WindowId } from "./types";
@@ -15,18 +14,24 @@ export function createKernel(screen: HTMLElement): {
 } {
   const display = new Display(screen);
   const processes = new ProcessManager();
+  const events = new EventBus();
 
-  const windows = new WindowManager(display.getWindowLayer(), {
-    defaultClose: (windowId: WindowId, ownerPid: Pid) =>
-      defaultClose(ctx, windowId, ownerPid),
-    forceClose: (windowId: WindowId, ownerPid: Pid) =>
-      forceClose(ctx, windowId, ownerPid),
-  });
+  const windows = new WindowManager(
+    display.getWindowLayer(),
+    {
+      defaultClose: (windowId: WindowId, ownerPid: Pid) =>
+        defaultClose(ctx, windowId, ownerPid),
+      forceClose: (windowId: WindowId, ownerPid: Pid) =>
+        forceClose(ctx, windowId, ownerPid),
+    },
+    { emit: (event) => events.emit(event) },
+  );
 
   const ctx: KernelContext = {
     processes,
     display,
     windows,
+    events,
     createOs: (pid) => bindSyscalls(table, pid),
   };
 
@@ -41,23 +46,9 @@ export function createKernel(screen: HTMLElement): {
   processes.setStatus(0 as Pid, "running");
 
   const os = bindSyscalls(table, 0 as Pid);
+  events.on(
+    ["process.spawned", "process.exited", "window.created", "window.destroyed"],
+    (e) => console.log(e),
+  );
   return { os, boot: () => os.process.spawn("/System/desktop") };
-}
-
-const SIGTERM_TIMEOUT_MS = 5000;
-
-function armWatchdog(ctx: KernelContext, pid: Pid, signal: Signal): void {
-  const proc = ctx.processes.get(pid);
-  if (!proc) return;
-  if (
-    Array.from(proc.resources.values()).some((res) => res.kind === "watchdog")
-  )
-    return;
-
-  const timer = setTimeout(() => {
-    console.warn(`Process ${pid} ignored ${signal}, sending SIGKILL`);
-    terminateProcess(ctx, pid, 137, "signal", "SIGKILL");
-  }, SIGTERM_TIMEOUT_MS);
-
-  ctx.processes.registerResource(pid, "watchdog", () => clearTimeout(timer));
 }

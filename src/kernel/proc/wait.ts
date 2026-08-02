@@ -4,12 +4,12 @@ import {
   requireAlive,
   requireControl,
 } from "../syscalls/guards";
-import type { Termination } from "../types";
+import type { Pid, Termination } from "../types";
 
 export function waitFor(
   ctx: KernelContext,
-  callerPid: number,
-  targetPid: number,
+  callerPid: Pid,
+  targetPid: Pid,
 ): Promise<Termination> {
   return rejectOnThrow(() => {
     requireAlive(ctx, callerPid);

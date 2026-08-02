@@ -1,9 +1,4 @@
-import type {
-  ExitRecord,
-  KernelInterface,
-  Pid,
-  ProcessInfo,
-} from "../../kernel/types";
+import type { ExitRecord, KernelInterface, Pid } from "../../kernel/types";
 
 import debugPsHTML from "./debug-ps.html?raw";
 import processRowHTML from "./process-row.html?raw";
@@ -14,8 +9,6 @@ import {
   selectElementFromTemplate,
 } from "../../utils/html";
 import type { Signal } from "../../kernel/proc/signals";
-
-const REFRESH_MS = 500;
 
 type Tab = "running" | "terminated";
 type Direction = "ascending" | "descending";
@@ -30,7 +23,6 @@ interface RunningRow {
   parentPid: Pid;
   path: string;
   status: string;
-  windows: number;
   uptime: number;
 }
 
@@ -70,6 +62,9 @@ class DebugPs {
   private readonly summary: HTMLElement;
   private readonly searchInput: HTMLInputElement;
 
+  private disposed = false;
+  private frameId: number | null = null;
+
   private tab: Tab = "running";
   private filter = "";
   private readonly sort: Record<Tab, SortState> = {
@@ -99,10 +94,32 @@ class DebugPs {
     this.bindEvents();
     this.render();
 
-    this.os.timers.setInterval(() => this.render(), REFRESH_MS);
+    this.os.events.subscribe(
+      [
+        "process.spawned",
+        "process.exited",
+        "window.created",
+        "window.destroyed",
+      ],
+      () => this.scheduleRender(),
+    );
+
+    this.os.process.signal.addEventListener("abort", () => {
+      this.disposed = true;
+      if (this.frameId !== null) cancelAnimationFrame(this.frameId);
+    });
   }
 
   // ---------------------------------------------------------------- rendering
+
+  private scheduleRender(): void {
+    if (this.disposed || this.frameId !== null) return;
+    this.frameId = requestAnimationFrame(() => {
+      this.frameId = null;
+      if (this.disposed) return;
+      this.render();
+    });
+  }
 
   private render(): void {
     const now = Date.now();
@@ -112,7 +129,6 @@ class DebugPs {
       parentPid: proc.parentPid,
       path: proc.path,
       status: proc.status,
-      windows: (proc as ProcessInfo & { windows?: number }).windows ?? 0,
       uptime: now - proc.startedAt,
     }));
 
@@ -179,7 +195,6 @@ class DebugPs {
     this.fill(element, "pid", String(row.pid));
     this.fill(element, "parentPid", String(row.parentPid));
     this.fill(element, "path", row.path, row.path);
-    this.fill(element, "windows", String(row.windows));
     this.fill(element, "uptime", formatDuration(row.uptime));
 
     const status = selectElementFromTemplate(element, '[data-field="status"]');
@@ -308,8 +323,6 @@ class DebugPs {
     } catch (error) {
       console.error(`Failed to send ${signal} to ${pid}:`, error);
     }
-
-    this.render();
   }
 
   private setTab(tab: Tab): void {

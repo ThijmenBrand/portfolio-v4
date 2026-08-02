@@ -27,6 +27,14 @@ function startProcess(
   });
 
   void execute(ctx, process, file.load);
+  ctx.events.emit({
+    type: "process.spawned",
+    pid: process.pid,
+    parentPid: process.parentPid,
+    path: process.path,
+    at: Date.now(),
+  });
+
   return process.pid;
 }
 
