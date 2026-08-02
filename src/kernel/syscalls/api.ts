@@ -1,4 +1,5 @@
 import type { EventHandler, EventType } from "../events/types";
+import type { DirEntry, StatResult } from "../fs/types";
 import type { Signal } from "../proc/signals";
 import type {
   ExitRecord,
@@ -49,6 +50,16 @@ export interface KernelInterface {
       handler: EventHandler<T>,
     ): () => void;
   };
+  fs: {
+    readFile(path: string): Promise<Uint8Array>;
+    writeFile(path: string, data: Uint8Array): Promise<void>;
+    readTextFile(path: string): Promise<string>;
+    writeTextFile(path: string, text: string): Promise<void>;
+    readdir(path: string): Promise<DirEntry[]>;
+    stat(path: string): Promise<StatResult>;
+    mkdir(path: string): Promise<void>;
+    unlink(path: string): Promise<void>;
+  };
 }
 
 export function bindSyscalls(target: SyscallTable, pid: Pid): KernelInterface {
@@ -88,6 +99,18 @@ export function bindSyscalls(target: SyscallTable, pid: Pid): KernelInterface {
     },
     events: {
       subscribe: (types, handler) => target.subscribe(pid, types, handler),
+    },
+    fs: {
+      readFile: (path) => target.readFile(pid, path),
+      writeFile: (path, data) => target.writeFile(pid, path, data),
+      readTextFile: async (path) =>
+        new TextDecoder().decode(await target.readFile(pid, path)),
+      writeTextFile: (path, text) =>
+        target.writeFile(pid, path, new TextEncoder().encode(text)),
+      readdir: (path) => target.readDir(pid, path),
+      stat: (path) => target.stat(pid, path),
+      mkdir: (path) => target.mkdir(pid, path),
+      unlink: (path) => target.unlink(pid, path),
     },
   };
 }

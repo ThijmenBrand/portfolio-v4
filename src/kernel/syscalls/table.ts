@@ -1,5 +1,6 @@
 import type { KernelContext } from "../context";
 import type { EventHandler, EventType } from "../events/types";
+import type { DirEntry, StatResult } from "../fs/types";
 import type { Signal } from "../proc/signals";
 import type {
   ExitRecord,
@@ -14,6 +15,7 @@ import type {
 import type { WindowHandle, WindowInfo, WindowOptions } from "../windows/types";
 import { displaySyscalls } from "./display";
 import { eventsSyscalls } from "./events";
+import { fsSyscalls } from "./fs";
 import { processSyscalls } from "./process";
 import { timersSyscalls } from "./timers";
 import { windowSyscalls } from "./window";
@@ -52,6 +54,12 @@ export interface SyscallTable {
     types: readonly T[],
     handler: EventHandler<T>,
   ): () => void;
+  stat(callerPid: Pid, path: string): Promise<StatResult>;
+  readDir(callerPid: Pid, path: string): Promise<DirEntry[]>;
+  readFile(callerPid: Pid, path: string): Promise<Uint8Array>;
+  writeFile(callerPid: Pid, path: string, data: Uint8Array): Promise<void>;
+  mkdir(callerPid: Pid, path: string): Promise<void>;
+  unlink(callerPid: Pid, path: string): Promise<void>;
 }
 
 export function createSyscallTable(ctx: KernelContext): SyscallTable {
@@ -61,5 +69,6 @@ export function createSyscallTable(ctx: KernelContext): SyscallTable {
     ...timersSyscalls(ctx),
     ...displaySyscalls(ctx),
     ...eventsSyscalls(ctx),
+    ...fsSyscalls(ctx),
   };
 }

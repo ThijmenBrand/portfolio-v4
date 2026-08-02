@@ -13,7 +13,7 @@ import { WindowManager } from "./windows/manager";
 
 export function createKernel(screen: HTMLElement): {
   os: KernelInterface;
-  boot(): void;
+  boot(): Promise<void>;
 } {
   const display = new Display(screen);
   const processes = new ProcessManager();
@@ -48,6 +48,7 @@ export function createKernel(screen: HTMLElement): {
     display,
     windows,
     events,
+    fs,
     createOs: (pid) => bindSyscalls(table, pid),
   };
 
@@ -66,5 +67,12 @@ export function createKernel(screen: HTMLElement): {
     ["process.spawned", "process.exited", "window.created", "window.destroyed"],
     (e) => console.log(e),
   );
-  return { os, boot: () => os.process.spawn("/System/desktop") };
+  return {
+    os,
+    boot: async () => {
+      await fs.mkdir("/home");
+      await fs.mkdir("/tmp");
+      os.process.spawn("/System/desktop");
+    },
+  };
 }

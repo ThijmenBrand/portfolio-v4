@@ -1,19 +1,21 @@
 import { ebusy, einval, eisdir, enoent, erofs } from "../errors";
 import { findMount, relativeSegments, walk } from "./mount";
 import { normalize } from "./path";
-import type { DirEntry, Mount, Node, Stat } from "./types";
+import type { DirEntry, Mount, Node, StatResult } from "./types";
 
 export class VFS {
-  private mounts: Mount[] = [];
+  private readonly mounts: Mount[] = [];
 
   public mount(mount: Mount): void {
     mount.path = normalize(mount.path);
     this.mounts.push(mount);
   }
 
-  public async stat(path: string): Promise<Stat> {
+  public async stat(path: string): Promise<StatResult> {
     const { mount, node } = await this.resolve(path);
-    return mount.driver.stat(node);
+    const stat = await mount.driver.stat(node);
+    const readonly = mount.readonly;
+    return { ...stat, readonly };
   }
 
   public async readdir(path: string): Promise<DirEntry[]> {
@@ -40,10 +42,10 @@ export class VFS {
     this.assertWritable(mount, path);
 
     const existingNode = await mount.driver.lookup(parent, name);
-    if (existingNode && existingNode.kind !== "directory") eisdir(path);
+    if (existingNode?.kind === "directory") throw eisdir(path);
     if (!existingNode) {
-      await mount.driver.create(parent, name, "file");
-      await mount.driver.write(parent, 0, data);
+      const node = await mount.driver.create(parent, name, "file");
+      await mount.driver.write(node, 0, data);
       return;
     }
 
@@ -55,14 +57,14 @@ export class VFS {
     const { mount, parent, name } = await this.resolveParent(path);
     this.assertWritable(mount, path);
 
-    mount.driver.create(parent, name, "directory");
+    await mount.driver.create(parent, name, "directory");
   }
 
   public async unlink(path: string): Promise<void> {
     const { mount, parent, name } = await this.resolveParent(path);
     this.assertWritable(mount, path);
 
-    mount.driver.unlink(parent, name);
+    await mount.driver.unlink(parent, name);
   }
 
   async resolve(path: string): Promise<{ mount: Mount; node: Node }> {

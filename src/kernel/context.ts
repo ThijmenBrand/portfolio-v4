@@ -1,5 +1,6 @@
 import type { DisplayInterface } from "./display/display";
 import type { EventBusInterface } from "./events/bus";
+import type { VFS } from "./fs/vfs";
 import type { ProcessManagerInterface } from "./proc/manager";
 import type { KernelInterface } from "./syscalls/api";
 import type { Pid } from "./types";
@@ -10,5 +11,6 @@ export interface KernelContext {
   windows: WindowManagerInterface;
   display: DisplayInterface;
   events: EventBusInterface;
+  fs: VFS;
   createOs(pid: Pid): KernelInterface;
 }

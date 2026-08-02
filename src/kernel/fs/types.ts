@@ -24,3 +24,7 @@ export interface DirEntry {
   modifiedAt: number;
   size: number;
 }
+
+export interface StatResult extends Stat {
+  readonly: boolean;
+}
