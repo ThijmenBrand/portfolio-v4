@@ -2,6 +2,7 @@ import type {
   ExitRecord,
   Pid,
   Process,
+  ProcessInfo,
   ProcessInit,
   ProcessSignal,
   Termination,
@@ -11,7 +12,7 @@ import type { Signal } from "./signals";
 export interface ProcessManagerInterface {
   allocate(init: ProcessInit): Process;
   get(pid: Pid): Process | undefined;
-  list(): Process[];
+  list(): ProcessInfo[];
   setStatus(pid: Pid, status: Process["status"]): void;
   childrenOf(pid: Pid): Process[];
   reparentChildren(from: Pid, to: Pid): void;
@@ -70,8 +71,16 @@ export class ProcessManager implements ProcessManagerInterface {
     return this.processes.get(pid);
   }
 
-  public list(): Process[] {
-    return Array.from(this.processes.values());
+  public list(): ProcessInfo[] {
+    return Array.from(this.processes.values()).map((p) => ({
+      pid: p.pid,
+      parentPid: p.parentPid,
+      privileged: p.privileged,
+      args: p.args,
+      path: p.path,
+      status: p.status,
+      startedAt: p.startedAt,
+    }));
   }
 
   public setStatus(pid: Pid, status: Process["status"]): void {

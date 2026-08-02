@@ -4,6 +4,7 @@ import { execute } from "../proc/exec";
 import { sendSignal } from "../proc/signals";
 import { terminateProcess } from "../proc/terminate";
 import { waitFor } from "../proc/wait";
+import type { Pid } from "../types";
 import { alive, requireAlive, requireControl } from "./guards";
 import type { SyscallTable } from "./table";
 
@@ -11,8 +12,8 @@ function startProcess(
   ctx: KernelContext,
   path: string,
   args: string[],
-  parentPid: number,
-): number {
+  parentPid: Pid,
+): Pid {
   const file = resolve(path);
   if (!file) {
     throw new Error(`ENOENT: No such file or directory, ${path}`);
@@ -60,7 +61,7 @@ export function processSyscalls(
 
       return ctx.processes.setSignalHandler(callerPid, signal, handler);
     },
-    getSignal: (callerPid: number) => ctx.processes.getSignal(callerPid),
+    getSignal: (callerPid: Pid) => ctx.processes.getSignal(callerPid),
     list: alive(ctx, (_pid) => ctx.processes.list()),
     history: alive(ctx, (_pid) => ctx.processes.history()),
   };
