@@ -6,7 +6,7 @@ export function fsSyscalls(
   ctx: KernelContext,
 ): Pick<
   SyscallTable,
-  "stat" | "readDir" | "readFile" | "writeFile" | "mkdir" | "unlink"
+  "stat" | "readDir" | "readFile" | "writeFile" | "mkdir" | "unlink" | "rmdir"
 > {
   return {
     stat: async (callerPid, path) => {
@@ -18,8 +18,8 @@ export function fsSyscalls(
       return await ctx.fs.readdir(path);
     },
     readFile: async (callerPid, path) => {
-      requireAlive(ctx, callerPid);
-      return await ctx.fs.readFile(path);
+      const proc = requireAlive(ctx, callerPid);
+      return await ctx.fs.readFile(path, proc.abortController.signal);
     },
     writeFile: async (callerPid, path, data) => {
       requireAlive(ctx, callerPid);
@@ -28,6 +28,10 @@ export function fsSyscalls(
     mkdir: async (callerPid, path) => {
       requireAlive(ctx, callerPid);
       return await ctx.fs.mkdir(path);
+    },
+    rmdir: async (callerPid, path) => {
+      requireAlive(ctx, callerPid);
+      return await ctx.fs.rmdir(path);
     },
     unlink: async (callerPid, path) => {
       requireAlive(ctx, callerPid);

@@ -66,9 +66,9 @@ export function enoexec(path: string): KernelError {
   });
 }
 
-export function eintr(pid: number): KernelError {
-  return new KernelError("EINTR", `Process ${pid} was interrupted`, {
-    pid,
+export function eintr(subject: string | number): KernelError {
+  return new KernelError("EINTR", `Operation interrupted: ${subject}`, {
+    subject,
   });
 }
 
@@ -110,6 +110,12 @@ export function erofs(path: string): KernelError {
 
 export function ebusy(path: string): KernelError {
   return new KernelError("EBUSY", `Resource busy: ${path}`, {
+    path,
+  });
+}
+
+export function efbig(path: string): KernelError {
+  return new KernelError("EFBIG", `File too large: ${path}`, {
     path,
   });
 }

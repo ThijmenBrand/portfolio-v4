@@ -9,5 +9,6 @@ export interface FileSystemDriver {
   write(node: Node, offset: number, data: Uint8Array): Promise<number>;
   truncate(node: Node, size: number): Promise<void>;
   create(parent: Node, name: string, kind: NodeKind): Promise<Node>;
+  rmdir(parent: Node, name: string): Promise<void>;
   unlink(parent: Node, name: string): Promise<void>;
 }

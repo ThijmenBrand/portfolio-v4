@@ -8,6 +8,7 @@ import {
   enotempty,
 } from "../../errors";
 import type { FileSystemDriver } from "../fsdriver";
+import { isValidName } from "../path";
 import type { NodeKind, Stat } from "../types";
 import type { Node } from "../types";
 
@@ -121,7 +122,7 @@ export class MemFS implements FileSystemDriver {
   ): Promise<Node> {
     const directory = this.assertDirectory(parent);
 
-    if (["", ".", ".."].includes(name) || name.includes("/")) {
+    if (!isValidName(name)) {
       throw einval(name);
     }
     if (directory.children.has(name)) {
@@ -155,13 +156,23 @@ export class MemFS implements FileSystemDriver {
     return newNode;
   }
 
+  // Unlink a file, if its a directory throw
   public async unlink(parent: Node, name: string): Promise<void> {
     const directory = this.assertDirectory(parent);
     const target = directory.children.get(name);
     if (!target) throw enoent(name);
-    if (target.kind === "directory" && target.children.size > 0) {
-      throw enotempty(name);
-    }
+    if (target.kind === "directory") throw eisdir(name);
+
+    directory.children.delete(name);
+    directory.modifiedAt = Date.now();
+  }
+
+  public async rmdir(parent: Node, name: string): Promise<void> {
+    const directory = this.assertDirectory(parent);
+    const target = directory.children.get(name);
+    if (!target) throw enoent(name);
+    if (target.kind !== "directory") throw enotdir(name);
+    if (target.children.size > 0) throw enotempty(name);
 
     directory.children.delete(name);
     directory.modifiedAt = Date.now();

@@ -2,6 +2,7 @@ import type { KernelContext } from "./context";
 import { Display } from "./display/display";
 import { EventBus } from "./events/bus";
 import { MemFS } from "./fs/drivers/memfs";
+import { ProcFS } from "./fs/drivers/procfs";
 import { VFS } from "./fs/vfs";
 import { faultProcess } from "./proc/faultproc";
 import { ProcessManager } from "./proc/manager";
@@ -24,6 +25,13 @@ export function createKernel(screen: HTMLElement): {
     path: "/",
     driver: new MemFS(),
     readonly: false,
+  });
+  fs.mount({
+    path: "/proc",
+    driver: new ProcFS({
+      list: () => processes.list(),
+    }),
+    readonly: true,
   });
 
   const windows = new WindowManager(

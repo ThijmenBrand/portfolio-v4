@@ -1,4 +1,5 @@
 import { enoent, enotdir } from "../errors";
+import { dirname } from "./path";
 import type { Mount, Node } from "./types";
 
 export function findMount(mounts: Mount[], path: string): Mount {
@@ -18,6 +19,16 @@ export function findMount(mounts: Mount[], path: string): Mount {
   }
 
   return bestMatch;
+}
+
+export function mountAt(mounts: Mount[], path: string): Mount | undefined {
+  return mounts.find((mount) => mount.path === path);
+}
+
+export function childMounts(mounts: Mount[], path: string): Mount[] {
+  return mounts.filter(
+    (mount) => mount.path !== path && dirname(mount.path) === path,
+  );
 }
 
 export function relativeSegments(mount: Mount, path: string): string[] {

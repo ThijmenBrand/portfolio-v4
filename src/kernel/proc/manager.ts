@@ -80,7 +80,7 @@ export class ProcessManager implements ProcessManagerInterface {
       pid: p.pid,
       parentPid: p.parentPid,
       privileged: p.privileged,
-      args: p.args,
+      args: [...(p.args ?? [])],
       path: p.path,
       status: p.status,
       startedAt: p.startedAt,

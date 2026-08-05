@@ -80,6 +80,7 @@ export interface ProcessInfo {
   termination?: Termination;
   faults: number;
   lastFault?: FaultInfo;
+  readonly args: string[];
 }
 
 export interface ProcessInit {

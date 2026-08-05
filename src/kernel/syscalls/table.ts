@@ -59,6 +59,7 @@ export interface SyscallTable {
   readFile(callerPid: Pid, path: string): Promise<Uint8Array>;
   writeFile(callerPid: Pid, path: string, data: Uint8Array): Promise<void>;
   mkdir(callerPid: Pid, path: string): Promise<void>;
+  rmdir(callerPid: Pid, path: string): Promise<void>;
   unlink(callerPid: Pid, path: string): Promise<void>;
 }
 
