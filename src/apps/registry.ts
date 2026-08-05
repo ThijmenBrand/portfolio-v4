@@ -20,4 +20,9 @@ export const registry: AppEntry[] = [
     icon: "/assets/icons/default-app.svg",
     exec: "/ProgramFiles/fs-debug",
   },
+  {
+    name: "IoDebug",
+    icon: "/assets/icons/default-app.svg",
+    exec: "/ProgramFiles/IoDebug",
+  },
 ];

@@ -1,0 +1,34 @@
+<div class="iod">
+  <div class="iod-toolbar">
+    <span class="iod-title">os.io</span>
+    <span class="iod-spacer"></span>
+    <button type="button" class="iod-btn" data-field="test">Run tests</button>
+    <button type="button" class="iod-btn" data-field="clear">Clear</button>
+  </div>
+
+  <div class="iod-main">
+    <div class="iod-console">
+      <div class="iod-log" data-field="log"></div>
+      <div class="iod-prompt">
+        <span class="iod-caret">$</span>
+        <input
+          class="iod-input"
+          data-field="input"
+          spellcheck="false"
+          autocomplete="off"
+          placeholder="open /proc/version r"
+        />
+      </div>
+    </div>
+
+    <div class="iod-side">
+      <div class="iod-side-head">
+        <span>descriptors</span>
+        <span class="iod-badge" data-field="count">0</span>
+      </div>
+      <div class="iod-fds" data-field="fds"></div>
+    </div>
+  </div>
+
+  <div class="iod-status" data-field="status">ready</div>
+</div>

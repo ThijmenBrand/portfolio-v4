@@ -4,6 +4,7 @@ import {
   closeFd,
   dupFd,
   fstatFd,
+  listFds,
   openFd,
   readFd,
   seekFd,
@@ -16,7 +17,7 @@ export function fdSyscalls(
   ctx: KernelContext,
 ): Pick<
   SyscallTable,
-  "open" | "close" | "read" | "write" | "seek" | "dup" | "fstat"
+  "open" | "close" | "read" | "write" | "seek" | "dup" | "fstat" | "listFds"
 > {
   return {
     open: (callerPid: Pid, path: string, flags: OpenFlags) =>
@@ -31,5 +32,6 @@ export function fdSyscalls(
     dup: (callerPid: Pid, fd: number, to?: number) =>
       dupFd(ctx, callerPid, fd, to),
     fstat: (callerPid: Pid, fd: number) => fstatFd(ctx, callerPid, fd),
+    listFds: (callerPid: Pid) => listFds(ctx, callerPid),
   };
 }

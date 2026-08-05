@@ -1,6 +1,6 @@
 import type { KernelContext } from "../context";
 import type { EventHandler, EventType } from "../events/types";
-import type { OpenFlags, Whence } from "../fs/openfile";
+import type { FdInfo, OpenFlags, Whence } from "../fs/openfile";
 import type { DirEntry, StatResult } from "../fs/types";
 import type { Signal } from "../proc/signals";
 import type {
@@ -75,6 +75,7 @@ export interface SyscallTable {
   ): Promise<number>;
   dup(callerPid: Pid, fd: number, to?: number): number;
   fstat(callerPid: Pid, fd: number): Promise<StatResult>;
+  listFds(callerPid: Pid): FdInfo[];
 }
 
 export function createSyscallTable(ctx: KernelContext): SyscallTable {

@@ -1,5 +1,5 @@
 import type { EventHandler, EventType } from "../events/types";
-import type { OpenFlags, Whence } from "../fs/openfile";
+import type { FdInfo, OpenFlags, Whence } from "../fs/openfile";
 import type { DirEntry, StatResult } from "../fs/types";
 import type { Signal } from "../proc/signals";
 import type {
@@ -69,6 +69,7 @@ export interface KernelInterface {
     seek(fd: number, offset: number, whence?: Whence): Promise<number>;
     dup(fd: number, to?: number): number;
     fstat(fd: number): Promise<StatResult>;
+    listFds(): FdInfo[];
   };
 }
 
@@ -131,6 +132,7 @@ export function bindSyscalls(target: SyscallTable, pid: Pid): KernelInterface {
         target.seek(pid, fd, offset, whence),
       dup: (fd, to) => target.dup(pid, fd, to),
       fstat: (fd) => target.fstat(pid, fd),
+      listFds: () => target.listFds(pid),
     },
   };
 }

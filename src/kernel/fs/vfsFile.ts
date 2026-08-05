@@ -40,7 +40,7 @@ export class VfsFile implements OpenFile {
   }
 
   public get description(): string {
-    return `${this.mount.driver.constructor.name}:${this.path}`;
+    return this.path;
   }
 
   private assertOpen() {

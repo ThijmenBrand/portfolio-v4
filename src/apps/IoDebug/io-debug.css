@@ -1,0 +1,241 @@
+.iod {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  font: 13px/1.45 var(--app-sans);
+  color: var(--app-text);
+  background: var(--app-bg);
+}
+
+/* ------------------------------------------------------------- toolbar */
+
+.iod-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  border-bottom: 1px solid var(--app-border);
+  background: var(--app-surface);
+}
+
+.iod-title {
+  font-family: var(--app-mono);
+  color: var(--app-text-dim);
+  letter-spacing: 0.02em;
+}
+
+.iod-spacer {
+  flex: 1;
+}
+
+.iod-btn {
+  height: var(--app-control);
+  padding: 0 10px;
+  border: 1px solid var(--app-border-hi);
+  border-radius: var(--app-radius-sm);
+  background: var(--app-surface-hi);
+  color: var(--app-text);
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.iod-btn:hover:not(:disabled) {
+  border-color: var(--app-accent);
+  background: var(--app-accent-soft);
+}
+
+.iod-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* ---------------------------------------------------------------- main */
+
+.iod-main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.iod-console {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.iod-log {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 10px;
+  font-family: var(--app-mono);
+  font-size: 12px;
+  background: var(--app-well);
+}
+
+.iod-line {
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding: 1px 0;
+}
+
+.iod-line.is-in {
+  color: var(--app-text);
+}
+
+.iod-line.is-out {
+  color: var(--app-text-dim);
+}
+
+.iod-line.is-info {
+  color: var(--app-text-faint);
+}
+
+.iod-line.is-ok {
+  color: var(--app-ok);
+}
+
+.iod-line.is-err {
+  color: var(--app-danger);
+}
+
+.iod-prompt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border-top: 1px solid var(--app-border);
+  background: var(--app-surface);
+}
+
+.iod-caret {
+  color: var(--app-accent);
+  font-family: var(--app-mono);
+}
+
+.iod-input {
+  flex: 1;
+  height: 34px;
+  border: 0;
+  background: transparent;
+  color: var(--app-text);
+  font: 12px/1.4 var(--app-mono);
+  outline: none;
+}
+
+.iod-input::placeholder {
+  color: var(--app-text-faint);
+}
+
+/* ---------------------------------------------------------- descriptors */
+
+.iod-side {
+  display: flex;
+  width: 340px;
+  flex-direction: column;
+  border-left: 1px solid var(--app-border);
+  background: var(--app-surface);
+}
+
+.iod-side-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--app-row);
+  padding: 0 10px;
+  border-bottom: 1px solid var(--app-border);
+  color: var(--app-text-dim);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.iod-badge {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--app-surface-hi);
+  color: var(--app-text);
+  font-size: 11px;
+  letter-spacing: 0;
+}
+
+.iod-fds {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 4px;
+}
+
+.iod-fd {
+  display: grid;
+  grid-template-columns: 26px 42px 1fr 52px 32px;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 6px;
+  border-radius: var(--app-radius-sm);
+  font-family: var(--app-mono);
+  font-size: 11px;
+}
+
+.iod-fd:nth-child(odd) {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.iod-fd-num {
+  color: var(--app-accent);
+  text-align: right;
+}
+
+.iod-fd-flags {
+  color: var(--app-warn);
+}
+
+.iod-fd-desc {
+  overflow: hidden;
+  color: var(--app-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+
+.iod-fd-offset {
+  color: var(--app-text-dim);
+  text-align: right;
+}
+
+.iod-fd-refs {
+  color: var(--app-text-faint);
+  text-align: right;
+}
+
+.iod-fd-refs.is-shared {
+  color: var(--app-ok);
+  font-weight: 600;
+}
+
+.iod-empty {
+  padding: 10px;
+  color: var(--app-text-faint);
+  font-size: 12px;
+}
+
+/* -------------------------------------------------------------- status */
+
+.iod-status {
+  padding: 6px 10px;
+  border-top: 1px solid var(--app-border);
+  background: var(--app-surface);
+  color: var(--app-text-dim);
+  font-family: var(--app-mono);
+  font-size: 11px;
+}
+
+.iod-status.is-error {
+  background: var(--app-danger-soft);
+  color: var(--app-danger);
+}

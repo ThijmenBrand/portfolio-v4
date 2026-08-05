@@ -24,6 +24,9 @@ const files: Record<string, FileEntry> = {
   "/ProgramFiles/fs-debug": {
     load: () => import("../apps/FsDebug/main"),
   },
+  "/ProgramFiles/IoDebug": {
+    load: () => import("../apps/IoDebug/main"),
+  },
 };
 
 export function resolve(path: string): FileEntry | undefined {
