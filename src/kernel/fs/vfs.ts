@@ -15,8 +15,10 @@ import {
   relativeSegments,
   walk,
 } from "./mount";
+import type { OpenFile, OpenFlags } from "./openfile";
 import { basename, isValidName, normalize } from "./path";
 import type { DirEntry, Mount, Node, StatResult } from "./types";
+import { VfsFile } from "./VfsFile";
 
 export class VFS {
   private readonly mounts: Mount[] = [];
@@ -62,30 +64,49 @@ export class VFS {
     return entries;
   }
 
+  public async open(path: string, flags: OpenFlags): Promise<OpenFile> {
+    const normalized = normalize(path);
+    if (!flags.read && !flags.write)
+      throw einval(`open: no access mode: ${normalized}`);
+    if (flags.truncate && !flags.write)
+      throw einval(`open: O_TRUNC without write: ${normalized}`);
+
+    const mount = findMount(this.mounts, normalized);
+    if (flags.write) this.assertWritable(mount, normalized);
+
+    const node = flags.create
+      ? await this.openCreate(mount, normalized)
+      : (await this.resolve(normalized)).node;
+
+    if (node.kind !== "file") throw eisdir(normalized);
+    if (flags.truncate) await mount.driver.truncate(node, 0);
+
+    return new VfsFile(mount, node, normalized);
+  }
+
   public async readFile(
     path: string,
     signal?: AbortSignal,
   ): Promise<Uint8Array> {
-    const { mount, node } = await this.resolve(path);
-    if (node.kind !== "file") throw enotdir(path);
-
-    return this.readAll(mount, node, 0, path, signal);
+    const file = await this.open(path, { read: true });
+    try {
+      return await this.readAll(file, 0, normalize(path), signal);
+    } finally {
+      await file.close();
+    }
   }
 
   public async writeFile(path: string, data: Uint8Array): Promise<void> {
-    const { mount, parent, name } = await this.resolveParent(path);
-    this.assertWritable(mount, path);
-
-    const existingNode = await mount.driver.lookup(parent, name);
-    if (existingNode?.kind === "directory") throw eisdir(path);
-    if (!existingNode) {
-      const node = await mount.driver.create(parent, name, "file");
-      await mount.driver.write(node, 0, data);
-      return;
+    const file = await this.open(path, {
+      write: true,
+      create: true,
+      truncate: true,
+    });
+    try {
+      await file.write(0, data);
+    } finally {
+      await file.close();
     }
-
-    await mount.driver.truncate(existingNode, 0);
-    await mount.driver.write(existingNode, 0, data);
   }
 
   public async mkdir(path: string): Promise<void> {
@@ -134,6 +155,14 @@ export class VFS {
     return { mount, parent, name };
   }
 
+  private async openCreate(mount: Mount, path: string): Promise<Node> {
+    const { parent, name } = await this.resolveParent(path);
+    return (
+      (await mount.driver.lookup(parent, name)) ??
+      (await mount.driver.create(parent, name, "file"))
+    );
+  }
+
   private assertWritable(mount: Mount, path: string): void {
     if (!mount.readonly) return;
 
@@ -164,8 +193,7 @@ export class VFS {
   }
 
   private async readAll(
-    mount: Mount,
-    node: Node,
+    file: OpenFile,
     from: number,
     fullPath: string,
     signal?: AbortSignal,
@@ -177,7 +205,7 @@ export class VFS {
     while (true) {
       if (signal?.aborted) throw eintr(fullPath);
 
-      const chunk = await mount.driver.read(node, position, VFS.CHUNK_SIZE);
+      const chunk = await file.read(position, VFS.CHUNK_SIZE);
       if (chunk.length === 0) break; // End of file
 
       if (totalRead + chunk.length > VFS.MAX_SIZE) throw efbig(fullPath);
