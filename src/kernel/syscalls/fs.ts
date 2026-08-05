@@ -22,8 +22,8 @@ export function fsSyscalls(
       return await ctx.fs.readFile(path, proc.abortController.signal);
     },
     writeFile: async (callerPid, path, data) => {
-      requireAlive(ctx, callerPid);
-      return await ctx.fs.writeFile(path, data);
+      const proc = requireAlive(ctx, callerPid);
+      return await ctx.fs.writeFile(path, data, proc.abortController.signal);
     },
     mkdir: async (callerPid, path) => {
       requireAlive(ctx, callerPid);

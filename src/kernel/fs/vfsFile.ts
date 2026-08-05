@@ -35,8 +35,12 @@ export class VfsFile implements OpenFile {
   }
 
   public async close(): Promise<void> {
-    this.assertOpen();
+    if (this.closed) return;
     this.closed = true;
+  }
+
+  public get description(): string {
+    return `${this.mount.driver.constructor.name}:${this.path}`;
   }
 
   private assertOpen() {

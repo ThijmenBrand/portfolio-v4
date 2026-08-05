@@ -18,7 +18,7 @@ import {
 import type { OpenFile, OpenFlags } from "./openfile";
 import { basename, isValidName, normalize } from "./path";
 import type { DirEntry, Mount, Node, StatResult } from "./types";
-import { VfsFile } from "./VfsFile";
+import { VfsFile } from "./vfsFile.ts";
 
 export class VFS {
   private readonly mounts: Mount[] = [];
@@ -96,14 +96,18 @@ export class VFS {
     }
   }
 
-  public async writeFile(path: string, data: Uint8Array): Promise<void> {
+  public async writeFile(
+    path: string,
+    data: Uint8Array,
+    signal?: AbortSignal,
+  ): Promise<void> {
     const file = await this.open(path, {
       write: true,
       create: true,
       truncate: true,
     });
     try {
-      await file.write(0, data);
+      await file.write(0, data, signal);
     } finally {
       await file.close();
     }
@@ -205,7 +209,7 @@ export class VFS {
     while (true) {
       if (signal?.aborted) throw eintr(fullPath);
 
-      const chunk = await file.read(position, VFS.CHUNK_SIZE);
+      const chunk = await file.read(position, VFS.CHUNK_SIZE, signal);
       if (chunk.length === 0) break; // End of file
 
       if (totalRead + chunk.length > VFS.MAX_SIZE) throw efbig(fullPath);

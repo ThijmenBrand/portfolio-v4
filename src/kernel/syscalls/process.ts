@@ -27,6 +27,9 @@ function startProcess(
     privileged: file.privileged === true,
   });
 
+  const parent = ctx.processes.get(parentPid);
+  if (parent) process.files.inheritFrom(parent.files);
+
   void execute(ctx, process, file.load);
   ctx.events.emit({
     type: "process.spawned",

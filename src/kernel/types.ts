@@ -1,3 +1,4 @@
+import type { FdTable } from "./proc/fdTable";
 import type { Signal } from "./proc/signals";
 import type { FaultInfo } from "./proc/types";
 import type { KernelInterface } from "./syscalls/api";
@@ -63,6 +64,7 @@ export interface Process {
   startedAt: number;
   termination: Termination;
   resources: Map<number, ResourceEntry>;
+  files: FdTable;
   nextResourceId: number;
   waiters: Array<(termination: Termination) => void>;
   abortController: AbortController;

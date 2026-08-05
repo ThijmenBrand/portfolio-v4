@@ -8,6 +8,7 @@ import type {
   ProcessSignal,
   Termination,
 } from "../types";
+import { FdTable } from "./fdTable";
 import type { Signal } from "./signals";
 import type { FaultInfo } from "./types";
 
@@ -55,6 +56,7 @@ export class ProcessManager implements ProcessManagerInterface {
       status: "loading",
       startedAt: Date.now(),
       resources: new Map(),
+      files: new FdTable(),
       nextResourceId: 0,
       termination: {
         code: 0,

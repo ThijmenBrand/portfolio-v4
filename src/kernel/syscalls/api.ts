@@ -1,4 +1,5 @@
 import type { EventHandler, EventType } from "../events/types";
+import type { OpenFlags, Whence } from "../fs/openfile";
 import type { DirEntry, StatResult } from "../fs/types";
 import type { Signal } from "../proc/signals";
 import type {
@@ -60,6 +61,15 @@ export interface KernelInterface {
     mkdir(path: string): Promise<void>;
     unlink(path: string): Promise<void>;
   };
+  io: {
+    open(path: string, flags: OpenFlags): Promise<number>;
+    close(fd: number): Promise<void>;
+    read(fd: number, length: number): Promise<Uint8Array>;
+    write(fd: number, data: Uint8Array): Promise<number>;
+    seek(fd: number, offset: number, whence?: Whence): Promise<number>;
+    dup(fd: number, to?: number): number;
+    fstat(fd: number): Promise<StatResult>;
+  };
 }
 
 export function bindSyscalls(target: SyscallTable, pid: Pid): KernelInterface {
@@ -111,6 +121,16 @@ export function bindSyscalls(target: SyscallTable, pid: Pid): KernelInterface {
       stat: (path) => target.stat(pid, path),
       mkdir: (path) => target.mkdir(pid, path),
       unlink: (path) => target.unlink(pid, path),
+    },
+    io: {
+      open: (path, flags) => target.open(pid, path, flags),
+      close: (fd) => target.close(pid, fd),
+      read: (fd, length) => target.read(pid, fd, length),
+      write: (fd, data) => target.write(pid, fd, data),
+      seek: (fd, offset, whence = "set") =>
+        target.seek(pid, fd, offset, whence),
+      dup: (fd, to) => target.dup(pid, fd, to),
+      fstat: (fd) => target.fstat(pid, fd),
     },
   };
 }

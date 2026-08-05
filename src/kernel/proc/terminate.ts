@@ -34,6 +34,7 @@ export function terminateProcess(
 
   ctx.windows.releaseFor(pid);
   ctx.processes.disposeResources(pid);
+  void proc.files.closeAll().catch(logError);
   proc.signalHandlers.clear();
 
   const termination = {

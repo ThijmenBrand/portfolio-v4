@@ -1,5 +1,6 @@
 import type { KernelContext } from "../context";
 import type { EventHandler, EventType } from "../events/types";
+import type { OpenFlags, Whence } from "../fs/openfile";
 import type { DirEntry, StatResult } from "../fs/types";
 import type { Signal } from "../proc/signals";
 import type {
@@ -15,6 +16,7 @@ import type {
 import type { WindowHandle, WindowInfo, WindowOptions } from "../windows/types";
 import { displaySyscalls } from "./display";
 import { eventsSyscalls } from "./events";
+import { fdSyscalls } from "./fd";
 import { fsSyscalls } from "./fs";
 import { processSyscalls } from "./process";
 import { timersSyscalls } from "./timers";
@@ -61,6 +63,18 @@ export interface SyscallTable {
   mkdir(callerPid: Pid, path: string): Promise<void>;
   rmdir(callerPid: Pid, path: string): Promise<void>;
   unlink(callerPid: Pid, path: string): Promise<void>;
+  open(callerPid: Pid, path: string, flags: OpenFlags): Promise<number>;
+  close(callerPid: Pid, fd: number): Promise<void>;
+  read(callerPid: Pid, fd: number, length: number): Promise<Uint8Array>;
+  write(callerPid: Pid, fd: number, data: Uint8Array): Promise<number>;
+  seek(
+    callerPid: Pid,
+    fd: number,
+    offset: number,
+    whence: Whence,
+  ): Promise<number>;
+  dup(callerPid: Pid, fd: number, to?: number): number;
+  fstat(callerPid: Pid, fd: number): Promise<StatResult>;
 }
 
 export function createSyscallTable(ctx: KernelContext): SyscallTable {
@@ -71,5 +85,6 @@ export function createSyscallTable(ctx: KernelContext): SyscallTable {
     ...displaySyscalls(ctx),
     ...eventsSyscalls(ctx),
     ...fsSyscalls(ctx),
+    ...fdSyscalls(ctx),
   };
 }

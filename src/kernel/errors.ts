@@ -96,9 +96,9 @@ export function enotempty(path: string): KernelError {
   });
 }
 
-export function ebadf(path: string): KernelError {
-  return new KernelError("EBADF", `Bad file descriptor: ${path}`, {
-    path,
+export function ebadf(subject: string | number): KernelError {
+  return new KernelError("EBADF", `Bad file descriptor: ${subject}`, {
+    subject,
   });
 }
 
@@ -117,5 +117,15 @@ export function ebusy(path: string): KernelError {
 export function efbig(path: string): KernelError {
   return new KernelError("EFBIG", `File too large: ${path}`, {
     path,
+  });
+}
+
+export function emfile(): KernelError {
+  return new KernelError("EMFILE", `Too many open files`, {});
+}
+
+export function espipe(subject: string | number): KernelError {
+  return new KernelError("ESPIPE", `Illegal seek: ${subject}`, {
+    subject,
   });
 }

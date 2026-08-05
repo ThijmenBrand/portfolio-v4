@@ -50,7 +50,7 @@ export function basename(path: string): string {
   }
 
   const parts = split(path);
-  return parts.length > 0 ? parts[parts.length - 1] : "";
+  return parts.at(-1) ?? "";
 }
 
 export function isValidName(name: string): boolean {
