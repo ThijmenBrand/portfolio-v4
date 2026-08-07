@@ -1,7 +1,7 @@
 import type { KernelContext } from "../context";
 import type { EventHandler, EventType } from "../events/types";
 import type { FdInfo, OpenFlags, Whence } from "../fs/openfile";
-import type { DirEntry, StatResult } from "../fs/types";
+import type { DirEntry, Stat, StatResult } from "../fs/types";
 import type { Signal } from "../proc/signals";
 import type {
   ExitRecord,
@@ -74,8 +74,10 @@ export interface SyscallTable {
     whence: Whence,
   ): Promise<number>;
   dup(callerPid: Pid, fd: number, to?: number): number;
-  fstat(callerPid: Pid, fd: number): Promise<StatResult>;
+  fstat(callerPid: Pid, fd: number): Promise<Stat>;
   listFds(callerPid: Pid): FdInfo[];
+  chdir(callerPid: Pid, path: string): void;
+  cwd(callerPid: Pid): string;
 }
 
 export function createSyscallTable(ctx: KernelContext): SyscallTable {

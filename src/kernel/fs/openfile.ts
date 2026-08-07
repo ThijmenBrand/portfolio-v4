@@ -1,4 +1,4 @@
-import type { StatResult } from "./types";
+import type { Stat } from "./types";
 
 export interface OpenFile {
   readonly description: string;
@@ -12,7 +12,7 @@ export interface OpenFile {
     data: Uint8Array,
     signal?: AbortSignal,
   ): Promise<number>;
-  stat(): Promise<StatResult>;
+  stat(): Promise<Stat>;
   close(): Promise<void>;
   readonly seekable: boolean;
 }

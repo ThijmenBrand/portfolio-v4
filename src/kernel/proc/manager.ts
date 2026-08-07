@@ -30,6 +30,8 @@ export interface ProcessManagerInterface {
   reap(pid: Pid): void;
   history(): readonly ExitRecord[];
   addFault(pid: Pid, fault: FaultInfo): void;
+  setCwd(pid: Pid, cwd: string): void;
+  getCwd(pid: Pid): string;
 }
 
 export class ProcessManager implements ProcessManagerInterface {
@@ -67,6 +69,7 @@ export class ProcessManager implements ProcessManagerInterface {
       abortController: new AbortController(),
       signalHandlers: new Map(),
       faults: 0,
+      cwd: init.cwd,
     };
 
     this.processes.set(pid, process);
@@ -264,5 +267,19 @@ export class ProcessManager implements ProcessManagerInterface {
 
     process.faults += 1;
     process.lastFault = fault;
+  }
+
+  public setCwd(pid: Pid, cwd: string): void {
+    const process = this.processes.get(pid);
+    if (!process) throw esrch(pid);
+
+    process.cwd = cwd;
+  }
+
+  public getCwd(pid: Pid): string {
+    const process = this.processes.get(pid);
+    if (!process) throw esrch(pid);
+
+    return process.cwd;
   }
 }

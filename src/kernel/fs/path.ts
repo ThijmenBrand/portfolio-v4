@@ -1,4 +1,5 @@
 import { einval } from "../errors";
+import type { Process } from "../types";
 
 export function normalize(path: string): string {
   // if path is relative, throw an error
@@ -59,3 +60,9 @@ export function isValidName(name: string): boolean {
   }
   return !name.includes("/");
 }
+
+export function resolveFrom(cwd: string, path: string): string {
+  return path.startsWith("/") ? normalize(path) : normalize(join(cwd, path));
+}
+
+export const at = (proc: Process, path: string) => resolveFrom(proc.cwd, path);

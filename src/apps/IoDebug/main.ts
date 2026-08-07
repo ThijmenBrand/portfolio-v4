@@ -534,7 +534,7 @@ class IoDebug {
 
       fstat: async (args) => {
         const info = await os.io.fstat(num(args[0], "fd"));
-        return `${info.kind} ${info.size} bytes${info.readonly ? " (read-only)" : ""}`;
+        return `${info.kind} ${info.size} bytes`;
       },
 
       // The read-until-zero loop, by hand. A short read is not EOF — only a

@@ -71,6 +71,7 @@ export interface Process {
   signalHandlers: Map<Signal, () => void>;
   faults: number;
   lastFault?: FaultInfo;
+  cwd: string;
 }
 
 export interface ProcessInfo {
@@ -89,6 +90,7 @@ export interface ProcessInit {
   parentPid: Pid;
   path: string;
   args: string[];
+  cwd: string;
   privileged: boolean;
 }
 

@@ -66,6 +66,7 @@ export function createKernel(screen: HTMLElement): {
     parentPid: 0 as Pid,
     path: "/kernel",
     args: [],
+    cwd: "/",
     privileged: true,
   });
   processes.setStatus(0 as Pid, "running");

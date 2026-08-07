@@ -6,7 +6,8 @@ import type {
   OpenFlags,
   Whence,
 } from "../fs/openfile";
-import type { StatResult } from "../fs/types";
+import { at } from "../fs/path";
+import type { Stat } from "../fs/types";
 import { requireAlive } from "../syscalls/guards";
 import type { Pid } from "../types";
 
@@ -36,11 +37,11 @@ export async function openFd(
   path: string,
   flags: OpenFlags,
 ): Promise<number> {
-  requireAlive(ctx, pid);
+  const proc = requireAlive(ctx, pid);
 
-  const file = await ctx.fs.open(path, flags);
+  const file = await ctx.fs.open(at(proc, path), flags);
   try {
-    return requireAlive(ctx, pid).files.allocate(file, flags);
+    return proc.files.allocate(file, flags);
   } catch (e) {
     await file.close().catch(logError);
     throw e;
@@ -149,6 +150,6 @@ export async function fstatFd(
   ctx: KernelContext,
   pid: Pid,
   fd: number,
-): Promise<StatResult> {
+): Promise<Stat> {
   return description(ctx, pid, fd).file.stat();
 }

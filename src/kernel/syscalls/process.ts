@@ -8,6 +8,7 @@ import { waitFor } from "../proc/wait";
 import type { Pid } from "../types";
 import { alive, requireAlive, requireControl } from "./guards";
 import type { SyscallTable } from "./table";
+import { changeDirectory, getCwd } from "../proc/cwd";
 
 function startProcess(
   ctx: KernelContext,
@@ -20,14 +21,16 @@ function startProcess(
     throw enoent(path);
   }
 
+  const parent = ctx.processes.get(parentPid);
+
   const process = ctx.processes.allocate({
     parentPid,
     args,
     path,
     privileged: file.privileged === true,
+    cwd: parent?.cwd ?? "/",
   });
 
-  const parent = ctx.processes.get(parentPid);
   if (parent) process.files.inheritFrom(parent.files);
 
   void execute(ctx, process, file.load);
@@ -54,6 +57,8 @@ export function processSyscalls(
   | "getSignal"
   | "onSignal"
   | "history"
+  | "chdir"
+  | "cwd"
 > {
   return {
     spawn: alive(ctx, (parentPid, path, args) =>
@@ -76,5 +81,7 @@ export function processSyscalls(
     getSignal: (callerPid: Pid) => ctx.processes.getSignal(callerPid),
     list: alive(ctx, (_pid) => ctx.processes.list()),
     history: alive(ctx, (_pid) => ctx.processes.history()),
+    chdir: (callerPid, path) => changeDirectory(ctx, callerPid, path),
+    cwd: (callerPid) => getCwd(ctx, callerPid),
   };
 }

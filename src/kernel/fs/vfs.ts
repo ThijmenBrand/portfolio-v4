@@ -81,7 +81,9 @@ export class VFS {
     if (node.kind !== "file") throw eisdir(normalized);
     if (flags.truncate) await mount.driver.truncate(node, 0);
 
-    return new VfsFile(mount, node, normalized);
+    return (
+      (await mount.driver.open?.(node)) ?? new VfsFile(mount, node, normalized)
+    );
   }
 
   public async readFile(

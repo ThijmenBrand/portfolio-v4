@@ -1,6 +1,6 @@
 import type { EventHandler, EventType } from "../events/types";
 import type { FdInfo, OpenFlags, Whence } from "../fs/openfile";
-import type { DirEntry, StatResult } from "../fs/types";
+import type { DirEntry, Stat, StatResult } from "../fs/types";
 import type { Signal } from "../proc/signals";
 import type {
   ExitRecord,
@@ -68,7 +68,7 @@ export interface KernelInterface {
     write(fd: number, data: Uint8Array): Promise<number>;
     seek(fd: number, offset: number, whence?: Whence): Promise<number>;
     dup(fd: number, to?: number): number;
-    fstat(fd: number): Promise<StatResult>;
+    fstat(fd: number): Promise<Stat>;
     listFds(): FdInfo[];
   };
 }

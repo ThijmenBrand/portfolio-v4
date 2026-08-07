@@ -1,6 +1,8 @@
 import { ebadf, einval, eisdir, enotdir, erofs, esrch } from "../../errors";
 import type { Pid, ProcessInfo } from "../../types";
 import type { FileSystemDriver } from "../fsdriver";
+import type { OpenFile } from "../openfile";
+import { SnapshotFile } from "../snapshotFile";
 import type { Node, NodeKind, Stat } from "../types";
 
 const BRAND = Symbol("procfs");
@@ -78,6 +80,22 @@ export class ProcFS implements FileSystemDriver {
   public async readdir(node: Node): Promise<string[]> {
     const directory = this.assertDirectory(node);
     return directory.children();
+  }
+
+  public async open(node: Node): Promise<OpenFile> {
+    const file = this.assertFile(node);
+    const bytes = ProcFS.encoder.encode(file.content());
+
+    return new SnapshotFile(
+      bytes,
+      {
+        kind: "file",
+        size: bytes.length,
+        createdAt: file.createdAt,
+        modifiedAt: file.updatedAt,
+      },
+      "procfs",
+    );
   }
 
   public async read(

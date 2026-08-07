@@ -1,6 +1,6 @@
 import { ebadf } from "../errors";
 import type { OpenFile } from "./openfile";
-import type { Mount, Node, StatResult } from "./types";
+import type { Mount, Node, Stat } from "./types";
 
 export class VfsFile implements OpenFile {
   public readonly seekable: boolean = true;
@@ -26,12 +26,9 @@ export class VfsFile implements OpenFile {
     return this.mount.driver.write(this.node, offset, data);
   }
 
-  public async stat(): Promise<StatResult> {
+  public async stat(): Promise<Stat> {
     this.assertOpen();
-    return {
-      ...(await this.mount.driver.stat(this.node)),
-      readonly: this.mount.readonly,
-    };
+    return await this.mount.driver.stat(this.node);
   }
 
   public async close(): Promise<void> {
