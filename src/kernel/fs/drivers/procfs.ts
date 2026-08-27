@@ -1,7 +1,7 @@
 import { ebadf, einval, eisdir, enotdir, erofs, esrch } from "../../errors";
+import type { OpenFile } from "../../io/openfile";
 import type { Pid, ProcessInfo } from "../../types";
 import type { FileSystemDriver } from "../fsdriver";
-import type { OpenFile } from "../openfile";
 import { SnapshotFile } from "../snapshotFile";
 import type { Node, NodeKind, Stat } from "../types";
 
@@ -47,6 +47,7 @@ export class ProcFS implements FileSystemDriver {
   private readonly processFiles: Record<string, (pid: Pid) => string> = {
     status: (pid) => this.formatStatus(pid),
     cmdline: (pid) => this.formatcmdline(pid),
+    cwd: (pid) => this.formatcwd(pid),
   };
 
   public constructor(source: ProcSource) {
@@ -179,6 +180,10 @@ export class ProcFS implements FileSystemDriver {
   private formatcmdline(pid: Pid): string {
     const info = this.find(pid);
     return [info.path, ...info.args].map((arg) => `${arg}\0`).join("");
+  }
+
+  private formatcwd(pid: Pid): string {
+    return this.find(pid).cwd;
   }
 
   private makeDirectory(

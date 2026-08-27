@@ -1,5 +1,5 @@
 import { ebadf } from "../errors";
-import type { OpenFile } from "./openfile";
+import type { OpenFile } from "../io/openfile";
 import type { Mount, Node, Stat } from "./types";
 
 export class VfsFile implements OpenFile {

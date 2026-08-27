@@ -1,6 +1,12 @@
 import { einval } from "../errors";
-import type { Process } from "../types";
 
+/**
+ * Normalizes a path by first removing any duplicate or trailing slashes,
+ * after which resolving . and .. directives.
+ * @param path string
+ * @returns normalized path
+ * @throws einval
+ */
 export function normalize(path: string): string {
   // if path is relative, throw an error
   if (!path.startsWith("/")) throw einval(path);
@@ -64,5 +70,3 @@ export function isValidName(name: string): boolean {
 export function resolveFrom(cwd: string, path: string): string {
   return path.startsWith("/") ? normalize(path) : normalize(join(cwd, path));
 }
-
-export const at = (proc: Process, path: string) => resolveFrom(proc.cwd, path);

@@ -1,4 +1,4 @@
-import type { OpenFile } from "./openfile";
+import type { OpenFile } from "../io/openfile";
 import { type Node, type NodeKind, type Stat } from "./types";
 
 export interface FileSystemDriver {
@@ -12,5 +12,5 @@ export interface FileSystemDriver {
   create(parent: Node, name: string, kind: NodeKind): Promise<Node>;
   rmdir(parent: Node, name: string): Promise<void>;
   unlink(parent: Node, name: string): Promise<void>;
-  open?(node: Node): Promise<OpenFile>;
+  open?(node: Node, path: string): Promise<OpenFile>;
 }

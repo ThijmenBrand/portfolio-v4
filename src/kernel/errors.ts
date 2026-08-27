@@ -108,6 +108,10 @@ export function erofs(path: string): KernelError {
   });
 }
 
+export function eeof(offset: string): KernelError {
+  return new KernelError("EEOF", `end of file at offset: ${offset}`);
+}
+
 export function ebusy(path: string): KernelError {
   return new KernelError("EBUSY", `Resource busy: ${path}`, {
     path,
@@ -129,3 +133,5 @@ export function espipe(subject: string | number): KernelError {
     subject,
   });
 }
+
+export function epipe();

@@ -8,6 +8,7 @@ import {
   erofs,
   KernelError,
 } from "../errors";
+import type { OpenFile, OpenFlags } from "../io/openfile.ts";
 import {
   childMounts,
   findMount,
@@ -15,7 +16,6 @@ import {
   relativeSegments,
   walk,
 } from "./mount";
-import type { OpenFile, OpenFlags } from "./openfile";
 import { basename, isValidName, normalize } from "./path";
 import type { DirEntry, Mount, Node, StatResult } from "./types";
 import { VfsFile } from "./vfsFile.ts";
@@ -34,6 +34,11 @@ export class VFS {
     this.mounts.push({ ...mount, path: mountPath });
   }
 
+  /**
+   * returns the stat for a given path
+   * @param path string
+   * @returns Promise<StatResult>
+   */
   public async stat(path: string): Promise<StatResult> {
     const { mount, node } = await this.resolve(path);
     const stat = await mount.driver.stat(node);
@@ -66,6 +71,7 @@ export class VFS {
 
   public async open(path: string, flags: OpenFlags): Promise<OpenFile> {
     const normalized = normalize(path);
+
     if (!flags.read && !flags.write)
       throw einval(`open: no access mode: ${normalized}`);
     if (flags.truncate && !flags.write)
@@ -82,7 +88,8 @@ export class VFS {
     if (flags.truncate) await mount.driver.truncate(node, 0);
 
     return (
-      (await mount.driver.open?.(node)) ?? new VfsFile(mount, node, normalized)
+      (await mount.driver.open?.(node, normalized)) ??
+      new VfsFile(mount, node, normalized)
     );
   }
 
@@ -136,6 +143,14 @@ export class VFS {
     await mount.driver.rmdir(parent, name);
   }
 
+  /**
+   * resolves the mount and node based on a given path
+   * @param path string
+   * @returns
+   * @throws einval
+   * @throws enoent
+   * @throws enotdir
+   */
   public async resolve(path: string): Promise<{ mount: Mount; node: Node }> {
     const normalized = normalize(path);
     const mount = findMount(this.mounts, normalized);

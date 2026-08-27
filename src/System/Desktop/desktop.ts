@@ -34,6 +34,7 @@ import "./desktop.css";
 
 export function main(os: KernelInterface): void {
   const desktop = new Desktop(os, registry, os.display.root());
+  os.process.chdir("/home");
 
   os.process.spawn("/System/Taskbar");
 

@@ -31,7 +31,6 @@ export interface ProcessManagerInterface {
   history(): readonly ExitRecord[];
   addFault(pid: Pid, fault: FaultInfo): void;
   setCwd(pid: Pid, cwd: string): void;
-  getCwd(pid: Pid): string;
 }
 
 export class ProcessManager implements ProcessManagerInterface {
@@ -89,6 +88,7 @@ export class ProcessManager implements ProcessManagerInterface {
       path: p.path,
       status: p.status,
       startedAt: p.startedAt,
+      cwd: p.cwd,
       termination: p.termination,
       faults: p.faults,
       lastFault: p.lastFault,

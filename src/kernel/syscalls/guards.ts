@@ -2,6 +2,15 @@ import type { KernelContext } from "../context";
 import { eperm, esrch } from "../errors";
 import type { Pid, Process } from "../types";
 
+/**
+ * Resolves the process from the process registry.
+ * If no process could be found,
+ * Or the proces has status exiting or zombie it throws
+ * @param ctx KernelContext
+ * @param pid Pid
+ * @returns Process
+ * @throws esrch
+ */
 export function requireAlive(ctx: KernelContext, pid: Pid): Process {
   const proc = ctx.processes.get(pid);
 

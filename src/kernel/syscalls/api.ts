@@ -1,6 +1,6 @@
 import type { EventHandler, EventType } from "../events/types";
-import type { FdInfo, OpenFlags, Whence } from "../fs/openfile";
 import type { DirEntry, Stat, StatResult } from "../fs/types";
+import type { FdInfo, OpenFlags, Whence } from "../io/openfile";
 import type { Signal } from "../proc/signals";
 import type {
   ExitRecord,
@@ -40,6 +40,8 @@ export interface KernelInterface {
     list(): ProcessInfo[];
     kill(pid: Pid, signal: Signal, code?: number): void;
     history(): readonly ExitRecord[];
+    chdir(path: string): Promise<void>;
+    cwd(): string;
   };
   timers: {
     setInterval(callback: () => void, ms: number): number;
@@ -103,6 +105,8 @@ export function bindSyscalls(target: SyscallTable, pid: Pid): KernelInterface {
       onSignal: (signal, handler) => target.onSignal(pid, signal, handler),
       kill: (targetPid, signal) => target.kill(pid, targetPid, signal),
       history: () => target.history(pid),
+      chdir: (path: string) => target.chdir(pid, path),
+      cwd: () => target.cwd(pid),
     },
     timers: {
       setInterval: (callback, ms) => target.setInterval(pid, callback, ms),

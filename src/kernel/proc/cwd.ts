@@ -1,20 +1,29 @@
 import type { KernelContext } from "../context";
-import { normalize } from "../fs/path";
+import { enoent, enotdir } from "../errors";
+import { resolveFrom } from "../fs/path";
 import { requireAlive } from "../syscalls/guards";
 import type { Pid } from "../types";
 
-export function changeDirectory(
+export async function changeDirectory(
   ctx: KernelContext,
   pid: Pid,
   path: string,
-): void {
+): Promise<void> {
   const proc = requireAlive(ctx, pid);
-  const normalized = normalize(path);
+  const normalized = resolveFrom(proc.cwd, path);
+  const stat = await ctx.fs.stat(normalized);
+
+  if (stat.kind !== "directory") {
+    throw enotdir(normalized);
+  }
+
+  if (requireAlive(ctx, pid)) {
+    throw enoent(normalized);
+  }
 
   ctx.processes.setCwd(proc.pid, normalized);
 }
 
 export function getCwd(ctx: KernelContext, pid: Pid): string {
-  const proc = requireAlive(ctx, pid);
-  return ctx.processes.getCwd(proc.pid);
+  return requireAlive(ctx, pid).cwd;
 }

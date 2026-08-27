@@ -2,6 +2,13 @@ import { enoent, enotdir } from "../errors";
 import { dirname } from "./path";
 import type { Mount, Node } from "./types";
 
+/**
+ * Find the mount for a given path, throws when no mount could be found
+ * @param mounts Mount[]
+ * @param path string
+ * @returns Mount
+ * @throws enoent
+ */
 export function findMount(mounts: Mount[], path: string): Mount {
   let bestMatch: Mount | null = null;
   // Iterate through the mounts to find the best match for the given path
@@ -31,6 +38,12 @@ export function childMounts(mounts: Mount[], path: string): Mount[] {
   );
 }
 
+/**
+ * 
+ * @param mount Mount
+ * @param path string
+ * @returns string[] 
+ */
 export function relativeSegments(mount: Mount, path: string): string[] {
   if (path === mount.path) {
     return [];
@@ -40,6 +53,15 @@ export function relativeSegments(mount: Mount, path: string): string[] {
   return relativePath.split("/").filter(Boolean);
 }
 
+/**
+ * find the node at a given fullPath, throws if the given path could not be found
+ * @param mount Mount
+ * @param segments string[]
+ * @param fullPath string
+ * @returns Node
+ * @throws enotdir
+ * @throws enoent
+ */
 export async function walk(
   mount: Mount,
   segments: string[],

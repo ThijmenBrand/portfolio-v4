@@ -6,7 +6,7 @@ import type {
   OpenFlags,
   Whence,
 } from "../fs/openfile";
-import { at } from "../fs/path";
+import { resolveFrom } from "../fs/path";
 import type { Stat } from "../fs/types";
 import { requireAlive } from "../syscalls/guards";
 import type { Pid } from "../types";
@@ -39,7 +39,7 @@ export async function openFd(
 ): Promise<number> {
   const proc = requireAlive(ctx, pid);
 
-  const file = await ctx.fs.open(at(proc, path), flags);
+  const file = await ctx.fs.open(resolveFrom(proc.cwd, path), flags);
   try {
     return proc.files.allocate(file, flags);
   } catch (e) {

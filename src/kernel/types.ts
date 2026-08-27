@@ -82,6 +82,7 @@ export interface ProcessInfo {
   startedAt: number;
   termination?: Termination;
   faults: number;
+  cwd: string;
   lastFault?: FaultInfo;
   readonly args: string[];
 }

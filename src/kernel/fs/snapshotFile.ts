@@ -1,5 +1,5 @@
 import { ebadf, einval, erofs } from "../errors";
-import type { OpenFile } from "./openfile";
+import type { OpenFile } from "../io/openfile";
 import type { Stat } from "./types";
 
 export class SnapshotFile implements OpenFile {
@@ -28,7 +28,7 @@ export class SnapshotFile implements OpenFile {
     throw erofs(this.description);
   }
   public async stat(): Promise<Stat> {
-    return this.meta;
+    return { ...this.meta };
   }
   public async close(): Promise<void> {
     this.closed = true;

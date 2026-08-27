@@ -76,7 +76,7 @@ export interface SyscallTable {
   dup(callerPid: Pid, fd: number, to?: number): number;
   fstat(callerPid: Pid, fd: number): Promise<Stat>;
   listFds(callerPid: Pid): FdInfo[];
-  chdir(callerPid: Pid, path: string): void;
+  chdir(callerPid: Pid, path: string): Promise<void>;
   cwd(callerPid: Pid): string;
 }
 

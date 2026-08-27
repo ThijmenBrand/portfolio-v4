@@ -1,4 +1,3 @@
-import type { FdInfo, OpenFlags, Whence } from "../../kernel/fs/openfile";
 import type { KernelInterface } from "../../kernel/syscalls/api";
 import {
   htmlStringToTemplate,
@@ -9,6 +8,7 @@ import fdRowHTML from "./fd-row.html?raw";
 import ioDebugHTML from "./io-debug.html?raw";
 import "./io-debug.css";
 import "../../ui/theme.css";
+import type { FdInfo, OpenFlags, Whence } from "../../kernel/io/openfile";
 
 const CHILD_PATH = "/ProgramFiles/io-child";
 const CHILD_FD = 3;
@@ -487,6 +487,8 @@ class IoDebug {
           "fds                       dump the table (also shown on the right)",
           "test                      run the self-test suite",
           "clear",
+          "cwd",
+          "chdir <path>",
         ].join("\n"),
 
       open: async (args) => {
@@ -585,6 +587,17 @@ class IoDebug {
 
       clear: async () => {
         this.log.replaceChildren();
+        return "";
+      },
+
+      cwd: async () => {
+        const cwd = os.process.cwd();
+        return cwd;
+      },
+
+      chdir: async (args) => {
+        const path = args[0];
+        await os.process.chdir(path);
         return "";
       },
     };

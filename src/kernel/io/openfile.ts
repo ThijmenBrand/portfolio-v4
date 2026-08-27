@@ -1,4 +1,4 @@
-import type { Stat } from "./types";
+import type { Stat } from "../fs/types";
 
 export interface OpenFile {
   readonly description: string;
