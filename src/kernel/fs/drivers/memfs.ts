@@ -7,6 +7,7 @@ import {
   enotdir,
   enotempty,
 } from "../../errors";
+import type { Bytes } from "../../types";
 import type { FileSystemDriver } from "../fsdriver";
 import { isValidName } from "../path";
 import type { NodeKind, Stat } from "../types";
@@ -22,7 +23,7 @@ interface MemNodeBase {
 
 interface MemFile extends MemNodeBase {
   kind: "file";
-  data: Uint8Array;
+  data: Bytes;
 }
 
 interface MemDirectory extends MemNodeBase {
@@ -71,7 +72,7 @@ export class MemFS implements FileSystemDriver {
     node: Node,
     offset: number,
     length: number,
-  ): Promise<Uint8Array> {
+  ): Promise<Bytes> {
     const file = this.assertFile(node);
     if (offset < 0) throw einval(`Offset cannot be negative: ${offset}`);
     if (length < 0) throw einval(`Length cannot be negative: ${length}`);
@@ -80,11 +81,7 @@ export class MemFS implements FileSystemDriver {
     return file.data.slice(offset, offset + length);
   }
 
-  public async write(
-    node: Node,
-    offset: number,
-    data: Uint8Array,
-  ): Promise<number> {
+  public async write(node: Node, offset: number, data: Bytes): Promise<number> {
     const file = this.assertFile(node);
     if (offset < 0) throw einval(`Offset cannot be negative: ${offset}`);
 

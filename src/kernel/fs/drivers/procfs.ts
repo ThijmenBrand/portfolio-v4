@@ -1,6 +1,6 @@
 import { ebadf, einval, eisdir, enotdir, erofs, esrch } from "../../errors";
-import type { OpenFile } from "../../io/openfile";
-import type { Pid, ProcessInfo } from "../../types";
+import type { FdInfo, OpenFile } from "../../io/openfile";
+import type { Bytes, Pid, ProcessInfo } from "../../types";
 import type { FileSystemDriver } from "../fsdriver";
 import { SnapshotFile } from "../snapshotFile";
 import type { Node, NodeKind, Stat } from "../types";
@@ -28,6 +28,7 @@ type ProcNode = ProcFile | ProcDirectory;
 
 type ProcSource = {
   list(): ProcessInfo[];
+  fds(pid: Pid): FdInfo[];
 };
 
 export class ProcFS implements FileSystemDriver {
@@ -103,7 +104,7 @@ export class ProcFS implements FileSystemDriver {
     node: Node,
     offset: number,
     length: number,
-  ): Promise<Uint8Array> {
+  ): Promise<Bytes> {
     const file = this.assertFile(node);
     if (offset < 0) throw einval(`Offset cannot be negative: ${offset}`);
     if (length < 0) throw einval(`Length cannot be negative: ${length}`);
@@ -117,7 +118,7 @@ export class ProcFS implements FileSystemDriver {
   public async write(
     _node: Node,
     _offset: number,
-    _data: Uint8Array,
+    _data: Bytes,
   ): Promise<number> {
     throw erofs("Write operation is not supported on procfs");
   }
@@ -237,9 +238,37 @@ export class ProcFS implements FileSystemDriver {
   private makeProcessDirectory(pid: Pid, startedAt: number): ProcDirectory {
     return this.makeDirectory(
       startedAt,
-      () => Object.keys(this.processFiles),
-      (name) => this.makeChildFile(pid, startedAt, name),
+      () => [...Object.keys(this.processFiles), "fd"],
+      (name) =>
+        name === "fd"
+          ? this.makeFdDirectory(pid, startedAt)
+          : this.makeChildFile(pid, startedAt, name),
     );
+  }
+
+  private makeFdDirectory(pid: Pid, startedAt: number): ProcDirectory {
+    return this.makeDirectory(
+      startedAt,
+      () => this.source.fds(pid).map((info) => String(info.fd)),
+      (name) => {
+        // Strict, for the same reason pid names are: "007" must not alias fd 7.
+        if (!/^\d+$/.test(name)) return undefined;
+        const info = this.source.fds(pid).find((f) => String(f.fd) === name);
+        if (!info) return undefined;
+        return this.makeFile(() => this.formatFd(info), startedAt);
+      },
+    );
+  }
+
+  private formatFd(info: FdInfo): string {
+    return [
+      `Description:\t${info.description}`,
+      `Flags:\t${[info.flags.read ? "r" : "", info.flags.write ? "w" : ""].join("")}`,
+      `Offset:\t${info.seekable ? info.offset : "-"}`,
+      `Refs:\t${info.refs}`,
+      `Seekable:\t${info.seekable}`,
+      "",
+    ].join("\n");
   }
 
   private makeChildFile(

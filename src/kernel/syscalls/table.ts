@@ -1,9 +1,10 @@
 import type { KernelContext } from "../context";
 import type { EventHandler, EventType } from "../events/types";
-import type { FdInfo, OpenFlags, Whence } from "../fs/openfile";
 import type { DirEntry, Stat, StatResult } from "../fs/types";
+import type { FdInfo, OpenFlags, PipeFds, Whence } from "../io/openfile";
 import type { Signal } from "../proc/signals";
 import type {
+  Bytes,
   ExitRecord,
   Pid,
   ProcessInfo,
@@ -18,12 +19,17 @@ import { displaySyscalls } from "./display";
 import { eventsSyscalls } from "./events";
 import { fdSyscalls } from "./fd";
 import { fsSyscalls } from "./fs";
-import { processSyscalls } from "./process";
+import { processSyscalls, type SpawnOptions } from "./process";
 import { timersSyscalls } from "./timers";
 import { windowSyscalls } from "./window";
 
 export interface SyscallTable {
-  spawn(callerPid: Pid, path: string, args?: string[]): Pid;
+  spawn(
+    callerPid: Pid,
+    path: string,
+    args?: string[],
+    options?: SpawnOptions,
+  ): Pid;
   exit(callerPid: Pid, code: number): void;
   createWindow(callerPid: Pid, options: WindowOptions): WindowHandle;
   setWindowTitle(callerPid: Pid, windowId: WindowId, title: string): void;
@@ -58,15 +64,15 @@ export interface SyscallTable {
   ): () => void;
   stat(callerPid: Pid, path: string): Promise<StatResult>;
   readDir(callerPid: Pid, path: string): Promise<DirEntry[]>;
-  readFile(callerPid: Pid, path: string): Promise<Uint8Array>;
-  writeFile(callerPid: Pid, path: string, data: Uint8Array): Promise<void>;
+  readFile(callerPid: Pid, path: string): Promise<Bytes>;
+  writeFile(callerPid: Pid, path: string, data: Bytes): Promise<void>;
   mkdir(callerPid: Pid, path: string): Promise<void>;
   rmdir(callerPid: Pid, path: string): Promise<void>;
   unlink(callerPid: Pid, path: string): Promise<void>;
   open(callerPid: Pid, path: string, flags: OpenFlags): Promise<number>;
   close(callerPid: Pid, fd: number): Promise<void>;
-  read(callerPid: Pid, fd: number, length: number): Promise<Uint8Array>;
-  write(callerPid: Pid, fd: number, data: Uint8Array): Promise<number>;
+  read(callerPid: Pid, fd: number, length: number): Promise<Bytes>;
+  write(callerPid: Pid, fd: number, data: Bytes): Promise<number>;
   seek(
     callerPid: Pid,
     fd: number,
@@ -78,6 +84,8 @@ export interface SyscallTable {
   listFds(callerPid: Pid): FdInfo[];
   chdir(callerPid: Pid, path: string): Promise<void>;
   cwd(callerPid: Pid): string;
+  pipe(callerPid: Pid): Promise<PipeFds>;
+  openpty(callerPid: Pid): Promise<{ master: number; slave: number }>;
 }
 
 export function createSyscallTable(ctx: KernelContext): SyscallTable {

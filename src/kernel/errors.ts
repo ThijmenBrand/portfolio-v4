@@ -134,4 +134,18 @@ export function espipe(subject: string | number): KernelError {
   });
 }
 
-export function epipe();
+export function epipe(subject: string | number): KernelError {
+  return new KernelError("EPIPE", `${subject}`, {
+    subject,
+  });
+}
+
+export function eio(subject: string): KernelError {
+  return new KernelError("EIO", `Input/output error: ${subject}`, { subject });
+}
+
+export function enospc(subject: string): KernelError {
+  return new KernelError("ENOSPC", `No space left on device: ${subject}`, {
+    subject,
+  });
+}

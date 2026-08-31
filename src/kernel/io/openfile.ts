@@ -1,17 +1,11 @@
 import type { Stat } from "../fs/types";
+import type { Bytes } from "../types";
+import type { PtyEnd } from "./pty";
 
 export interface OpenFile {
   readonly description: string;
-  read(
-    offset: number,
-    length: number,
-    signal?: AbortSignal,
-  ): Promise<Uint8Array>;
-  write(
-    offset: number,
-    data: Uint8Array,
-    signal?: AbortSignal,
-  ): Promise<number>;
+  read(offset: number, length: number, signal?: AbortSignal): Promise<Bytes>;
+  write(offset: number, data: Bytes, signal?: AbortSignal): Promise<number>;
   stat(): Promise<Stat>;
   close(): Promise<void>;
   readonly seekable: boolean;
@@ -24,6 +18,16 @@ export interface FdInfo {
   offset: number;
   refs: number;
   seekable: boolean;
+}
+
+export interface PipeFds {
+  read: number;
+  write: number;
+}
+
+export interface PtyFds {
+  master: PtyEnd;
+  slave: PtyEnd;
 }
 
 export interface OpenFileDescription {

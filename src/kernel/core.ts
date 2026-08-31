@@ -2,6 +2,7 @@ import type { KernelContext } from "./context";
 import { Display } from "./display/display";
 import { EventBus } from "./events/bus";
 import { MemFS } from "./fs/drivers/memfs";
+import { opfsAvailable, OpfsFS } from "./fs/drivers/opfs";
 import { ProcFS } from "./fs/drivers/procfs";
 import { VFS } from "./fs/vfs";
 import { faultProcess } from "./proc/faultproc";
@@ -30,9 +31,14 @@ export function createKernel(screen: HTMLElement): {
     path: "/proc",
     driver: new ProcFS({
       list: () => processes.list(),
+      fds: (pid) => processes.get(pid)?.files.list() ?? [],
     }),
     readonly: true,
   });
+
+  if (opfsAvailable()) {
+    fs.mount({ path: "/home", driver: new OpfsFS(), readonly: false });
+  }
 
   const windows = new WindowManager(
     display.getWindowLayer(),
@@ -79,8 +85,8 @@ export function createKernel(screen: HTMLElement): {
   return {
     os,
     boot: async () => {
-      await fs.mkdir("/home");
       await fs.mkdir("/tmp");
+      if (!opfsAvailable()) await fs.mkdir("/home");
       os.process.spawn("/System/desktop");
     },
   };

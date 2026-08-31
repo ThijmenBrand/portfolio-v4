@@ -98,3 +98,5 @@ export interface ProcessInit {
 export type AppModule = {
   main(os: KernelInterface, args: string[]): void | Promise<void>;
 };
+
+export type Bytes = Uint8Array<ArrayBuffer>;

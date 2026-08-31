@@ -1,15 +1,18 @@
 import type { KernelContext } from "../context";
 import { ebadf, einval, eperm, espipe, logError } from "../errors";
-import type {
-  FdInfo,
-  OpenFileDescription,
-  OpenFlags,
-  Whence,
-} from "../fs/openfile";
 import { resolveFrom } from "../fs/path";
 import type { Stat } from "../fs/types";
+import type {
+  OpenFileDescription,
+  OpenFlags,
+  FdInfo,
+  Whence,
+  PipeFds,
+} from "../io/openfile";
+import { createPipe } from "../io/pipe";
+import { createPty } from "../io/pty";
 import { requireAlive } from "../syscalls/guards";
-import type { Pid } from "../types";
+import type { Bytes, Pid } from "../types";
 
 function withOffset<T>(
   ofd: OpenFileDescription,
@@ -61,7 +64,7 @@ export async function readFd(
   pid: Pid,
   fd: number,
   length: number,
-): Promise<Uint8Array> {
+): Promise<Bytes> {
   const proc = requireAlive(ctx, pid);
   const ofd = proc.files.get(fd);
 
@@ -70,18 +73,21 @@ export async function readFd(
   if (length === 0) return new Uint8Array(0);
 
   const signal = proc.abortController.signal;
-  return withOffset(ofd, async () => {
+
+  const run = async () => {
     const chunk = await ofd.file.read(ofd.offset, length, signal);
     ofd.offset += chunk.length;
     return chunk;
-  });
+  };
+
+  return ofd.file.seekable ? withOffset(ofd, run) : run();
 }
 
 export async function writeFd(
   ctx: KernelContext,
   pid: Pid,
   fd: number,
-  data: Uint8Array,
+  data: Bytes,
 ): Promise<number> {
   const proc = requireAlive(ctx, pid);
   const ofd = proc.files.get(fd);
@@ -91,13 +97,14 @@ export async function writeFd(
 
   const signal = proc.abortController.signal;
 
-  return withOffset(ofd, async () => {
+  const run = async () => {
     if (ofd.flags.append) ofd.offset = (await ofd.file.stat()).size;
-
     const written = await ofd.file.write(ofd.offset, data, signal);
     ofd.offset += written;
     return written;
-  });
+  };
+
+  return ofd.file.seekable ? withOffset(ofd, run) : run();
 }
 
 export function listFds(ctx: KernelContext, pid: Pid, target?: Pid): FdInfo[] {
@@ -152,4 +159,38 @@ export async function fstatFd(
   fd: number,
 ): Promise<Stat> {
   return description(ctx, pid, fd).file.stat();
+}
+
+export async function pipeFd(ctx: KernelContext, pid: Pid): Promise<PipeFds> {
+  const proc = requireAlive(ctx, pid);
+  const { read, write } = createPipe();
+
+  const readFd = proc.files.allocate(read, { read: true });
+  try {
+    return { read: readFd, write: proc.files.allocate(write, { write: true }) };
+  } catch (e) {
+    await proc.files.close(readFd).catch(logError);
+    await write.close().catch(logError);
+    throw e;
+  }
+}
+
+export async function ptyFd(
+  ctx: KernelContext,
+  pid: Pid,
+): Promise<{ master: number; slave: number }> {
+  const proc = requireAlive(ctx, pid);
+  const { master, slave } = createPty();
+
+  const readFd = proc.files.allocate(master, { read: true, write: true });
+  try {
+    return {
+      master: readFd,
+      slave: proc.files.allocate(slave, { write: true, read: true }),
+    };
+  } catch (e) {
+    await proc.files.close(readFd).catch(logError);
+    await slave.close().catch(logError);
+    throw e;
+  }
 }

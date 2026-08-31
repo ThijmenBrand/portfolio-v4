@@ -1,6 +1,6 @@
 import type { FileSystemDriver } from "./fsdriver";
 
-export type NodeKind = "file" | "directory";
+export type NodeKind = "file" | "directory" | "fifo";
 
 export type Node = { readonly kind: NodeKind };
 

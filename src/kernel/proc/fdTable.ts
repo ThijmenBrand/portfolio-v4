@@ -4,7 +4,7 @@ import type {
   OpenFile,
   OpenFileDescription,
   OpenFlags,
-} from "../fs/openfile";
+} from "../io/openfile";
 
 export class FdTable {
   private static readonly MAX_FDS = 256;
@@ -31,6 +31,33 @@ export class FdTable {
       refs: ofd.refs,
       seekable: ofd.file.seekable,
     }));
+  }
+
+  public static resolveMapping(
+    parent: FdTable,
+    mapping: Record<number, number>,
+  ): Array<[number, OpenFileDescription]> {
+    const resolved: Array<[number, OpenFileDescription]> = [];
+
+    for (const [childFd, parentFd] of Object.entries(mapping)) {
+      const fd = Number(childFd);
+
+      if (!Number.isInteger(fd) || fd < 0 || fd >= FdTable.MAX_FDS)
+        throw ebadf(fd);
+
+      resolved.push([fd, parent.get(parentFd)]); // throws EBADF if absent
+    }
+
+    return resolved;
+  }
+
+  public adopt(entries: Array<[number, OpenFileDescription]>): void {
+    if (this.entries.size > 0) throw ebusy("adopt: table is not empty");
+
+    for (const [fd, ofd] of entries) {
+      ofd.refs++; // ONCE PER ENTRY, even when the OFD repeats
+      this.entries.set(fd, ofd);
+    }
   }
 
   public get(fd: number): OpenFileDescription {

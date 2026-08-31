@@ -32,9 +32,9 @@ import menuHTML from "./menu.html?raw";
 import menuItemHTML from "./menu-item.html?raw";
 import "./desktop.css";
 
-export function main(os: KernelInterface): void {
+export async function main(os: KernelInterface): Promise<void> {
   const desktop = new Desktop(os, registry, os.display.root());
-  os.process.chdir("/home");
+  await os.process.chdir("/home");
 
   os.process.spawn("/System/Taskbar");
 

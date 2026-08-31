@@ -1,9 +1,10 @@
 import { ebadf, einval, erofs } from "../errors";
 import type { OpenFile } from "../io/openfile";
+import type { Bytes } from "../types";
 import type { Stat } from "./types";
 
 export class SnapshotFile implements OpenFile {
-  private readonly bytes: Uint8Array;
+  private readonly bytes: Bytes;
   private readonly meta: Stat;
 
   public readonly description: string;
@@ -11,13 +12,13 @@ export class SnapshotFile implements OpenFile {
 
   private closed = false;
 
-  constructor(bytes: Uint8Array, meta: Stat, description: string) {
+  constructor(bytes: Bytes, meta: Stat, description: string) {
     this.bytes = bytes;
     this.meta = meta;
     this.description = description;
   }
 
-  public async read(offset: number, length: number): Promise<Uint8Array> {
+  public async read(offset: number, length: number): Promise<Bytes> {
     this.assertOpen();
     if (offset < 0 || length < 0) throw einval(this.description);
     if (offset >= this.bytes.length) return new Uint8Array(0);

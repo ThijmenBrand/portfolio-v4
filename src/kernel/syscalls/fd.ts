@@ -1,23 +1,34 @@
 import type { KernelContext } from "../context";
-import type { OpenFlags, Whence } from "../fs/openfile";
+import type { OpenFlags, Whence } from "../io/openfile";
 import {
   closeFd,
   dupFd,
   fstatFd,
   listFds,
   openFd,
+  pipeFd,
+  ptyFd,
   readFd,
   seekFd,
   writeFd,
 } from "../proc/fd";
-import type { Pid } from "../types";
+import type { Bytes, Pid } from "../types";
 import type { SyscallTable } from "./table";
 
 export function fdSyscalls(
   ctx: KernelContext,
 ): Pick<
   SyscallTable,
-  "open" | "close" | "read" | "write" | "seek" | "dup" | "fstat" | "listFds"
+  | "open"
+  | "close"
+  | "read"
+  | "write"
+  | "seek"
+  | "dup"
+  | "fstat"
+  | "listFds"
+  | "pipe"
+  | "openpty"
 > {
   return {
     open: (callerPid: Pid, path: string, flags: OpenFlags) =>
@@ -25,7 +36,7 @@ export function fdSyscalls(
     close: (callerPid: Pid, fd: number) => closeFd(ctx, callerPid, fd),
     read: (callerPid: Pid, fd: number, length: number) =>
       readFd(ctx, callerPid, fd, length),
-    write: (callerPid: Pid, fd: number, data: Uint8Array) =>
+    write: (callerPid: Pid, fd: number, data: Bytes) =>
       writeFd(ctx, callerPid, fd, data),
     seek: (callerPid: Pid, fd: number, offset: number, whence: Whence) =>
       seekFd(ctx, callerPid, fd, offset, whence),
@@ -33,5 +44,7 @@ export function fdSyscalls(
       dupFd(ctx, callerPid, fd, to),
     fstat: (callerPid: Pid, fd: number) => fstatFd(ctx, callerPid, fd),
     listFds: (callerPid: Pid) => listFds(ctx, callerPid),
+    pipe: (callerPid: Pid) => pipeFd(ctx, callerPid),
+    openpty: (callerPid: Pid) => ptyFd(ctx, callerPid),
   };
 }

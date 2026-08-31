@@ -9,6 +9,7 @@ import ioDebugHTML from "./io-debug.html?raw";
 import "./io-debug.css";
 import "../../ui/theme.css";
 import type { FdInfo, OpenFlags, Whence } from "../../kernel/io/openfile";
+import type { Bytes } from "../../kernel/types";
 
 const CHILD_PATH = "/ProgramFiles/io-child";
 const CHILD_FD = 3;
@@ -17,11 +18,11 @@ const MAX_LOG_LINES = 500;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-function encode(text: string): Uint8Array {
+function encode(text: string): Bytes {
   return encoder.encode(text);
 }
 
-function decode(bytes: Uint8Array): string {
+function decode(bytes: Bytes): string {
   return decoder.decode(bytes);
 }
 
@@ -47,7 +48,7 @@ function errorMessage(error: unknown): string {
  * NUL-separated — decoding as UTF-8 would render those as nothing at all and
  * make a correct read look like an empty one.
  */
-function printable(bytes: Uint8Array): string {
+function printable(bytes: Bytes): string {
   let out = "";
   for (const byte of bytes) {
     if (byte === 0) out += "␀";
@@ -350,6 +351,162 @@ function buildCases(os: KernelInterface): TestCase[] {
         }
       },
     },
+    {
+      name: "a pipe round-trips bytes",
+      run: async () => {
+        const { read, write } = await os.io.pipe();
+        try {
+          await os.io.write(write, encode("hello"));
+          const text = decode(await os.io.read(read, 64));
+          expect(text === "hello", `got ${JSON.stringify(text)}`);
+        } finally {
+          await os.io.close(read).catch(() => {});
+          await os.io.close(write).catch(() => {});
+        }
+      },
+    },
+    {
+      name: "a pipe is not seekable",
+      run: async () => {
+        const { read, write } = await os.io.pipe();
+        try {
+          await expectCode("ESPIPE", () => os.io.seek(read, 0, "set"));
+        } finally {
+          await os.io.close(read).catch(() => {});
+          await os.io.close(write).catch(() => {});
+        }
+      },
+    },
+    {
+      name: "a read on an empty pipe parks until a write arrives",
+      run: async () => {
+        const { read, write } = await os.io.pipe();
+        try {
+          const order: string[] = [];
+          const pending = os.io.read(read, 16).then((bytes) => {
+            order.push("read");
+            return bytes;
+          });
+
+          // A MACROTASK, not a microtask. A read that merely deferred by one
+          // microtask would still land before this, and the test would pass
+          // for the wrong reason.
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          order.push("write");
+          await os.io.write(write, encode("late"));
+
+          expect(decode(await pending) === "late", "wrong bytes came back");
+          expect(
+            order.join(",") === "write,read",
+            `order was ${order.join(",")} — the read never parked`,
+          );
+        } finally {
+          await os.io.close(read).catch(() => {});
+          await os.io.close(write).catch(() => {});
+        }
+      },
+    },
+    {
+      name: "closing the write end wakes a parked reader with EOF",
+      run: async () => {
+        const { read, write } = await os.io.pipe();
+        try {
+          const pending = os.io.read(read, 16);
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          await os.io.close(write);
+
+          const bytes = await pending;
+          expect(bytes.length === 0, `EOF read returned ${bytes.length} bytes`);
+        } finally {
+          await os.io.close(read).catch(() => {});
+        }
+      },
+    },
+    {
+      name: "writing with no readers is EPIPE",
+      run: async () => {
+        const { read, write } = await os.io.pipe();
+        await os.io.close(read);
+        try {
+          await expectCode("EPIPE", () =>
+            os.io.write(write, encode("nobody home")),
+          );
+        } finally {
+          await os.io.close(write).catch(() => {});
+        }
+      },
+    },
+    {
+      name: "a write past capacity blocks until the reader drains",
+      run: async () => {
+        const { read, write } = await os.io.pipe();
+        const SIZE = 100 * 1024; // deliberately larger than the 64KB capacity
+        try {
+          let resolved = false;
+          const pending = os.io.write(write, new Uint8Array(SIZE)).then((n) => {
+            resolved = true;
+            return n;
+          });
+
+          await new Promise((r) => setTimeout(r, 0));
+          expect(
+            !resolved,
+            "the write resolved with nobody reading — capacity is not enforced",
+          );
+
+          let drained = 0;
+          while (drained < SIZE) {
+            drained += (await os.io.read(read, 16 * 1024)).length;
+          }
+
+          expect(
+            (await pending) === SIZE,
+            "the write did not report every byte it queued",
+          );
+        } finally {
+          await os.io.close(read).catch(() => {});
+          await os.io.close(write).catch(() => {});
+        }
+      },
+    },
+    {
+      name: "a child inherits the write end and its exit is the EOF",
+      run: async () => {
+        const { read, write } = await os.io.pipe();
+        try {
+          os.io.dup(write, CHILD_FD); // the child writes to fd 3
+          await os.io.close(write); // parent drops its own write end
+
+          const pid = os.process.spawn(CHILD_PATH, ["from-child"]);
+          await os.io.close(CHILD_FD); // AFTER spawn — inheritFrom already ran
+
+          // Only the child holds a write end now. Read to EOF.
+          const chunks: Bytes[] = [];
+          for (;;) {
+            const chunk = await os.io.read(read, 64);
+            if (chunk.length === 0) break;
+            chunks.push(chunk);
+          }
+          await os.process.wait(pid);
+
+          const total = chunks.reduce((sum, c) => sum + c.length, 0);
+          const merged = new Uint8Array(total);
+          let at = 0;
+          for (const chunk of chunks) {
+            merged.set(chunk, at);
+            at += chunk.length;
+          }
+
+          expect(
+            decode(merged) === "from-child",
+            `got ${JSON.stringify(decode(merged))} — an empty result means writerCount hit zero when the parent closed, i.e. it is counting descriptors instead of ends`,
+          );
+        } finally {
+          await os.io.close(read).catch(() => {});
+          await os.io.close(CHILD_FD).catch(() => {});
+        }
+      },
+    },
   ];
 }
 
@@ -489,6 +646,7 @@ class IoDebug {
           "clear",
           "cwd",
           "chdir <path>",
+          "pipe                      create a pipe, prints both fds",
         ].join("\n"),
 
       open: async (args) => {
@@ -547,7 +705,7 @@ class IoDebug {
 
         const fd = await os.io.open(path, { read: true });
         try {
-          const chunks: Uint8Array[] = [];
+          const chunks: Bytes[] = [];
           let reads = 0;
           for (;;) {
             const chunk = await os.io.read(fd, 4096);
@@ -599,6 +757,11 @@ class IoDebug {
         const path = args[0];
         await os.process.chdir(path);
         return "";
+      },
+
+      pipe: async () => {
+        const { read, write } = await os.io.pipe();
+        return `read fd ${read}, write fd ${write}`;
       },
     };
   }

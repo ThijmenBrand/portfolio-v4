@@ -27,6 +27,13 @@ const files: Record<string, FileEntry> = {
   "/ProgramFiles/IoDebug": {
     load: () => import("../apps/IoDebug/main"),
   },
+  "/ProgramFiles/io-child": {
+    load: () => import("../apps/IoDebug/child"),
+  },
+  "/ProgramFiles/sh": { load: () => import("../apps/sh/main") },
+  "/ProgramFiles/echo": { load: () => import("../apps/echo/main") },
+  "/ProgramFiles/cat": { load: () => import("../apps/cat/main") },
+  "/ProgramFiles/loop": { load: () => import("../apps/loop/main") },
 };
 
 export function resolve(path: string): FileEntry | undefined {

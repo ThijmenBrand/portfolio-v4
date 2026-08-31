@@ -1,8 +1,9 @@
 import type { EventHandler, EventType } from "../events/types";
 import type { DirEntry, Stat, StatResult } from "../fs/types";
-import type { FdInfo, OpenFlags, Whence } from "../io/openfile";
+import type { FdInfo, OpenFlags, PipeFds, Whence } from "../io/openfile";
 import type { Signal } from "../proc/signals";
 import type {
+  Bytes,
   ExitRecord,
   Pid,
   ProcessInfo,
@@ -13,6 +14,7 @@ import type {
   WindowId,
 } from "../types";
 import type { WindowHandle, WindowInfo, WindowOptions } from "../windows/types";
+import type { SpawnOptions } from "./process";
 import type { SyscallTable } from "./table";
 import type { WindowHandleCommands } from "./window";
 
@@ -35,7 +37,7 @@ export interface KernelInterface {
     readonly pid: Pid;
     onSignal(signal: Signal, handler: () => void): void;
     wait(pid: Pid): Promise<Termination>;
-    spawn(path: string, args?: string[]): Pid;
+    spawn(path: string, args?: string[], options?: SpawnOptions): Pid;
     exit(code?: number): void;
     list(): ProcessInfo[];
     kill(pid: Pid, signal: Signal, code?: number): void;
@@ -54,8 +56,8 @@ export interface KernelInterface {
     ): () => void;
   };
   fs: {
-    readFile(path: string): Promise<Uint8Array>;
-    writeFile(path: string, data: Uint8Array): Promise<void>;
+    readFile(path: string): Promise<Bytes>;
+    writeFile(path: string, data: Bytes): Promise<void>;
     readTextFile(path: string): Promise<string>;
     writeTextFile(path: string, text: string): Promise<void>;
     readdir(path: string): Promise<DirEntry[]>;
@@ -66,12 +68,14 @@ export interface KernelInterface {
   io: {
     open(path: string, flags: OpenFlags): Promise<number>;
     close(fd: number): Promise<void>;
-    read(fd: number, length: number): Promise<Uint8Array>;
-    write(fd: number, data: Uint8Array): Promise<number>;
+    read(fd: number, length: number): Promise<Bytes>;
+    write(fd: number, data: Bytes): Promise<number>;
     seek(fd: number, offset: number, whence?: Whence): Promise<number>;
     dup(fd: number, to?: number): number;
     fstat(fd: number): Promise<Stat>;
     listFds(): FdInfo[];
+    pipe(): Promise<PipeFds>;
+    openpty(): Promise<{ master: number; slave: number }>;
   };
 }
 
@@ -98,7 +102,7 @@ export function bindSyscalls(target: SyscallTable, pid: Pid): KernelInterface {
       get pid() {
         return pid;
       },
-      spawn: (path, args) => target.spawn(pid, path, args),
+      spawn: (path, args, options) => target.spawn(pid, path, args, options),
       wait: (childPid) => target.wait(pid, childPid),
       exit: (code?) => target.exit(pid, code ?? 0),
       list: () => target.list(pid),
@@ -137,6 +141,8 @@ export function bindSyscalls(target: SyscallTable, pid: Pid): KernelInterface {
       dup: (fd, to) => target.dup(pid, fd, to),
       fstat: (fd) => target.fstat(pid, fd),
       listFds: () => target.listFds(pid),
+      pipe: () => target.pipe(pid),
+      openpty: () => target.openpty(pid),
     },
   };
 }

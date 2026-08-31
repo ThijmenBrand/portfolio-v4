@@ -9,11 +9,17 @@ import type { Pid } from "../types";
 import { alive, requireAlive, requireControl } from "./guards";
 import type { SyscallTable } from "./table";
 import { changeDirectory, getCwd } from "../proc/cwd";
+import { FdTable } from "../proc/fdTable";
+
+export interface SpawnOptions {
+  fds?: Record<number, number>; // child fd -> parent fd
+}
 
 function startProcess(
   ctx: KernelContext,
   path: string,
   args: string[],
+  options: SpawnOptions,
   parentPid: Pid,
 ): Pid {
   const file = resolve(path);
@@ -21,7 +27,11 @@ function startProcess(
     throw enoent(path);
   }
 
-  const parent = ctx.processes.get(parentPid);
+  const parent = requireAlive(ctx, parentPid);
+
+  const inherited = options?.fds
+    ? FdTable.resolveMapping(parent.files, options.fds)
+    : undefined;
 
   const process = ctx.processes.allocate({
     parentPid,
@@ -31,7 +41,8 @@ function startProcess(
     cwd: parent?.cwd ?? "/",
   });
 
-  if (parent) process.files.inheritFrom(parent.files);
+  if (inherited) process.files.adopt(inherited);
+  else process.files.inheritFrom(parent.files);
 
   void execute(ctx, process, file.load);
   ctx.events.emit({
@@ -61,8 +72,8 @@ export function processSyscalls(
   | "cwd"
 > {
   return {
-    spawn: alive(ctx, (parentPid, path, args) =>
-      startProcess(ctx, path, args, parentPid),
+    spawn: alive(ctx, (parentPid, path, args, options) =>
+      startProcess(ctx, path, args, options, parentPid),
     ),
     exit: (pid, code) => terminateProcess(ctx, pid, code, "exit"),
     kill: alive(ctx, (callerPid, targetPid, signal) => {

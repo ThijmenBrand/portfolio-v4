@@ -9,6 +9,7 @@ import {
   KernelError,
 } from "../errors";
 import type { OpenFile, OpenFlags } from "../io/openfile.ts";
+import type { Bytes } from "../types.ts";
 import {
   childMounts,
   findMount,
@@ -93,10 +94,7 @@ export class VFS {
     );
   }
 
-  public async readFile(
-    path: string,
-    signal?: AbortSignal,
-  ): Promise<Uint8Array> {
+  public async readFile(path: string, signal?: AbortSignal): Promise<Bytes> {
     const file = await this.open(path, { read: true });
     try {
       return await this.readAll(file, 0, normalize(path), signal);
@@ -107,7 +105,7 @@ export class VFS {
 
   public async writeFile(
     path: string,
-    data: Uint8Array,
+    data: Bytes,
     signal?: AbortSignal,
   ): Promise<void> {
     const file = await this.open(path, {
@@ -218,10 +216,10 @@ export class VFS {
     from: number,
     fullPath: string,
     signal?: AbortSignal,
-  ): Promise<Uint8Array> {
+  ): Promise<Bytes> {
     let totalRead = 0;
     let position = from;
-    const chunks: Uint8Array[] = [];
+    const chunks: Bytes[] = [];
 
     while (true) {
       if (signal?.aborted) throw eintr(fullPath);

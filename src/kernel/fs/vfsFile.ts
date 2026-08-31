@@ -1,5 +1,6 @@
 import { ebadf } from "../errors";
 import type { OpenFile } from "../io/openfile";
+import type { Bytes } from "../types";
 import type { Mount, Node, Stat } from "./types";
 
 export class VfsFile implements OpenFile {
@@ -16,12 +17,12 @@ export class VfsFile implements OpenFile {
     this.path = path;
   }
 
-  public async read(offset: number, length: number): Promise<Uint8Array> {
+  public async read(offset: number, length: number): Promise<Bytes> {
     this.assertOpen();
     return this.mount.driver.read(this.node, offset, length);
   }
 
-  public async write(offset: number, data: Uint8Array): Promise<number> {
+  public async write(offset: number, data: Bytes): Promise<number> {
     this.assertOpen();
     return this.mount.driver.write(this.node, offset, data);
   }
