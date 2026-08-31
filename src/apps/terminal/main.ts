@@ -7,6 +7,7 @@ import {
 import terminalHTML from "./terminal.html?raw";
 import "./terminal.css";
 import "../../ui/theme.css";
+import type { Pid } from "../../kernel/types";
 
 const SHELL_PATH = "/ProgramFiles/sh";
 const MAX_CHARS = 200_000;
@@ -29,6 +30,8 @@ class Terminal {
 
   private readonly history: string[] = [];
   private historyIndex = 0;
+
+  private shell: Pid = 0 as Pid;
 
   private master = -1;
   private disposed = false;
@@ -62,7 +65,7 @@ class Terminal {
     const { master, slave } = await this.os.io.openpty();
     this.master = master;
 
-    const shell = this.os.process.spawn(SHELL_PATH, [], {
+    this.shell = this.os.process.spawn(SHELL_PATH, [], {
       fds: { 0: slave, 1: slave, 2: slave },
     });
 
@@ -72,7 +75,7 @@ class Terminal {
     await this.os.io.close(slave);
 
     void this.pump();
-    void this.reap(shell);
+    void this.reap(this.shell);
     this.input.focus();
   }
 
@@ -123,8 +126,16 @@ class Terminal {
         this.recall(event.key === "ArrowUp" ? -1 : 1);
       }
 
-      if (event.key === event.ctrlKey && event.key === "c") {
+      if (event.key === "c" && event.ctrlKey) {
         event.preventDefault();
+        this.append("^C\n");
+        this.input.value = "";
+        try {
+          this.os.process.kill(this.shell, "SIGINT");
+        } catch {
+          // ESRCH — the shell is already gone; reap() has said so.
+        }
+        return;
       }
     });
   }

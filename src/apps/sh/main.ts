@@ -150,6 +150,7 @@ class Shell {
   private readonly lines: LineReader;
   private status = 0;
   private running = true;
+  private foreground: Pid[] = [];
 
   private readonly os: KernelInterface;
 
@@ -159,6 +160,7 @@ class Shell {
   }
 
   public async run(): Promise<number> {
+    this.os.process.onSignal("SIGINT", () => this.interrupt());
     await this.write(1, "portfolio sh — try `help`\n");
 
     while (this.running) {
@@ -180,6 +182,22 @@ class Shell {
     }
 
     return this.status;
+  }
+
+  private interrupt(): void {
+    // Idle at the prompt: bash redraws it. Nothing to kill.
+    if (this.foreground.length === 0) {
+      void this.write(1, `${this.os.process.cwd()} $ `);
+      return;
+    }
+
+    for (const pid of this.foreground) {
+      try {
+        this.os.process.kill(pid, "SIGINT");
+      } catch {
+        // ESRCH — it exited between the signal and here.
+      }
+    }
   }
 
   private async execute(line: string): Promise<number> {
@@ -298,9 +316,14 @@ class Shell {
       for (const fd of opened) await this.os.io.close(fd).catch(() => {});
     }
 
-    let status = 0;
-    for (const pid of pids) status = (await this.os.process.wait(pid)).code;
-    return status;
+    this.foreground = pids;
+    try {
+      let status = 0;
+      for (const pid of pids) status = (await this.os.process.wait(pid)).code;
+      return status;
+    } finally {
+      this.foreground = [];
+    }
   }
 
   private async write(fd: number, text: string): Promise<void> {

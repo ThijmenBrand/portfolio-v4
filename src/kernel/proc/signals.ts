@@ -39,7 +39,13 @@ export function sendSignal(ctx: KernelContext, pid: Pid, signal: Signal): void {
     case Signal.SIGKILL:
       return terminateProcess(ctx, pid, 137, "signal", signal);
     case Signal.SIGTERM:
+      if (!deliver(ctx, pid, signal))
+        terminateProcess(ctx, pid, 143, "signal", signal);
+      return;
     case Signal.SIGHUP:
+      if (!deliver(ctx, pid, signal))
+        terminateProcess(ctx, pid, 129, "signal", signal);
+      return;
     case Signal.SIGINT:
       if (!deliver(ctx, pid, signal))
         terminateProcess(ctx, pid, 143, "signal", signal);
