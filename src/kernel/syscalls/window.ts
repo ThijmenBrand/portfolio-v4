@@ -26,7 +26,7 @@ export function windowSyscalls(
       const windowRecord = ctx.windows.createWindow(windowOptions, pid);
       return bindWindowHandle(pid, slice, windowRecord.id, windowRecord.bodyEl);
     }),
-    listWindows: (pid: Pid) => {
+    listWindows: async (pid: Pid) => {
       const proc = requireAlive(ctx, pid);
       const windows = ctx.windows.listWindows();
       if (proc.privileged) {
@@ -35,7 +35,7 @@ export function windowSyscalls(
 
       return windows.filter((w) => w.pid === pid);
     },
-    focusWindow: (pid: Pid, windowId: WindowId) => {
+    focusWindow: async (pid: Pid, windowId: WindowId) => {
       const proc = requireAlive(ctx, pid);
       if (proc.privileged) {
         ctx.windows.focusWindow(windowId);
@@ -45,7 +45,7 @@ export function windowSyscalls(
       ctx.windows.validateWindowOwnership(windowId, pid);
       ctx.windows.focusWindow(windowId);
     },
-    setMinimized: (pid: Pid, windowId: WindowId, minimized: boolean) => {
+    setMinimized: async (pid: Pid, windowId: WindowId, minimized: boolean) => {
       const proc = requireAlive(ctx, pid);
       if (proc.privileged) {
         ctx.windows.setMinimized(windowId, minimized);

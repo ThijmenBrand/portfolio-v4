@@ -15,13 +15,13 @@ export interface SpawnOptions {
   fds?: Record<number, number>; // child fd -> parent fd
 }
 
-function startProcess(
+async function startProcess(
   ctx: KernelContext,
   path: string,
   args: string[],
   options: SpawnOptions,
   parentPid: Pid,
-): Pid {
+): Promise<Pid> {
   const file = resolve(path);
   if (!file) {
     throw enoent(path);
@@ -76,9 +76,9 @@ export function processSyscalls(
       startProcess(ctx, path, args, options, parentPid),
     ),
     exit: (pid, code) => terminateProcess(ctx, pid, code, "exit"),
-    kill: alive(ctx, (callerPid, targetPid, signal) => {
+    kill: alive(ctx, async (callerPid, targetPid, signal) => {
       requireControl(ctx, callerPid, targetPid);
-      sendSignal(ctx, targetPid, signal);
+      await sendSignal(ctx, targetPid, signal);
     }),
     wait: (callerPid, targetPid) => waitFor(ctx, callerPid, targetPid),
     onSignal: (callerPid, signal, handler) => {
@@ -93,6 +93,6 @@ export function processSyscalls(
     list: alive(ctx, (_pid) => ctx.processes.list()),
     history: alive(ctx, (_pid) => ctx.processes.history()),
     chdir: (callerPid, path) => changeDirectory(ctx, callerPid, path),
-    cwd: (callerPid) => getCwd(ctx, callerPid),
+    cwd: async (callerPid) => getCwd(ctx, callerPid),
   };
 }

@@ -14,6 +14,7 @@ import {
 import type { Signal } from "../../kernel/proc/signals";
 import { logError } from "../../kernel/errors";
 import type { KernelInterface } from "../../kernel/syscalls/api";
+import type { WindowHandle } from "../../kernel/windows/types";
 
 type Tab = "running" | "terminated";
 type Direction = "ascending" | "descending";
@@ -42,8 +43,8 @@ interface TerminatedRow {
   at: number;
 }
 
-export function main(os: KernelInterface): void {
-  const handle = os.windows.create({
+export async function main(os: KernelInterface): Promise<void> {
+  const handle = await os.windows.create({
     title: "Process Monitor",
     width: 760,
     height: 440,
@@ -51,7 +52,7 @@ export function main(os: KernelInterface): void {
     minHeight: 260,
   });
 
-  new DebugPs(os, handle);
+  await new DebugPs(os, handle).start();
 }
 
 class DebugPs {
@@ -77,10 +78,7 @@ class DebugPs {
     terminated: { key: "at", direction: "descending" },
   };
 
-  constructor(
-    os: KernelInterface,
-    handle: ReturnType<KernelInterface["windows"]["create"]>,
-  ) {
+  constructor(os: KernelInterface, handle: WindowHandle) {
     this.os = os;
     this.root = htmlStringToTemplate(debugPsHTML);
 
@@ -94,12 +92,14 @@ class DebugPs {
     this.searchInput = this.select<HTMLInputElement>("#debug-ps-search");
 
     handle.body.appendChild(this.root);
-    handle.onCloseRequest(() => this.os.process.exit(0));
+    void handle.onCloseRequest(() => void this.os.process.exit(0));
 
     this.bindEvents();
-    this.render();
+  }
 
-    this.os.events.subscribe(
+  /** The syscalls the constructor cannot await. */
+  public async start(): Promise<void> {
+    await this.os.events.subscribe(
       [
         "process.spawned",
         "process.exited",
@@ -109,10 +109,13 @@ class DebugPs {
       () => this.scheduleRender(),
     );
 
-    this.os.process.signal.addEventListener("abort", () => {
+    const signal = await this.os.process.signal;
+    signal.addEventListener("abort", () => {
       this.disposed = true;
       if (this.frameId !== null) cancelAnimationFrame(this.frameId);
     });
+
+    await this.render();
   }
 
   // ---------------------------------------------------------------- rendering
@@ -122,14 +125,17 @@ class DebugPs {
     this.frameId = requestAnimationFrame(() => {
       this.frameId = null;
       if (this.disposed) return;
-      this.render();
+      void this.render();
     });
   }
 
-  private render(): void {
+  private async render(): Promise<void> {
     const now = Date.now();
 
-    const running: RunningRow[] = this.os.process.list().map((proc) => ({
+    const processes = await this.os.process.list();
+    const history = await this.os.process.history();
+
+    const running: RunningRow[] = processes.map((proc) => ({
       pid: proc.pid,
       parentPid: proc.parentPid,
       path: proc.path,
@@ -137,9 +143,7 @@ class DebugPs {
       uptime: now - proc.startedAt,
     }));
 
-    const terminated: TerminatedRow[] = this.os.process
-      .history()
-      .map((record: ExitRecord) => ({
+    const terminated: TerminatedRow[] = history.map((record: ExitRecord) => ({
         pid: record.pid,
         parentPid: record.parentPid,
         path: record.path,
@@ -261,7 +265,7 @@ class DebugPs {
 
     this.searchInput.addEventListener("input", () => {
       this.filter = this.searchInput.value;
-      this.render();
+      void this.render();
     });
 
     this.select('[data-action="clear-search"]').addEventListener(
@@ -269,7 +273,7 @@ class DebugPs {
       () => {
         this.searchInput.value = "";
         this.filter = "";
-        this.render();
+        void this.render();
       },
     );
 
@@ -308,7 +312,7 @@ class DebugPs {
       );
     }
 
-    this.render();
+    void this.render();
   }
 
   private onRowAction(event: MouseEvent): void {
@@ -323,11 +327,11 @@ class DebugPs {
     const signal: Signal =
       button.dataset.action === "sigkill" ? "SIGKILL" : "SIGTERM";
 
-    try {
-      this.os.process.kill(pid as Pid, signal);
-    } catch (error) {
-      logError(`Failed to send ${signal} to ${pid}: ${error}`);
-    }
+    void this.os.process
+      .kill(pid as Pid, signal)
+      .catch((error: unknown) =>
+        logError(`Failed to send ${signal} to ${pid}: ${error}`),
+      );
   }
 
   private setTab(tab: Tab): void {
@@ -350,7 +354,7 @@ class DebugPs {
       panel.setAttribute("aria-hidden", String(!active));
     }
 
-    this.render();
+    void this.render();
   }
 
   // ----------------------------------------------------------------- helpers

@@ -23,8 +23,12 @@ export interface ProcessManagerInterface {
   unregisterResource(pid: Pid, resourceId: number): void;
   disposeResources(pid: Pid): void;
   setTermination(pid: Pid, termination: Termination): void;
-  setSignalHandler(pid: Pid, signal: Signal, handler: () => void): () => void;
-  getSignal(pid: Pid): ProcessSignal;
+  setSignalHandler(
+    pid: Pid,
+    signal: Signal,
+    handler: () => void,
+  ): Promise<() => void>;
+  getSignal(pid: Pid): Promise<ProcessSignal>;
   resolveWaiters(pid: Pid): void;
   addWaiter(pid: Pid, waiter: (termination: Termination) => void): () => void;
   reap(pid: Pid): void;
@@ -184,11 +188,11 @@ export class ProcessManager implements ProcessManagerInterface {
     this.processes.delete(pid);
   }
 
-  public setSignalHandler(
+  public async setSignalHandler(
     pid: Pid,
     signal: Signal,
     handler: () => void,
-  ): () => void {
+  ): Promise<() => void> {
     const proc = this.processes.get(pid);
     if (!proc) {
       throw esrch(pid);
@@ -203,7 +207,7 @@ export class ProcessManager implements ProcessManagerInterface {
     };
   }
 
-  public getSignal(pid: Pid): ProcessSignal {
+  public async getSignal(pid: Pid): Promise<ProcessSignal> {
     const proc = this.processes.get(pid);
     if (!proc) {
       throw esrch(pid);

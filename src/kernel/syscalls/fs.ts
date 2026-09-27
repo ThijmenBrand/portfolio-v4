@@ -58,7 +58,7 @@ export function fsSyscalls(
       requireAlive(ctx, callerPid);
       return await changeDirectory(ctx, callerPid, path);
     },
-    cwd: (callerPid) => {
+    cwd: async (callerPid) => {
       requireAlive(ctx, callerPid);
       return getCwd(ctx, callerPid);
     },

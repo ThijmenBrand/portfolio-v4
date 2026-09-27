@@ -29,39 +29,59 @@ export interface SyscallTable {
     path: string,
     args?: string[],
     options?: SpawnOptions,
-  ): Pid;
-  exit(callerPid: Pid, code: number): void;
-  createWindow(callerPid: Pid, options: WindowOptions): WindowHandle;
-  setWindowTitle(callerPid: Pid, windowId: WindowId, title: string): void;
-  listWindows(callerPid: Pid): Array<WindowInfo>;
-  focusWindow(callerPid: Pid, windowId: WindowId): void;
-  setMinimized(callerPid: Pid, windowId: WindowId, minimized: boolean): void;
-  closeWindow(callerPid: Pid, windowId: WindowId): void;
+  ): Promise<Pid>;
+  exit(callerPid: Pid, code: number): Promise<void>;
+  createWindow(callerPid: Pid, options: WindowOptions): Promise<WindowHandle>;
+  setWindowTitle(
+    callerPid: Pid,
+    windowId: WindowId,
+    title: string,
+  ): Promise<void>;
+  listWindows(callerPid: Pid): Promise<Array<WindowInfo>>;
+  focusWindow(callerPid: Pid, windowId: WindowId): Promise<void>;
+  setMinimized(
+    callerPid: Pid,
+    windowId: WindowId,
+    minimized: boolean,
+  ): Promise<void>;
+  closeWindow(callerPid: Pid, windowId: WindowId): Promise<void>;
   onWindowCloseRequest(
     callerPid: Pid,
     windowId: WindowId,
     db: () => void,
-  ): void;
-  getDisplayRoot(callerPid: Pid): HTMLElement;
-  getTaskbarRoot(callerPid: Pid): HTMLElement;
-  getWorkArea(callerPid: Pid): Rect;
-  reserveStrut(callerPid: Pid, edge: StrutEdge, size: number): number;
-  releaseStrut(callerPid: Pid, resourceId: number): void;
-  list(callerPid: Pid): ProcessInfo[];
-  getSignal(callerPid: Pid): ProcessSignal;
-  onSignal(callerPid: Pid, signal: Signal, handler: () => void): void;
+  ): Promise<void>;
+  getDisplayRoot(callerPid: Pid): Promise<HTMLElement>;
+  getTaskbarRoot(callerPid: Pid): Promise<HTMLElement>;
+  getWorkArea(callerPid: Pid): Promise<Rect>;
+  reserveStrut(callerPid: Pid, edge: StrutEdge, size: number): Promise<number>;
+  releaseStrut(callerPid: Pid, resourceId: number): Promise<void>;
+  list(callerPid: Pid): Promise<ProcessInfo[]>;
+  getSignal(callerPid: Pid): Promise<ProcessSignal>;
+  onSignal(
+    callerPid: Pid,
+    signal: Signal,
+    handler: () => void,
+  ): Promise<() => void>;
   wait(callerPid: Pid, targetPid: Pid): Promise<Termination>;
-  setInterval(callerPid: Pid, callback: () => void, ms: number): number;
-  clearInterval(callerPid: Pid, id: number): void;
-  setTimeout(callerPid: Pid, callback: () => void, ms: number): number;
-  clearTimeout(callerPid: Pid, id: number): void;
-  kill(callerPid: Pid, targetPid: Pid, signal: Signal): void;
-  history(callerPid: Pid): readonly ExitRecord[];
+  setInterval(
+    callerPid: Pid,
+    callback: () => void,
+    ms: number,
+  ): Promise<number>;
+  clearInterval(callerPid: Pid, id: number): Promise<void>;
+  setTimeout(
+    callerPid: Pid,
+    callback: () => void,
+    ms: number,
+  ): Promise<number>;
+  clearTimeout(callerPid: Pid, id: number): Promise<void>;
+  kill(callerPid: Pid, targetPid: Pid, signal: Signal): Promise<void>;
+  history(callerPid: Pid): Promise<readonly ExitRecord[]>;
   subscribe<T extends EventType>(
     callerPid: Pid,
     types: readonly T[],
     handler: EventHandler<T>,
-  ): () => void;
+  ): Promise<() => void>;
   stat(callerPid: Pid, path: string): Promise<StatResult>;
   readDir(callerPid: Pid, path: string): Promise<DirEntry[]>;
   readFile(callerPid: Pid, path: string): Promise<Bytes>;
@@ -79,11 +99,11 @@ export interface SyscallTable {
     offset: number,
     whence: Whence,
   ): Promise<number>;
-  dup(callerPid: Pid, fd: number, to?: number): number;
+  dup(callerPid: Pid, fd: number, to?: number): Promise<number>;
   fstat(callerPid: Pid, fd: number): Promise<Stat>;
-  listFds(callerPid: Pid): FdInfo[];
+  listFds(callerPid: Pid): Promise<FdInfo[]>;
   chdir(callerPid: Pid, path: string): Promise<void>;
-  cwd(callerPid: Pid): string;
+  cwd(callerPid: Pid): Promise<string>;
   pipe(callerPid: Pid): Promise<PipeFds>;
   openpty(callerPid: Pid): Promise<{ master: number; slave: number }>;
 }

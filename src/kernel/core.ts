@@ -87,7 +87,7 @@ export function createKernel(screen: HTMLElement): {
     boot: async () => {
       await fs.mkdir("/tmp");
       if (!opfsAvailable()) await fs.mkdir("/home");
-      os.process.spawn("/System/desktop");
+      await os.process.spawn("/System/desktop");
     },
   };
 }

@@ -34,21 +34,25 @@ export function deliver(ctx: KernelContext, pid: Pid, signal: Signal): boolean {
   return true;
 }
 
-export function sendSignal(ctx: KernelContext, pid: Pid, signal: Signal): void {
+export async function sendSignal(
+  ctx: KernelContext,
+  pid: Pid,
+  signal: Signal,
+): Promise<void> {
   switch (signal) {
     case Signal.SIGKILL:
-      return terminateProcess(ctx, pid, 137, "signal", signal);
+      return await terminateProcess(ctx, pid, 137, "signal", signal);
     case Signal.SIGTERM:
       if (!deliver(ctx, pid, signal))
-        terminateProcess(ctx, pid, 143, "signal", signal);
+        await terminateProcess(ctx, pid, 143, "signal", signal);
       return;
     case Signal.SIGHUP:
       if (!deliver(ctx, pid, signal))
-        terminateProcess(ctx, pid, 129, "signal", signal);
+        await terminateProcess(ctx, pid, 129, "signal", signal);
       return;
     case Signal.SIGINT:
       if (!deliver(ctx, pid, signal))
-        terminateProcess(ctx, pid, 143, "signal", signal);
+        await terminateProcess(ctx, pid, 143, "signal", signal);
       return;
     case Signal.SIGCHLD:
       deliver(ctx, pid, signal); // Default action: ignore

@@ -160,11 +160,11 @@ class Shell {
   }
 
   public async run(): Promise<number> {
-    this.os.process.onSignal("SIGINT", () => this.interrupt());
+    await this.os.process.onSignal("SIGINT", () => void this.interrupt());
     await this.write(1, "portfolio sh — try `help`\n");
 
     while (this.running) {
-      await this.write(1, `${this.os.process.cwd()} $ `);
+      await this.prompt();
 
       const line = await this.lines.readLine();
       if (line === null) break; // stdin closed — the terminal went away
@@ -184,19 +184,20 @@ class Shell {
     return this.status;
   }
 
-  private interrupt(): void {
+  private async prompt(): Promise<void> {
+    await this.write(1, `${await this.os.process.cwd()} $ `);
+  }
+
+  private async interrupt(): Promise<void> {
     // Idle at the prompt: bash redraws it. Nothing to kill.
     if (this.foreground.length === 0) {
-      void this.write(1, `${this.os.process.cwd()} $ `);
+      await this.prompt();
       return;
     }
 
     for (const pid of this.foreground) {
-      try {
-        this.os.process.kill(pid, "SIGINT");
-      } catch {
-        // ESRCH — it exited between the signal and here.
-      }
+      // ESRCH — it exited between the signal and here.
+      await this.os.process.kill(pid, "SIGINT").catch(() => {});
     }
   }
 
@@ -222,7 +223,7 @@ class Shell {
     const [name, ...args] = command.argv;
 
     if (name === "pwd") {
-      await this.write(1, `${this.os.process.cwd()}\n`);
+      await this.write(1, `${await this.os.process.cwd()}\n`);
       return 0;
     }
 
@@ -255,13 +256,13 @@ class Shell {
    * binfmt is an exact-match table, so bare names need a search path.
    * spawn throws ENOENT synchronously, which makes "try each" cheap.
    */
-  private spawn(command: Command, fds: Record<number, number>): Pid {
+  private async spawn(command: Command, fds: Record<number, number>): Promise<Pid> {
     const [name, ...args] = command.argv;
     let last: unknown;
 
     for (const prefix of SEARCH_PATH) {
       try {
-        return this.os.process.spawn(`${prefix}${name}`, args, { fds });
+        return await this.os.process.spawn(`${prefix}${name}`, args, { fds });
       } catch (error) {
         if (errorCode(error) !== "ENOENT") throw error;
         last = error;
@@ -307,7 +308,7 @@ class Shell {
           fds[1] = fd;
         }
 
-        pids.push(this.spawn(command, fds));
+        pids.push(await this.spawn(command, fds));
       }
     } finally {
       // THE step that makes a pipeline terminate. Every pipe end the shell

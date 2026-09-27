@@ -8,5 +8,5 @@ export async function main(
   for (let i = 0; i < 10; i++) {
     await os.io.write(1, new TextEncoder().encode(`loop number ${i}\n`));
   }
-  os.process.exit(0);
+  await os.process.exit(0);
 }

@@ -20,40 +20,40 @@ import type { WindowHandleCommands } from "./window";
 
 export interface KernelInterface {
   display: {
-    root(): HTMLElement;
-    taskbar(): HTMLElement;
-    workArea(): Rect;
-    reserveStrut(edge: StrutEdge, size: number): number;
-    releaseStrut(resourceId: number): void;
+    root(): Promise<HTMLElement>;
+    taskbar(): Promise<HTMLElement>;
+    workArea(): Promise<Rect>;
+    reserveStrut(edge: StrutEdge, size: number): Promise<number>;
+    releaseStrut(resourceId: number): Promise<void>;
   };
   windows: {
-    create(options: WindowOptions): WindowHandle;
-    list(): WindowInfo[];
-    focus(windowId: WindowId): void;
-    setMinimized(windowId: WindowId, minimized: boolean): void;
+    create(options: WindowOptions): Promise<WindowHandle>;
+    list(): Promise<WindowInfo[]>;
+    focus(windowId: WindowId): Promise<void>;
+    setMinimized(windowId: WindowId, minimized: boolean): Promise<void>;
   };
   process: {
-    readonly signal: ProcessSignal;
+    readonly signal: Promise<ProcessSignal>;
     readonly pid: Pid;
-    onSignal(signal: Signal, handler: () => void): void;
+    onSignal(signal: Signal, handler: () => void): Promise<() => void>;
     wait(pid: Pid): Promise<Termination>;
-    spawn(path: string, args?: string[], options?: SpawnOptions): Pid;
-    exit(code?: number): void;
-    list(): ProcessInfo[];
-    kill(pid: Pid, signal: Signal, code?: number): void;
-    history(): readonly ExitRecord[];
+    spawn(path: string, args?: string[], options?: SpawnOptions): Promise<Pid>;
+    exit(code?: number): Promise<void>;
+    list(): Promise<ProcessInfo[]>;
+    kill(pid: Pid, signal: Signal, code?: number): Promise<void>;
+    history(): Promise<readonly ExitRecord[]>;
     chdir(path: string): Promise<void>;
-    cwd(): string;
+    cwd(): Promise<string>;
   };
   timers: {
-    setInterval(callback: () => void, ms: number): number;
-    clearInterval(id: number): void;
+    setInterval(callback: () => void, ms: number): Promise<number>;
+    clearInterval(id: number): Promise<void>;
   };
   events: {
     subscribe<T extends EventType>(
       types: readonly T[],
       handler: EventHandler<T>,
-    ): () => void;
+    ): Promise<() => void>;
   };
   fs: {
     readFile(path: string): Promise<Bytes>;
@@ -71,9 +71,9 @@ export interface KernelInterface {
     read(fd: number, length: number): Promise<Bytes>;
     write(fd: number, data: Bytes): Promise<number>;
     seek(fd: number, offset: number, whence?: Whence): Promise<number>;
-    dup(fd: number, to?: number): number;
+    dup(fd: number, to?: number): Promise<number>;
     fstat(fd: number): Promise<Stat>;
-    listFds(): FdInfo[];
+    listFds(): Promise<FdInfo[]>;
     pipe(): Promise<PipeFds>;
     openpty(): Promise<{ master: number; slave: number }>;
   };

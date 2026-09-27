@@ -8,6 +8,7 @@ import terminalHTML from "./terminal.html?raw";
 import "./terminal.css";
 import "../../ui/theme.css";
 import type { Pid } from "../../kernel/types";
+import type { WindowHandle } from "../../kernel/windows/types";
 
 const SHELL_PATH = "/ProgramFiles/sh";
 const MAX_CHARS = 200_000;
@@ -36,17 +37,10 @@ class Terminal {
   private master = -1;
   private disposed = false;
 
-  public constructor(os: KernelInterface) {
+  public constructor(os: KernelInterface, handle: WindowHandle) {
     this.os = os;
 
-    const handle = os.windows.create({
-      title: "Terminal",
-      width: 680,
-      height: 440,
-      minWidth: 360,
-      minHeight: 220,
-    });
-    handle.onCloseRequest(() => os.process.exit(0));
+    void handle.onCloseRequest(() => void os.process.exit(0));
 
     const root = htmlStringToTemplate(terminalHTML);
     handle.body.appendChild(root);
@@ -65,7 +59,7 @@ class Terminal {
     const { master, slave } = await this.os.io.openpty();
     this.master = master;
 
-    this.shell = this.os.process.spawn(SHELL_PATH, [], {
+    this.shell = await this.os.process.spawn(SHELL_PATH, [], {
       fds: { 0: slave, 1: slave, 2: slave },
     });
 
@@ -130,11 +124,8 @@ class Terminal {
         event.preventDefault();
         this.append("^C\n");
         this.input.value = "";
-        try {
-          this.os.process.kill(this.shell, "SIGINT");
-        } catch {
-          // ESRCH — the shell is already gone; reap() has said so.
-        }
+        // ESRCH — the shell is already gone; reap() has said so.
+        void this.os.process.kill(this.shell, "SIGINT").catch(() => {});
         return;
       }
     });
@@ -176,7 +167,15 @@ class Terminal {
 }
 
 export async function main(os: KernelInterface): Promise<void> {
-  const terminal = new Terminal(os);
-  os.process.onSignal("SIGTERM", () => terminal.dispose());
+  const handle = await os.windows.create({
+    title: "Terminal",
+    width: 680,
+    height: 440,
+    minWidth: 360,
+    minHeight: 220,
+  });
+
+  const terminal = new Terminal(os, handle);
+  await os.process.onSignal("SIGTERM", () => terminal.dispose());
   await terminal.start();
 }

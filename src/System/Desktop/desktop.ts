@@ -33,34 +33,37 @@ import menuItemHTML from "./menu-item.html?raw";
 import "./desktop.css";
 
 export async function main(os: KernelInterface): Promise<void> {
-  const desktop = new Desktop(os, registry, os.display.root());
+  const desktop = new Desktop(os, registry, await os.display.root());
+  await desktop.start();
+
   await os.process.chdir("/home");
+  await os.process.spawn("/System/Taskbar");
 
-  os.process.spawn("/System/Taskbar");
-
-  os.process.onSignal("SIGTERM", () => {
+  await os.process.onSignal("SIGTERM", () => {
     desktop.destroy();
-    os.process.exit(0);
+    void os.process.exit(0);
   });
 
-  os.process.onSignal("SIGCHLD", () => {
-    const zombies = os.process
-      .list()
-      .filter(
-        (proc) => proc.parentPid === os.process.pid && proc.status === "zombie",
+  await os.process.onSignal("SIGCHLD", () => void reapZombies(os));
+}
+
+/** SIGCHLD only says "a child died" — find out which ones. */
+async function reapZombies(os: KernelInterface): Promise<void> {
+  const processes = await os.process.list();
+  const zombies = processes.filter(
+    (proc) => proc.parentPid === os.process.pid && proc.status === "zombie",
+  );
+
+  for (const child of zombies) {
+    try {
+      const termination = await os.process.wait(child.pid);
+      console.log(
+        `[init] reaped ${child.pid} ${child.path} → ${termination.code}`,
       );
-
-    for (const child of zombies) {
-      os.process
-        .wait(child.pid)
-        .then((termination) =>
-          console.log(
-            `[init] reaped ${child.pid} ${child.path} → ${termination.code}`,
-          ),
-        )
-        .catch(() => {});
+    } catch {
+      // The child was already reaped.
     }
-  });
+  }
 }
 
 class Desktop implements DesktopCommands {
@@ -70,6 +73,9 @@ class Desktop implements DesktopCommands {
   private readonly iconLayer: HTMLElement;
   private readonly menu: ContextMenu;
 
+  private readonly marquee: HTMLElement;
+  private readonly entries: AppEntry[];
+
   private readonly icons: DesktopIcon[] = [];
   private readonly disposers: Array<() => void> = [];
   private focused: DesktopIcon | null = null;
@@ -77,32 +83,40 @@ class Desktop implements DesktopCommands {
   constructor(os: KernelInterface, entries: AppEntry[], root: HTMLElement) {
     this.os = os;
     this.root = root;
+    this.entries = entries;
     root.innerHTML = desktopHTML;
 
     this.surface = this.require("#desktop");
     this.iconLayer = this.require("[data-field='icons']");
-    const marquee = this.require("[data-field='marquee']");
-
-    // Before any icon is placed: the grid needs a laid-out container.
-    this.applyWorkArea();
+    this.marquee = this.require("[data-field='marquee']");
 
     this.menu = createMenu(this.surface, menuHTML, menuItemHTML);
     this.disposers.push(() => this.menu.destroy());
+  }
 
-    for (const entry of entries) this.addIcon(entry);
+  /** Everything that needs a syscall, so the constructor can stay sync. */
+  public async start(): Promise<void> {
+    // Before any icon is placed: the grid needs a laid-out container.
+    await this.applyWorkArea();
+
+    for (const entry of this.entries) this.addIcon(entry);
 
     this.disposers.push(
-      enableMarquee(this.surface, marquee, this),
+      enableMarquee(this.surface, this.marquee, this),
       enableKeyboard(this.surface, this),
       this.enableSurfaceMenu(),
-      this.os.events.subscribe(["display.workAreaChanged"], () => {
-        this.applyWorkArea();
-        this.relayoutOutOfBounds();
-        this.menu.close();
-      }),
+      await this.os.events.subscribe(["display.workAreaChanged"], () =>
+        void this.onWorkAreaChanged(),
+      ),
     );
 
     this.surface.focus();
+  }
+
+  private async onWorkAreaChanged(): Promise<void> {
+    await this.applyWorkArea();
+    this.relayoutOutOfBounds();
+    this.menu.close();
   }
 
   public destroy(): void {
@@ -129,8 +143,8 @@ class Desktop implements DesktopCommands {
     return element;
   }
 
-  private applyWorkArea(): void {
-    const area = this.os.display.workArea();
+  private async applyWorkArea(): Promise<void> {
+    const area = await this.os.display.workArea();
     const style = this.iconLayer.style;
 
     style.left = `${area.x}px`;
@@ -319,14 +333,10 @@ class Desktop implements DesktopCommands {
 
   private spawn(icons: readonly DesktopIcon[]): void {
     for (const icon of icons) {
-      try {
-        this.os.process.spawn(icon.entry.exec);
-      } catch (error) {
-        // A stale registry path throws ENOENT. This runs inside a dblclick
-        // handler, which is not a kernel callback site, so an escaping throw
-        // would not even register as a fault — it would just vanish.
-        logError(error);
-      }
+      // A stale registry path rejects with ENOENT. This runs inside a dblclick
+      // handler, which is not a kernel callback site, so an unhandled rejection
+      // would not even register as a fault — it would just vanish.
+      void this.os.process.spawn(icon.entry.exec).catch(logError);
     }
 
     this.clearSelection();

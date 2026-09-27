@@ -24,7 +24,7 @@ export async function execute(
     if (proc.status !== "loading") return;
     if (!isExecutable(module)) {
       console.error(enoexec(proc.path));
-      terminateProcess(ctx, proc.pid, 1, "crash");
+      await terminateProcess(ctx, proc.pid, 1, "crash");
       return;
     }
     ctx.processes.setStatus(proc.pid, "running");

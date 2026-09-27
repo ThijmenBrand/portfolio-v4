@@ -3,13 +3,13 @@ import { eperm, logError } from "../errors";
 import type { ExitReason, Pid } from "../types";
 import { sendSignal, Signal } from "./signals";
 
-export function terminateProcess(
+export async function terminateProcess(
   ctx: KernelContext,
   pid: Pid,
   code: number,
   reason: ExitReason,
   signal?: Signal,
-) {
+): Promise<void> {
   const proc = ctx.processes.get(pid);
   if (!proc) return;
   if (proc.status === "exiting" || proc.status === "zombie") return;
@@ -49,7 +49,7 @@ export function terminateProcess(
   ctx.processes.resolveWaiters(pid);
 
   const parent = ctx.processes.get(proc.parentPid);
-  if (parent) sendSignal(ctx, parent.pid, "SIGCHLD");
+  if (parent) await sendSignal(ctx, parent.pid, "SIGCHLD");
 
   if (
     !parent ||

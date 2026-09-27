@@ -1,5 +1,6 @@
 import type { DirEntry } from "../../kernel/fs/types";
 import type { KernelInterface } from "../../kernel/syscalls/api";
+import type { WindowHandle } from "../../kernel/windows/types";
 import {
   htmlStringToTemplate,
   selectElementFromTemplate,
@@ -50,11 +51,19 @@ function formatTime(ms: number): string {
   return new Date(ms).toLocaleTimeString();
 }
 
-export function main(os: KernelInterface): void {
-  const app = new FsDebug(os);
-  os.process.onSignal("SIGTERM", () => {
+export async function main(os: KernelInterface): Promise<void> {
+  const handle = await os.windows.create({
+    title: "Files (debug)",
+    width: 780,
+    height: 480,
+    minWidth: 520,
+    minHeight: 320,
+  });
+
+  const app = new FsDebug(os, handle);
+  await os.process.onSignal("SIGTERM", () => {
     app.destroy();
-    os.process.exit(0);
+    void os.process.exit(0);
   });
 }
 
@@ -77,18 +86,11 @@ class FsDebug {
   private selected: DirEntry | null = null;
   private disposed = false;
 
-  constructor(os: KernelInterface) {
+  constructor(os: KernelInterface, handle: WindowHandle) {
     this.os = os;
 
-    const handle = os.windows.create({
-      title: "Files (debug)",
-      width: 780,
-      height: 480,
-      minWidth: 520,
-      minHeight: 320,
-    });
-    this.close = () => handle.close();
-    handle.onCloseRequest(() => os.process.exit(0));
+    this.close = () => void handle.close();
+    void handle.onCloseRequest(() => void os.process.exit(0));
 
     this.root = htmlStringToTemplate(fsDebugHTML);
     handle.body.appendChild(this.root);

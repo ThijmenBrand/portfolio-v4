@@ -8,7 +8,7 @@ export function eventsSyscalls(
   ctx: KernelContext,
 ): Pick<SyscallTable, "subscribe"> {
   return {
-    subscribe: <T extends EventType>(
+    subscribe: async <T extends EventType>(
       callerPid: Pid,
       types: readonly T[],
       handler: EventHandler<T>,

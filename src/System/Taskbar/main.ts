@@ -4,7 +4,7 @@ import type { Pid, WindowId } from "../../kernel/types";
 import taskbarHtml from "./taskbar.html?raw";
 import taskbarButtonHtml from "./taskbar-button.html?raw";
 import "./taskbar.css";
-import { kernelError } from "../../kernel/errors";
+import { kernelError, logError } from "../../kernel/errors";
 import {
   htmlStringToTemplate,
   selectElementFromTemplate,
@@ -30,22 +30,24 @@ interface TaskGroup {
   count: HTMLElement;
 }
 
-export function main(os: KernelInterface): void {
-  new Taskbar(os);
+export async function main(os: KernelInterface): Promise<void> {
+  const taskbar = new Taskbar(os, await os.display.taskbar());
+  await taskbar.start();
 }
 
 class Taskbar {
   private readonly os: KernelInterface;
   private readonly root: HTMLElement;
   private readonly taskList: HTMLElement;
+  private readonly bar: HTMLElement;
 
   private readonly groups = new Map<Pid, TaskGroup>();
   private readonly paths = new Map<Pid, string>();
   private focusedPid: Pid | null = null;
 
-  constructor(os: KernelInterface) {
+  constructor(os: KernelInterface, root: HTMLElement) {
     this.os = os;
-    this.root = os.display.taskbar();
+    this.root = root;
     this.root.innerHTML = taskbarHtml;
 
     const taskList = this.root.querySelector<HTMLElement>("#taskbar-tasks");
@@ -54,31 +56,35 @@ class Taskbar {
 
     const bar = this.root.querySelector<HTMLElement>("#taskbar");
     if (!bar) throw kernelError("ENODEV", "Taskbar element not found");
+    this.bar = bar;
+  }
 
-    os.display.reserveStrut("bottom", bar.offsetHeight || 48);
+  /** Everything that needs a syscall, so the constructor can stay sync. */
+  public async start(): Promise<void> {
+    await this.os.display.reserveStrut("bottom", this.bar.offsetHeight || 48);
 
-    this.seed();
-    this.subscribe();
+    await this.seed();
+    await this.subscribe();
 
-    os.process.onSignal("SIGTERM", () => {
+    await this.os.process.onSignal("SIGTERM", () => {
       this.root.innerHTML = "";
-      os.process.exit(0);
+      void this.os.process.exit(0);
     });
   }
 
-  private seed(): void {
-    for (const proc of this.os.process.list()) {
+  private async seed(): Promise<void> {
+    for (const proc of await this.os.process.list()) {
       this.paths.set(proc.pid, proc.path);
     }
 
-    for (const info of this.os.windows.list()) {
+    for (const info of await this.os.windows.list()) {
       this.addWindow(info.pid, info.windowId, info.title, info.minimized);
       if (info.focused) this.setFocused(info.pid, info.windowId);
     }
   }
 
-  private subscribe(): void {
-    this.os.events.subscribe(
+  private async subscribe(): Promise<void> {
+    await this.os.events.subscribe(
       [
         "window.created",
         "window.destroyed",
@@ -161,7 +167,7 @@ class Taskbar {
     this.renderGroup(pid);
   }
 
-  private activate(pid: Pid): void {
+  private async activate(pid: Pid): Promise<void> {
     const group = this.groups.get(pid);
     if (!group || group.windows.size === 0) return;
 
@@ -170,15 +176,16 @@ class Taskbar {
 
     if (this.focusedPid === pid && anyVisible) {
       for (const win of windows) {
-        if (!win.minimized) this.os.windows.setMinimized(win.id, true);
+        if (!win.minimized) await this.os.windows.setMinimized(win.id, true);
       }
       return;
     }
 
     // Oldest first, so the most recently focused window ends up on top.
     // focus() also un-minimizes, so this covers restore and raise alike.
+    // Sequentially: the kernel decides z-order in the order it is asked.
     for (const id of [...group.mru].reverse()) {
-      this.os.windows.focus(id);
+      await this.os.windows.focus(id);
     }
   }
 
@@ -201,7 +208,9 @@ class Taskbar {
       count: selectElementFromTemplate(button, "#task-button-count"),
     };
 
-    button.addEventListener("click", () => this.activate(pid));
+    button.addEventListener("click", () => {
+      void this.activate(pid).catch(logError);
+    });
     this.taskList.appendChild(button);
     this.groups.set(pid, group);
     return group;
@@ -228,13 +237,28 @@ class Taskbar {
     );
   }
 
+  /**
+   * Called from synchronous render paths, so a cache miss cannot block: fill it
+   * in the background and re-render the group once the path is known.
+   */
   private pathFor(pid: Pid): string {
     const cached = this.paths.get(pid);
     if (cached !== undefined) return cached;
 
-    const proc = this.os.process.list().find((entry) => entry.pid === pid);
-    const path = proc?.path ?? "";
-    this.paths.set(pid, path);
-    return path;
+    void this.os.process
+      .list()
+      .then((processes) => {
+        const path = processes.find((entry) => entry.pid === pid)?.path ?? "";
+        this.paths.set(pid, path);
+
+        const group = this.groups.get(pid);
+        if (!group || group.path === path) return;
+
+        group.path = path;
+        this.renderGroup(pid);
+      })
+      .catch(logError);
+
+    return cached ?? "";
   }
 }

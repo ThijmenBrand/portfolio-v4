@@ -40,10 +40,10 @@ export function fdSyscalls(
       writeFd(ctx, callerPid, fd, data),
     seek: (callerPid: Pid, fd: number, offset: number, whence: Whence) =>
       seekFd(ctx, callerPid, fd, offset, whence),
-    dup: (callerPid: Pid, fd: number, to?: number) =>
+    dup: async (callerPid: Pid, fd: number, to?: number) =>
       dupFd(ctx, callerPid, fd, to),
     fstat: (callerPid: Pid, fd: number) => fstatFd(ctx, callerPid, fd),
-    listFds: (callerPid: Pid) => listFds(ctx, callerPid),
+    listFds: async (callerPid: Pid) => listFds(ctx, callerPid),
     pipe: (callerPid: Pid) => pipeFd(ctx, callerPid),
     openpty: (callerPid: Pid) => ptyFd(ctx, callerPid),
   };

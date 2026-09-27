@@ -1,4 +1,5 @@
 import type { KernelInterface } from "../../kernel/syscalls/api";
+import type { WindowHandle } from "../../kernel/windows/types";
 import {
   htmlStringToTemplate,
   selectElementFromTemplate,
@@ -177,7 +178,7 @@ function buildCases(os: KernelInterface): TestCase[] {
         let copy = -1;
         try {
           await os.io.read(fd, 8);
-          copy = os.io.dup(fd);
+          copy = await os.io.dup(fd);
           const text = decode(await os.io.read(copy, 8));
           expect(
             text === "ersion 1",
@@ -193,7 +194,7 @@ function buildCases(os: KernelInterface): TestCase[] {
       name: "closing one dup keeps the other open",
       run: async () => {
         const fd = await os.io.open("/proc/version", { read: true });
-        const copy = os.io.dup(fd);
+        const copy = await os.io.dup(fd);
         await os.io.close(fd);
         try {
           const text = decode(await os.io.read(copy, 8));
@@ -333,8 +334,8 @@ function buildCases(os: KernelInterface): TestCase[] {
           truncate: true,
         });
         try {
-          os.io.dup(fd, CHILD_FD);
-          const pid = os.process.spawn(CHILD_PATH, ["a"]);
+          await os.io.dup(fd, CHILD_FD);
+          const pid = await os.process.spawn(CHILD_PATH, ["a"]);
           await os.process.wait(pid);
 
           // Child wrote "a" at offset 0, advancing the SHARED offset to 1.
@@ -474,10 +475,10 @@ function buildCases(os: KernelInterface): TestCase[] {
       run: async () => {
         const { read, write } = await os.io.pipe();
         try {
-          os.io.dup(write, CHILD_FD); // the child writes to fd 3
+          await os.io.dup(write, CHILD_FD); // the child writes to fd 3
           await os.io.close(write); // parent drops its own write end
 
-          const pid = os.process.spawn(CHILD_PATH, ["from-child"]);
+          const pid = await os.process.spawn(CHILD_PATH, ["from-child"]);
           await os.io.close(CHILD_FD); // AFTER spawn — inheritFrom already ran
 
           // Only the child holds a write end now. Read to EOF.
@@ -512,11 +513,19 @@ function buildCases(os: KernelInterface): TestCase[] {
 
 // ----------------------------------------------------------------------- app
 
-export function main(os: KernelInterface): void {
-  const app = new IoDebug(os);
-  os.process.onSignal("SIGTERM", () => {
+export async function main(os: KernelInterface): Promise<void> {
+  const handle = await os.windows.create({
+    title: "io (debug)",
+    width: 860,
+    height: 520,
+    minWidth: 600,
+    minHeight: 340,
+  });
+
+  const app = new IoDebug(os, handle);
+  await os.process.onSignal("SIGTERM", () => {
     app.destroy();
-    os.process.exit(0);
+    void os.process.exit(0);
   });
 }
 
@@ -542,18 +551,11 @@ class IoDebug {
     (args: string[], rest: string) => Promise<string>
   >;
 
-  constructor(os: KernelInterface) {
+  constructor(os: KernelInterface, handle: WindowHandle) {
     this.os = os;
 
-    const handle = os.windows.create({
-      title: "io (debug)",
-      width: 860,
-      height: 520,
-      minWidth: 600,
-      minHeight: 340,
-    });
-    this.close = () => handle.close();
-    handle.onCloseRequest(() => os.process.exit(0));
+    this.close = () => void handle.close();
+    void handle.onCloseRequest(() => void os.process.exit(0));
 
     this.root = htmlStringToTemplate(ioDebugHTML);
     handle.body.appendChild(this.root);
@@ -571,7 +573,7 @@ class IoDebug {
       "os.io console — `help` for commands, `test` for the suite",
       "info",
     );
-    this.refreshFds();
+    void this.refreshFds();
   }
 
   public destroy(): void {
@@ -684,7 +686,7 @@ class IoDebug {
         const fd = num(args[0], "fd");
         const to =
           args[1] === undefined ? undefined : num(args[1], "target fd");
-        return `fd ${os.io.dup(fd, to)}`;
+        return `fd ${await os.io.dup(fd, to)}`;
       },
 
       close: async (args) => {
@@ -728,7 +730,7 @@ class IoDebug {
       },
 
       fds: async () => {
-        const list = os.io.listFds();
+        const list = await os.io.listFds();
         if (list.length === 0) return "(no open descriptors)";
         return list
           .map(
@@ -749,8 +751,7 @@ class IoDebug {
       },
 
       cwd: async () => {
-        const cwd = os.process.cwd();
-        return cwd;
+        return await os.process.cwd();
       },
 
       chdir: async (args) => {
@@ -798,7 +799,7 @@ class IoDebug {
       );
       this.setStatus(`${name} → ${code ?? "error"}`, true);
     } finally {
-      this.refreshFds();
+      await this.refreshFds();
     }
   }
 
@@ -822,7 +823,7 @@ class IoDebug {
         );
         failed += 1;
       }
-      this.refreshFds();
+      await this.refreshFds();
     }
 
     this.append(
@@ -834,12 +835,12 @@ class IoDebug {
 
   // --------------------------------------------------------------- render
 
-  private refreshFds(): void {
+  private async refreshFds(): Promise<void> {
     if (this.disposed) return;
 
     let list: FdInfo[];
     try {
-      list = this.os.io.listFds();
+      list = await this.os.io.listFds();
     } catch {
       return;
     }

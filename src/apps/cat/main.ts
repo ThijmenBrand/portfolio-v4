@@ -22,5 +22,5 @@ export async function main(os: KernelInterface, args: string[]): Promise<void> {
       }
     }
   }
-  os.process.exit(0);
+  await os.process.exit(0);
 }

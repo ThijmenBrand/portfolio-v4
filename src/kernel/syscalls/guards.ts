@@ -40,24 +40,26 @@ export function rejectOnThrow<T = unknown>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-export function alive<T = unknown>(
+export function alive<R>(
   ctx: KernelContext,
-  fn: (pid: Pid, ...args: any[]) => T,
-) {
-  return (pid: Pid, ...args: any[]) => {
-    requireAlive(ctx, pid);
-    return fn(pid, ...args);
-  };
+  fn: (pid: Pid, ...args: any[]) => R | Promise<R>,
+): (pid: Pid, ...args: any[]) => Promise<R> {
+  return (pid: Pid, ...args: any[]) =>
+    rejectOnThrow(() => {
+      requireAlive(ctx, pid);
+      return Promise.resolve(fn(pid, ...args)) as Promise<R>;
+    });
 }
 
-export function privileged(
+export function privileged<R>(
   ctx: KernelContext,
-  fn: (pid: Pid, ...args: any[]) => any,
-) {
-  return (pid: Pid, ...args: any[]) => {
-    requirePrivilege(ctx, pid, "privileged guard");
-    return fn(pid, ...args);
-  };
+  fn: (pid: Pid, ...args: any[]) => R | Promise<R>,
+): (pid: Pid, ...args: any[]) => Promise<R> {
+  return (pid: Pid, ...args: any[]) =>
+    rejectOnThrow(() => {
+      requirePrivilege(ctx, pid, "privileged guard");
+      return Promise.resolve(fn(pid, ...args)) as Promise<R>;
+    });
 }
 
 export function requireControl(

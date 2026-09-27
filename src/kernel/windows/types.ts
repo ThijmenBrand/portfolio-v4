@@ -34,9 +34,9 @@ export interface WindowRecord {
 export interface WindowHandle {
   readonly id: WindowId;
   readonly body: HTMLElement;
-  setTitle(title: string): void;
-  close(): void;
-  onCloseRequest(callback: () => void): void;
+  setTitle(title: string): Promise<void>;
+  close(): Promise<void>;
+  onCloseRequest(callback: () => void): Promise<void>;
 }
 
 export interface Constraints {

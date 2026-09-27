@@ -13,5 +13,5 @@ import type { KernelInterface } from "../../kernel/syscalls/api";
  */
 export async function main(os: KernelInterface, args: string[]): Promise<void> {
   await os.io.write(3, new TextEncoder().encode(args[0] ?? "?"));
-  os.process.exit(0);
+  await os.process.exit(0);
 }

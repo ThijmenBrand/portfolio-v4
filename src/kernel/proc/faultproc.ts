@@ -1,5 +1,5 @@
 import type { KernelContext } from "../context";
-import { isKernelError } from "../errors";
+import { isKernelError, logError } from "../errors";
 import type { Pid } from "../types";
 import { terminateProcess } from "./terminate";
 import type { FaultSite } from "./types";
@@ -28,6 +28,6 @@ export function faultProcess(
   );
 
   if (site === "main") {
-    terminateProcess(ctx, pid, ABORT_EXIT_CODE, "crash");
+    void terminateProcess(ctx, pid, ABORT_EXIT_CODE, "crash").catch(logError);
   }
 }
