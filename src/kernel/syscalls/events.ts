@@ -1,7 +1,6 @@
-import type { KernelContext } from "../context";
 import type { EventHandler, EventType } from "../events/types";
 import { subscribeEvents } from "../proc/subscribe";
-import type { Pid } from "../types";
+import type { KernelContext, Pid } from "../types";
 import type { SyscallTable } from "./table";
 
 export function eventsSyscalls(

@@ -1,6 +1,5 @@
-import type { KernelContext } from "../context";
 import { isKernelError, logError } from "../errors";
-import type { Pid } from "../types";
+import type { KernelContext, Pid } from "../types";
 import { terminateProcess } from "./terminate";
 import type { FaultSite } from "./types";
 

@@ -1,4 +1,3 @@
-import type { KernelContext } from "../context";
 import type { OpenFlags, Whence } from "../io/openfile";
 import {
   closeFd,
@@ -12,7 +11,7 @@ import {
   seekFd,
   writeFd,
 } from "../proc/fd";
-import type { Bytes, Pid } from "../types";
+import type { Bytes, KernelContext, Pid } from "../types";
 import type { SyscallTable } from "./table";
 
 export function fdSyscalls(

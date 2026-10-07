@@ -1,6 +1,5 @@
-import type { KernelContext } from "../context";
 import { enoexec } from "../errors";
-import type { AppModule, Process } from "../types";
+import type { AppModule, KernelContext, Process } from "../types";
 import { faultProcess } from "./faultproc";
 import { terminateProcess } from "./terminate";
 

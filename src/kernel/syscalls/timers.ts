@@ -6,8 +6,7 @@ import {
   clearTimeout,
   setTimeout,
 } from "../proc/timers";
-import type { KernelContext } from "../context";
-import type { Pid } from "../types";
+import type { KernelContext, Pid } from "../types";
 
 export function timersSyscalls(
   ctx: KernelContext,

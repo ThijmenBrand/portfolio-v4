@@ -1,8 +1,7 @@
-import type { KernelContext } from "../context";
 import { enotdir } from "../errors";
 import { resolveFrom } from "../fs/path";
 import { requireAlive } from "../syscalls/guards";
-import type { Pid } from "../types";
+import type { KernelContext, Pid } from "../types";
 
 export async function changeDirectory(
   ctx: KernelContext,

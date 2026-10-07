@@ -1,6 +1,5 @@
-import type { KernelContext } from "../context";
 import { einval, esrch } from "../errors";
-import type { Pid } from "../types";
+import type { KernelContext, Pid } from "../types";
 import { faultProcess } from "./faultproc";
 import { terminateProcess } from "./terminate";
 

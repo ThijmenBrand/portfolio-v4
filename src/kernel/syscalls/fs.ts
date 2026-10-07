@@ -1,6 +1,6 @@
-import type { KernelContext } from "../context";
 import { resolveFrom } from "../fs/path";
 import { changeDirectory, getCwd } from "../proc/cwd";
+import type { KernelContext } from "../types";
 import { requireAlive } from "./guards";
 import type { SyscallTable } from "./table";
 

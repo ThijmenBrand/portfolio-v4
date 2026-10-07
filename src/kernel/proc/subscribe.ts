@@ -1,6 +1,5 @@
-import type { KernelContext } from "../context";
 import { requireAlive } from "../syscalls/guards";
-import type { Pid } from "../types";
+import type { KernelContext, Pid } from "../types";
 import type { EventHandler, EventType } from "../events/types";
 import { faultProcess } from "./faultproc";
 

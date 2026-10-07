@@ -1,4 +1,3 @@
-import type { KernelContext } from "./context";
 import { Display } from "./display/display";
 import { EventBus } from "./events/bus";
 import { MemFS } from "./fs/drivers/memfs";
@@ -9,8 +8,8 @@ import { faultProcess } from "./proc/faultproc";
 import { ProcessManager } from "./proc/manager";
 import { bindSyscalls, type KernelInterface } from "./syscalls/api";
 import { createSyscallTable } from "./syscalls/table";
-import type { Pid } from "./types";
-import { defaultClose, forceClose } from "./windowPolicy";
+import type { KernelContext, Pid } from "./types";
+import { defaultClose, forceClose } from "./windows/windowPolicy";
 import { WindowManager } from "./windows/manager";
 
 export function createKernel(screen: HTMLElement): {

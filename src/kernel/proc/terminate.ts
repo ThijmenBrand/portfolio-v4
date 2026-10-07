@@ -1,6 +1,5 @@
-import type { KernelContext } from "../context";
 import { eperm, logError } from "../errors";
-import type { ExitReason, Pid } from "../types";
+import type { ExitReason, KernelContext, Pid } from "../types";
 import { sendSignal, Signal } from "./signals";
 
 export async function terminateProcess(

@@ -1,11 +1,10 @@
-import type { KernelContext } from "../context";
 import { einval, enoent } from "../errors";
 import { resolve } from "../binfmt";
 import { execute } from "../proc/exec";
 import { sendSignal } from "../proc/signals";
 import { terminateProcess } from "../proc/terminate";
 import { waitFor } from "../proc/wait";
-import type { Pid } from "../types";
+import type { KernelContext, Pid } from "../types";
 import { alive, requireAlive, requireControl } from "./guards";
 import type { SyscallTable } from "./table";
 import { changeDirectory, getCwd } from "../proc/cwd";

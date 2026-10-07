@@ -1,4 +1,3 @@
-import type { KernelContext } from "../context";
 import { ebadf, einval, eperm, espipe, logError } from "../errors";
 import { resolveFrom } from "../fs/path";
 import type { Stat } from "../fs/types";
@@ -12,7 +11,7 @@ import type {
 import { createPipe } from "../io/pipe";
 import { createPty } from "../io/pty";
 import { requireAlive } from "../syscalls/guards";
-import type { Bytes, Pid } from "../types";
+import type { Bytes, KernelContext, Pid } from "../types";
 
 function withOffset<T>(
   ofd: OpenFileDescription,

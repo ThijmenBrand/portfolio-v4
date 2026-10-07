@@ -1,7 +1,22 @@
+import type { DisplayInterface } from "./display/display";
+import type { EventBusInterface } from "./events/bus";
+import type { VFS } from "./fs/vfs";
 import type { FdTable } from "./proc/fdTable";
+import type { ProcessManagerInterface } from "./proc/manager";
 import type { Signal } from "./proc/signals";
 import type { FaultInfo } from "./proc/types";
 import type { KernelInterface } from "./syscalls/api";
+import type { WindowManagerInterface } from "./windows/managerInterface";
+
+export interface KernelContext {
+  processes: ProcessManagerInterface;
+  windows: WindowManagerInterface;
+  display: DisplayInterface;
+  events: EventBusInterface;
+  fs: VFS;
+  createOs(pid: Pid): KernelInterface;
+}
+
 
 export type Pid = number & { readonly __brand: "pid" };
 export type WindowId = number & { readonly __brand: "windowId" };

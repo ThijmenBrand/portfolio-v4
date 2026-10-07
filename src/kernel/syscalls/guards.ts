@@ -1,6 +1,5 @@
-import type { KernelContext } from "../context";
 import { eperm, esrch } from "../errors";
-import type { Pid, Process } from "../types";
+import type { KernelContext, Pid, Process } from "../types";
 
 /**
  * Resolves the process from the process registry.

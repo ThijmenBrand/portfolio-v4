@@ -1,5 +1,4 @@
-import type { KernelContext } from "../context";
-import type { Pid, WindowId } from "../types";
+import type { KernelContext, Pid, WindowId } from "../types";
 import type { WindowOptions } from "../windows/types";
 import { bindWindowHandle } from "./api";
 import { alive, requireAlive } from "./guards";

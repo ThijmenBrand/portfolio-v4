@@ -1,4 +1,3 @@
-import type { KernelContext } from "../context";
 import type { EventHandler, EventType } from "../events/types";
 import type { DirEntry, Stat, StatResult } from "../fs/types";
 import type { FdInfo, OpenFlags, PipeFds, Whence } from "../io/openfile";
@@ -6,6 +5,7 @@ import type { Signal } from "../proc/signals";
 import type {
   Bytes,
   ExitRecord,
+  KernelContext,
   Pid,
   ProcessInfo,
   ProcessSignal,

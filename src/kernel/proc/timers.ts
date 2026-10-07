@@ -1,5 +1,4 @@
-import type { KernelContext } from "../context";
-import type { Pid } from "../types";
+import type { KernelContext, Pid } from "../types";
 import { faultProcess } from "./faultproc";
 
 export function setInterval(

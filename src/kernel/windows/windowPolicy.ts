@@ -1,8 +1,7 @@
-import type { KernelContext } from "./context";
-import { logError } from "./errors";
-import { sendSignal } from "./proc/signals";
-import { terminateProcess } from "./proc/terminate";
-import type { Pid, WindowId } from "./types";
+import { logError } from "../errors";
+import { sendSignal } from "../proc/signals";
+import { terminateProcess } from "../proc/terminate";
+import type { KernelContext, Pid, WindowId } from "../types";
 
 export function defaultClose(
   ctx: KernelContext,

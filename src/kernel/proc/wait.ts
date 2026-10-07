@@ -1,11 +1,10 @@
-import type { KernelContext } from "../context";
 import { eintr } from "../errors";
 import {
   rejectOnThrow,
   requireAlive,
   requireControl,
 } from "../syscalls/guards";
-import type { Pid, Termination } from "../types";
+import type { KernelContext, Pid, Termination } from "../types";
 
 export function waitFor(
   ctx: KernelContext,
