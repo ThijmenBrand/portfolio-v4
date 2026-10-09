@@ -22,6 +22,7 @@ import type {
 import { displaySyscalls } from "./display";
 import { eventsSyscalls } from "./events";
 import { fdSyscalls } from "./fd";
+import { shellSyscalls } from "./shell";
 import { fsSyscalls } from "./fs";
 import { processSyscalls, type SpawnOptions } from "./process";
 import { timersSyscalls } from "./timers";
@@ -111,6 +112,7 @@ export interface SyscallTable {
   cwd(callerPid: Pid): Promise<string>;
   pipe(callerPid: Pid): Promise<PipeFds>;
   openpty(callerPid: Pid): Promise<{ master: number; slave: number }>;
+  openExternal(callerPid: Pid, url: string): Promise<void>;
 }
 
 export function createSyscallTable(ctx: KernelContext): SyscallTable {
@@ -122,5 +124,6 @@ export function createSyscallTable(ctx: KernelContext): SyscallTable {
     ...eventsSyscalls(ctx),
     ...fsSyscalls(ctx),
     ...fdSyscalls(ctx),
+    ...shellSyscalls(ctx),
   };
 }

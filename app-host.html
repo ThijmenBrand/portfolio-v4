@@ -5,10 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>app</title>
     <style>
+      /*
+       * Painted before any app code or CSS arrives, so a launching app never
+       * flashes the browser's default white. Matches --app-bg (ui/theme.css).
+       */
       html,
       body {
         margin: 0;
         height: 100%;
+        background: #1a1a1e;
+        color-scheme: dark;
       }
     </style>
   </head>

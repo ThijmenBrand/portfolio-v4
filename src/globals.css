@@ -1,3 +1,13 @@
+html,
+body {
+    margin: 0;
+    font: 13px/1.4 var(--app-sans);
+    color: var(--app-text);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    color-scheme: dark;
+}
+
 #screen {
     position: fixed;
     inset: 0;

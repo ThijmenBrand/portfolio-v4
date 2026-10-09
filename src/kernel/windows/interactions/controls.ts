@@ -32,6 +32,14 @@ export function enableControls(
     commands.minimizeWindow();
   };
 
+  // Double-clicking the title bar toggles maximize (not when on a button).
+  const topBar = windowElement.querySelector("#window-top-bar") as HTMLElement | null;
+  const titleBarDoubleClick = (event: MouseEvent) => {
+    if ((event.target as Element).closest(".window-button")) return;
+    maximizeHandler();
+  };
+  topBar?.addEventListener("dblclick", titleBarDoubleClick);
+
   if (closeButton) {
     closeButton.addEventListener("click", closeHandler);
   }
@@ -45,6 +53,7 @@ export function enableControls(
   }
 
   return () => {
+    topBar?.removeEventListener("dblclick", titleBarDoubleClick);
     if (closeButton) {
       closeButton.removeEventListener("click", closeHandler);
     }

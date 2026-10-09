@@ -166,9 +166,13 @@ export function executeIframe(
   // is destroyed by teardown too; remove() on a detached node is harmless.)
   const { port } = connectRealm(ctx, proc, () => iframe.remove());
 
+  // Hidden until its host page has painted (dark, see app-host.html), so
+  // launching never flashes the iframe's blank initial document.
+  iframe.classList.add("is-loading");
   iframe.addEventListener(
     "load",
     () => {
+      iframe.classList.remove("is-loading");
       iframe.contentWindow?.postMessage(bootMessage(proc, entry), "*", [port]);
     },
     { once: true },

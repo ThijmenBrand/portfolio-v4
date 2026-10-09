@@ -1,3 +1,5 @@
+// Theme variables + font stack for the kernel page (desktop, taskbar, window chrome).
+import "./ui/theme.css";
 import "./globals.css";
 import { createKernel } from "./kernel/core";
 import { kernelError } from "./kernel/errors";

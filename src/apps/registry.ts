@@ -6,28 +6,18 @@ export interface AppEntry {
 
 export const registry: AppEntry[] = [
   {
+    name: "Resume",
+    icon: "/assets/icons/resume.svg",
+    exec: "/ProgramFiles/resume",
+  },
+  {
     name: "Terminal",
-    icon: "/src/apps/terminal/icon.png",
+    icon: "/assets/icons/terminal.png",
     exec: "/ProgramFiles/terminal",
   },
   {
-    name: "Hello",
-    icon: "/assets/icons/default-app.svg",
-    exec: "/ProgramFiles/hello",
-  },
-  {
     name: "Task Manager",
-    icon: "/src/System/DebugPs/icon.png",
+    icon: "/assets/icons/task-manager.png",
     exec: "/System/DebugPs",
-  },
-  {
-    name: "Files",
-    icon: "/assets/icons/default-app.svg",
-    exec: "/ProgramFiles/fs-debug",
-  },
-  {
-    name: "IoDebug",
-    icon: "/assets/icons/default-app.svg",
-    exec: "/ProgramFiles/IoDebug",
   },
 ];

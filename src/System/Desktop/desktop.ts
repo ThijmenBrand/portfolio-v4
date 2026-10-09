@@ -39,6 +39,12 @@ export async function main(os: SystemInterface): Promise<void> {
   await os.process.chdir("/home");
   await os.process.spawn("/System/Taskbar");
 
+  // First thing a visitor sees: the resume. After the taskbar, so it shows
+  // up there too. A failure here must never take the desktop down.
+  await os.process.spawn("/ProgramFiles/resume").catch((error) =>
+    console.error("[desktop] could not open the resume:", error),
+  );
+
   await os.process.onSignal("SIGTERM", () => {
     desktop.destroy();
     void os.process.exit(0);

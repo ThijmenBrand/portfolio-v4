@@ -9,10 +9,8 @@ import { isBoot, runApp, type RealmAppModule } from "./boot";
  * document (display.root / display.taskbar / struts) and stay in-page.
  */
 const apps = import.meta.glob<RealmAppModule>([
-  "../apps/hello/main.ts",
+  "../apps/resume/main.ts",
   "../apps/terminal/main.ts",
-  "../apps/FsDebug/main.ts",
-  "../apps/IoDebug/main.ts",
   "../System/DebugPs/debug-ps.ts",
 ]);
 

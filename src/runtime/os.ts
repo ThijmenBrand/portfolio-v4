@@ -92,6 +92,10 @@ export function buildAppInterface(client: WireClient, pid: Pid): AppInterface {
         client.callWithDisposer("events.subscribe", [types, handler]),
     },
 
+    shell: {
+      openExternal: (url) => call("shell.openExternal", url),
+    },
+
     fs: {
       readFile,
       writeFile,

@@ -131,6 +131,8 @@ export const WIRE_CALLS = {
   "io.listFds": "listFds",
   "io.pipe": "pipe",
   "io.openpty": "openpty",
+
+  "shell.openExternal": "openExternal",
 } as const satisfies Record<WirePath, keyof SyscallTable | null>;
 
 /** The AppInterface member a wire path names, e.g. Member<"io.read">. */

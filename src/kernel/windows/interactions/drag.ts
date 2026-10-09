@@ -16,6 +16,9 @@ export function enableDrag(
   );
 
   const handleMouseDown = (event: MouseEvent) => {
+    // A press on a title-bar button is a click, not the start of a drag.
+    if ((event.target as Element).closest(".window-button")) return;
+    if (event.button !== 0) return;
     isDragging = true;
     shieldIframes();
     offsetX = event.clientX - record.frame.x;

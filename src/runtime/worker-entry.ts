@@ -8,11 +8,9 @@ import { isBoot, runApp, type RealmAppModule } from "./boot";
 const apps = import.meta.glob<RealmAppModule>([
   "../apps/echo/main.ts",
   "../apps/cat/main.ts",
-  "../apps/loop/main.ts",
   "../apps/sh/main.ts",
   "../apps/ls/main.ts",
   "../apps/clear/main.ts",
-  "../apps/IoDebug/child.ts",
 ]);
 
 /**

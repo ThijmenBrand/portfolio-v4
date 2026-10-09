@@ -61,6 +61,10 @@ export interface AppInterface {
       handler: EventHandler<T>,
     ): Promise<() => void>;
   };
+  shell: {
+    /** Open an https: or mailto: link outside the OS (kernel-mediated). */
+    openExternal(url: string): Promise<void>;
+  };
   fs: {
     readFile(path: string): Promise<Bytes>;
     writeFile(path: string, data: Bytes): Promise<void>;
@@ -141,6 +145,9 @@ export function bindSyscalls(target: SyscallTable, pid: Pid): SystemInterface {
     },
     events: {
       subscribe: (types, handler) => target.subscribe(pid, types, handler),
+    },
+    shell: {
+      openExternal: (url) => target.openExternal(pid, url),
     },
     fs: {
       readFile: (path) => target.readFile(pid, path),
