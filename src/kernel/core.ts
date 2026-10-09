@@ -11,6 +11,7 @@ import { createSyscallTable } from "./syscalls/table";
 import type { KernelContext, Pid } from "./types";
 import { defaultClose, forceClose } from "./windows/windowPolicy";
 import { WindowManager } from "./windows/manager";
+import { PortServer } from "./wire/server";
 
 export function createKernel(screen: HTMLElement): {
   os: SystemInterface;
@@ -63,6 +64,10 @@ export function createKernel(screen: HTMLElement): {
     events,
     fs,
     createOs: (pid) => bindSyscalls(table, pid),
+    serve: (port, pid) =>
+      new PortServer(port, pid, table, (message) =>
+        faultProcess(ctx, pid, new Error(message), "main"),
+      ),
   };
 
   const table = createSyscallTable(ctx);

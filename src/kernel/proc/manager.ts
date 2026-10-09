@@ -28,7 +28,7 @@ export interface ProcessManagerInterface {
     signal: Signal,
     handler: () => void,
   ): Promise<() => void>;
-  getSignal(pid: Pid): Promise<ProcessSignal>;
+  getSignal(pid: Pid): ProcessSignal;
   resolveWaiters(pid: Pid): void;
   addWaiter(pid: Pid, waiter: (termination: Termination) => void): () => void;
   reap(pid: Pid): void;
@@ -207,7 +207,7 @@ export class ProcessManager implements ProcessManagerInterface {
     };
   }
 
-  public async getSignal(pid: Pid): Promise<ProcessSignal> {
+  public getSignal(pid: Pid): ProcessSignal {
     const proc = this.processes.get(pid);
     if (!proc) {
       throw esrch(pid);

@@ -149,3 +149,9 @@ export function enospc(subject: string): KernelError {
     subject,
   });
 }
+
+export function enosys(call: string): KernelError {
+  return new KernelError("ENOSYS", `Syscall ${call} does not exist`, {
+    call,
+  });
+}

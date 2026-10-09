@@ -7,6 +7,7 @@ import type { Signal } from "./proc/signals";
 import type { FaultInfo } from "./proc/types";
 import type { SystemInterface } from "./syscalls/api";
 import type { WindowManagerInterface } from "./windows/managerInterface";
+import type { PortServer } from "./wire/server";
 
 export interface KernelContext {
   processes: ProcessManagerInterface;
@@ -15,6 +16,7 @@ export interface KernelContext {
   events: EventBusInterface;
   fs: VFS;
   createOs(pid: Pid): SystemInterface;
+  serve(port: MessagePort, pid: Pid): PortServer;
 }
 
 export type Pid = number & { readonly __brand: "pid" };

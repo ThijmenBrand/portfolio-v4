@@ -1,11 +1,14 @@
 import type { Executable } from "./proc/exec";
 
-export interface FileEntry {
-  load: Executable;
-  privileged?: boolean;
-}
+export type FileEntry =
+  | { format?: "module"; load: Executable; privileged?: boolean }
+  | { format: "worker"; entry: string; privileged?: boolean };
 
 const files: Record<string, FileEntry> = {
+  "/ProgramFiles/echo": { format: "worker", entry: "echo" },
+  "/ProgramFiles/cat": { format: "worker", entry: "cat" },
+  "/ProgramFiles/loop": { format: "worker", entry: "loop" },
+
   "/System/desktop": {
     load: () => import("../System/Desktop/desktop"),
     privileged: true,
@@ -31,9 +34,6 @@ const files: Record<string, FileEntry> = {
     load: () => import("../apps/IoDebug/child"),
   },
   "/ProgramFiles/sh": { load: () => import("../apps/sh/main") },
-  "/ProgramFiles/echo": { load: () => import("../apps/echo/main") },
-  "/ProgramFiles/cat": { load: () => import("../apps/cat/main") },
-  "/ProgramFiles/loop": { load: () => import("../apps/loop/main") },
 };
 
 export function resolve(path: string): FileEntry | undefined {

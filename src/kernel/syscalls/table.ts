@@ -63,7 +63,7 @@ export interface SyscallTable {
   reserveStrut(callerPid: Pid, edge: StrutEdge, size: number): Promise<number>;
   releaseStrut(callerPid: Pid, resourceId: number): Promise<void>;
   list(callerPid: Pid): Promise<ProcessInfo[]>;
-  getSignal(callerPid: Pid): Promise<ProcessSignal>;
+  getSignal(callerPid: Pid): ProcessSignal;
   onSignal(
     callerPid: Pid,
     signal: Signal,
@@ -76,11 +76,7 @@ export interface SyscallTable {
     ms: number,
   ): Promise<number>;
   clearInterval(callerPid: Pid, id: number): Promise<void>;
-  setTimeout(
-    callerPid: Pid,
-    callback: () => void,
-    ms: number,
-  ): Promise<number>;
+  setTimeout(callerPid: Pid, callback: () => void, ms: number): Promise<number>;
   clearTimeout(callerPid: Pid, id: number): Promise<void>;
   kill(callerPid: Pid, targetPid: Pid, signal: Signal): Promise<void>;
   history(callerPid: Pid): Promise<readonly ExitRecord[]>;

@@ -43,7 +43,7 @@ async function startProcess(
   if (inherited) process.files.adopt(inherited);
   else process.files.inheritFrom(parent.files);
 
-  void execute(ctx, process, file.load);
+  void execute(ctx, process, file);
   ctx.events.emit({
     type: "process.spawned",
     pid: process.pid,

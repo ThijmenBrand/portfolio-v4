@@ -35,14 +35,14 @@ export interface AppInterface {
   };
   process: {
     /** Runtime-local state, never a wire call (exempt in ./wire.ts). */
-    readonly signal: Promise<ProcessSignal>;
+    readonly signal: ProcessSignal;
     readonly pid: Pid;
     onSignal(signal: Signal, handler: () => void): Promise<() => void>;
     wait(pid: Pid): Promise<Termination>;
     spawn(path: string, args?: string[], options?: SpawnOptions): Promise<Pid>;
     exit(code?: number): Promise<void>;
     list(): Promise<ProcessInfo[]>;
-    kill(pid: Pid, signal: Signal, code?: number): Promise<void>;
+    kill(pid: Pid, signal: Signal): Promise<void>;
     history(): Promise<readonly ExitRecord[]>;
     chdir(path: string): Promise<void>;
     cwd(): Promise<string>;
@@ -81,11 +81,6 @@ export interface AppInterface {
   };
 }
 
-/**
- * In-realm extras: what a process gets by sharing the kernel's document.
- * Handed out by FORMAT ("module"), not by privilege — privilege stays a
- * runtime check in the kernel.
- */
 export interface SystemInterface extends AppInterface {
   display: AppInterface["display"] & {
     root(): Promise<HTMLElement>;

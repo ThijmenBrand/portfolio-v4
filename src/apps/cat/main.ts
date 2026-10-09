@@ -1,7 +1,7 @@
 // cat — pure byte copy, so no decoding and no chunk-boundary hazard
-import type { SystemInterface } from "../../kernel/syscalls/api";
+import type { AppInterface } from "../../kernel/syscalls/api";
 
-async function pump(os: SystemInterface, fd: number): Promise<void> {
+async function pump(os: AppInterface, fd: number): Promise<void> {
   for (;;) {
     const chunk = await os.io.read(fd, 4096);
     if (chunk.length === 0) return;
@@ -9,7 +9,7 @@ async function pump(os: SystemInterface, fd: number): Promise<void> {
   }
 }
 
-export async function main(os: SystemInterface, args: string[]): Promise<void> {
+export async function main(os: AppInterface, args: string[]): Promise<void> {
   if (args.length === 0) {
     await pump(os, 0);
   } else {
