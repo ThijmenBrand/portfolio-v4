@@ -19,6 +19,7 @@ const files: Record<string, FileEntry> = {
   "/ProgramFiles/sh": { format: "worker", entry: "apps/sh/main" },
   "/ProgramFiles/ls": { format: "worker", entry: "apps/ls/main" },
   "/ProgramFiles/clear": { format: "worker", entry: "apps/clear/main" },
+  "/System/launcher": { format: "worker", entry: "System/Launcher/main" },
 
   // GUI apps: sandboxed iframes. `window` is created at exec; the app
   // claims it with windows.create (which applies the title).

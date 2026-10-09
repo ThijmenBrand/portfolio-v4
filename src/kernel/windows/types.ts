@@ -58,6 +58,8 @@ export interface WindowCommmands {
   minimizeWindow(): void;
   focusWindow(): void;
   requestClose(): void;
+  /** Give the keyboard back to whichever window is focused now. */
+  refocusActive(): void;
 }
 
 export interface WorkArea {

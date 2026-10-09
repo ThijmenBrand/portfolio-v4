@@ -11,6 +11,7 @@ const apps = import.meta.glob<RealmAppModule>([
   "../apps/sh/main.ts",
   "../apps/ls/main.ts",
   "../apps/clear/main.ts",
+  "../System/Launcher/main.ts",
 ]);
 
 /**

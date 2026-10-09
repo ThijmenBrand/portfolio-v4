@@ -95,6 +95,14 @@ export interface Process {
   surface?: { windowId: WindowId; claimed: boolean };
 }
 
+/** Read-only snapshot of the page URL (shell.location). Plain data: wire-safe. */
+export interface LocationInfo {
+  href: string;
+  pathname: string;
+  search: string;
+  hash: string;
+}
+
 export interface ProcessInfo {
   pid: Pid;
   parentPid: Pid;

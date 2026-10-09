@@ -1,5 +1,5 @@
 import { einval } from "../errors";
-import type { KernelContext, Pid } from "../types";
+import type { KernelContext, LocationInfo, Pid } from "../types";
 import { alive } from "./guards";
 import type { SyscallTable } from "./table";
 
@@ -19,8 +19,17 @@ const ALLOWED = new Set(["https:", "mailto:"]);
  */
 export function shellSyscalls(
   ctx: KernelContext,
-): Pick<SyscallTable, "openExternal"> {
+): Pick<SyscallTable, "openExternal" | "getLocation"> {
   return {
+    /**
+     * Read-only: a copy of the page URL, so programs can react to links like
+     * ?launch=terminal. There is deliberately no way to change the URL.
+     * Treat the result as untrusted input — whoever made the link chose it.
+     */
+    getLocation: alive(ctx, (): LocationInfo => {
+      const { href, pathname, search, hash } = window.location;
+      return { href, pathname, search, hash };
+    }),
     openExternal: alive(ctx, (_pid: Pid, url: string) => {
       let target: URL;
       try {

@@ -39,10 +39,11 @@ export async function main(os: SystemInterface): Promise<void> {
   await os.process.chdir("/home");
   await os.process.spawn("/System/Taskbar");
 
-  // First thing a visitor sees: the resume. After the taskbar, so it shows
-  // up there too. A failure here must never take the desktop down.
-  await os.process.spawn("/ProgramFiles/resume").catch((error) =>
-    console.error("[desktop] could not open the resume:", error),
+  // Opens the apps the URL asks for (?launch=...), or the resume by default.
+  // After the taskbar, so they show up there too. A failure here must never
+  // take the desktop down.
+  await os.process.spawn("/System/launcher").catch((error) =>
+    console.error("[desktop] could not start the launcher:", error),
   );
 
   await os.process.onSignal("SIGTERM", () => {

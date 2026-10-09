@@ -6,6 +6,7 @@ import type {
   Bytes,
   ExitRecord,
   KernelContext,
+  LocationInfo,
   Pid,
   ProcessInfo,
   ProcessSignal,
@@ -113,6 +114,7 @@ export interface SyscallTable {
   pipe(callerPid: Pid): Promise<PipeFds>;
   openpty(callerPid: Pid): Promise<{ master: number; slave: number }>;
   openExternal(callerPid: Pid, url: string): Promise<void>;
+  getLocation(callerPid: Pid): Promise<LocationInfo>;
 }
 
 export function createSyscallTable(ctx: KernelContext): SyscallTable {

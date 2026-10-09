@@ -374,6 +374,11 @@ export class WindowManager implements WindowManagerInterface {
       minimizeWindow: () => this.setMinimized(windowRecord.id, true),
       focusWindow: () => this.focusWindow(windowRecord.id),
       requestClose: () => this.requestClose(windowRecord.id),
+      refocusActive: () => {
+        const active =
+          this.focusedId === null ? undefined : this.windows.get(this.focusedId);
+        if (active) this.focusContent(active);
+      },
     };
   }
 

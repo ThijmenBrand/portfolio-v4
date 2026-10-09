@@ -5,6 +5,7 @@ import type { Signal } from "../proc/signals";
 import type {
   Bytes,
   ExitRecord,
+  LocationInfo,
   Pid,
   ProcessInfo,
   ProcessSignal,
@@ -64,6 +65,8 @@ export interface AppInterface {
   shell: {
     /** Open an https: or mailto: link outside the OS (kernel-mediated). */
     openExternal(url: string): Promise<void>;
+    /** Read-only copy of the page URL. Untrusted: the link's author chose it. */
+    location(): Promise<LocationInfo>;
   };
   fs: {
     readFile(path: string): Promise<Bytes>;
@@ -148,6 +151,7 @@ export function bindSyscalls(target: SyscallTable, pid: Pid): SystemInterface {
     },
     shell: {
       openExternal: (url) => target.openExternal(pid, url),
+      location: () => target.getLocation(pid),
     },
     fs: {
       readFile: (path) => target.readFile(pid, path),

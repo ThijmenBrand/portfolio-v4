@@ -133,6 +133,7 @@ export const WIRE_CALLS = {
   "io.openpty": "openpty",
 
   "shell.openExternal": "openExternal",
+  "shell.location": "getLocation",
 } as const satisfies Record<WirePath, keyof SyscallTable | null>;
 
 /** The AppInterface member a wire path names, e.g. Member<"io.read">. */
