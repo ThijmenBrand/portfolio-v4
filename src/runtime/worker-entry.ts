@@ -18,11 +18,15 @@ const apps = import.meta.glob<WorkerAppModule>([
   "../apps/echo/main.ts",
   "../apps/cat/main.ts",
   "../apps/loop/main.ts",
+  "../apps/sh/main.ts",
+  "../apps/ls/main.ts",
+  "../apps/clear/main.ts",
 ]);
 
 /** Split an error into the fault message's fields, keeping a KernelError's code. */
 function describe(error: unknown): { message: string; code?: string } {
-  if (error instanceof KernelError) return { message: error.message, code: error.code };
+  if (error instanceof KernelError)
+    return { message: error.message, code: error.code };
   return { message: error instanceof Error ? error.message : String(error) };
 }
 

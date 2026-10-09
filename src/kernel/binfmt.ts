@@ -8,6 +8,9 @@ const files: Record<string, FileEntry> = {
   "/ProgramFiles/echo": { format: "worker", entry: "echo" },
   "/ProgramFiles/cat": { format: "worker", entry: "cat" },
   "/ProgramFiles/loop": { format: "worker", entry: "loop" },
+  "/ProgramFiles/sh": { format: "worker", entry: "sh" },
+  "/ProgramFiles/ls": { format: "worker", entry: "ls" },
+  "/ProgramFiles/clear": { format: "worker", entry: "clear" },
 
   "/System/desktop": {
     load: () => import("../System/Desktop/desktop"),
@@ -33,7 +36,6 @@ const files: Record<string, FileEntry> = {
   "/ProgramFiles/io-child": {
     load: () => import("../apps/IoDebug/child"),
   },
-  "/ProgramFiles/sh": { load: () => import("../apps/sh/main") },
 };
 
 export function resolve(path: string): FileEntry | undefined {

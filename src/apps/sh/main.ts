@@ -1,4 +1,5 @@
-import type { SystemInterface } from "../../kernel/syscalls/api";
+import { KernelError } from "../../kernel/errors";
+import type { AppInterface } from "../../kernel/syscalls/api";
 import type { Pid } from "../../kernel/types";
 
 const SEARCH_PATH = ["", "/ProgramFiles/", "/System/"];
@@ -116,10 +117,10 @@ class LineReader {
   private eof = false;
   private readonly decoder = new TextDecoder();
 
-  private readonly os: SystemInterface;
+  private readonly os: AppInterface;
   private readonly fd: number;
 
-  public constructor(os: SystemInterface, fd: number) {
+  public constructor(os: AppInterface, fd: number) {
     this.os = os;
     this.fd = fd;
   }
@@ -152,9 +153,9 @@ class Shell {
   private running = true;
   private foreground: Pid[] = [];
 
-  private readonly os: SystemInterface;
+  private readonly os: AppInterface;
 
-  public constructor(os: SystemInterface) {
+  public constructor(os: AppInterface) {
     this.os = os;
     this.lines = new LineReader(os, 0);
   }
@@ -272,7 +273,7 @@ class Shell {
       }
     }
 
-    throw last ?? new Error(`${name}: not found`);
+    throw new KernelError("ENOENT", `${name}: command not found`);
   }
 
   private async runPipeline(commands: Command[]): Promise<number> {
@@ -340,7 +341,7 @@ class Shell {
   }
 }
 
-export async function main(os: SystemInterface): Promise<void> {
+export async function main(os: AppInterface): Promise<void> {
   const shell = new Shell(os);
   os.process.exit(await shell.run());
 }

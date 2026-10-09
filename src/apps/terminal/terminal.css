@@ -19,6 +19,18 @@
   font: inherit;
 }
 
+.term-hints {
+  padding: 4px 12px;
+  border-top: 1px solid var(--app-border);
+  color: var(--app-text-dim);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.term-hints[hidden] {
+  display: none;
+}
+
 .term-prompt {
   display: flex;
   border-top: 1px solid var(--app-border);

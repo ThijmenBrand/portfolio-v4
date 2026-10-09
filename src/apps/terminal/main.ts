@@ -9,6 +9,8 @@ import "./terminal.css";
 import "../../ui/theme.css";
 import type { Pid } from "../../kernel/types";
 import type { ElementWindowHandle } from "../../kernel/windows/types";
+import { AnsiParser } from "./ansi";
+import { complete } from "./complete";
 
 const SHELL_PATH = "/ProgramFiles/sh";
 const MAX_CHARS = 200_000;
@@ -24,10 +26,12 @@ class Terminal {
   private readonly os: SystemInterface;
   private readonly out: HTMLElement;
   private readonly input: HTMLInputElement;
+  private readonly hints: HTMLElement;
 
   private readonly encoder = new TextEncoder();
   /** Streaming: a 4KB read can split a multi-byte sequence across chunks. */
   private readonly decoder = new TextDecoder();
+  private readonly ansi = new AnsiParser();
 
   private readonly history: string[] = [];
   private historyIndex = 0;
@@ -47,6 +51,7 @@ class Terminal {
 
     this.out = selectElementFromTemplate(root, '[data-field="out"]');
     this.input = selectElementFromTemplate(root, '[data-field="input"]');
+    this.hints = selectElementFromTemplate(root, '[data-field="hints"]');
 
     this.bindInput();
     root.addEventListener("mouseup", () => {
@@ -83,7 +88,7 @@ class Terminal {
       for (;;) {
         const chunk = await this.os.io.read(this.master, 4096);
         if (chunk.length === 0) break;
-        this.append(this.decoder.decode(chunk, { stream: true }));
+        this.render(this.decoder.decode(chunk, { stream: true }));
       }
     } catch (error) {
       // EINTR is our own termination aborting the parked read — not a fault.
@@ -103,6 +108,14 @@ class Terminal {
 
   private bindInput(): void {
     this.input.addEventListener("keydown", (event) => {
+      if (event.key === "Tab") {
+        event.preventDefault(); // keep focus in the input
+        void this.completeInput();
+        return;
+      }
+      // Any other key makes the shown candidates stale.
+      this.showHints([]);
+
       if (event.key === "Enter") {
         const line = this.input.value;
         this.input.value = "";
@@ -120,6 +133,13 @@ class Terminal {
         this.recall(event.key === "ArrowUp" ? -1 : 1);
       }
 
+      // Ctrl-L: clear locally, like readline does — keep the current prompt line.
+      if (event.key === "l" && event.ctrlKey) {
+        event.preventDefault();
+        this.clearScreen(true);
+        return;
+      }
+
       if (event.key === "c" && event.ctrlKey) {
         event.preventDefault();
         this.append("^C\n");
@@ -129,6 +149,35 @@ class Terminal {
         return;
       }
     });
+  }
+
+  private async completeInput(): Promise<void> {
+    const line = this.input.value;
+    const cursor = this.input.selectionStart ?? line.length;
+
+    const result = await complete(this.os, await this.shellCwd(), line, cursor);
+
+    // The user kept typing while we were asking the kernel: drop the result.
+    if (this.input.value !== line) return;
+
+    this.input.value = result.value;
+    this.input.setSelectionRange(result.cursor, result.cursor);
+    this.showHints(result.candidates);
+  }
+
+  /** The shell's cwd, not ours — `cd` changes the shell, never the terminal. */
+  private async shellCwd(): Promise<string> {
+    try {
+      const cwd = (await this.os.fs.readTextFile(`/proc/${this.shell}/cwd`)).trim();
+      return cwd || "/";
+    } catch {
+      return "/"; // shell gone or not started yet
+    }
+  }
+
+  private showHints(candidates: string[]): void {
+    this.hints.hidden = candidates.length === 0;
+    this.hints.textContent = candidates.join("  ");
   }
 
   private recall(direction: number): void {
@@ -151,6 +200,24 @@ class Terminal {
       // EPIPE means the shell is gone; reap() already said so.
       if (errorCode(error) !== "EPIPE") throw error;
     }
+  }
+
+  /** Program output: text plus the few escape sequences we understand. */
+  private render(chunk: string): void {
+    for (const segment of this.ansi.feed(chunk)) {
+      if (segment.kind === "clear") this.clearScreen(false);
+      else this.append(segment.text);
+    }
+  }
+
+  /**
+   * Wipe the output pane. Ctrl-L keeps the last line (the shell's prompt);
+   * `clear` doesn't need to, because sh prints a fresh prompt after it exits.
+   */
+  private clearScreen(keepPrompt: boolean): void {
+    const all = this.out.textContent ?? "";
+    this.out.textContent = keepPrompt ? all.slice(all.lastIndexOf("\n") + 1) : "";
+    this.out.scrollTop = 0;
   }
 
   private append(text: string): void {
