@@ -16,7 +16,7 @@ const BUILTINS = ["cd", "pwd", "exit", "help"];
  * not in the VFS, so they can't be listed with readdir yet.
  * TODO: derive this from readdir once /ProgramFiles is a real directory.
  */
-const PROGRAMS = ["cat", "clear", "echo", "loop", "ls", "sh", "terminal"];
+const PROGRAMS = ["cat", "clear", "echo", "hello", "loop", "ls", "sh", "terminal"];
 
 export interface Completion {
   value: string;

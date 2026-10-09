@@ -32,6 +32,10 @@ export interface AppInterface {
     list(): Promise<WindowInfo[]>;
     focus(windowId: WindowId): Promise<void>;
     setMinimized(windowId: WindowId, minimized: boolean): Promise<void>;
+    /** Id-based handle operations: what a WindowHandle is built from over the wire. */
+    setTitle(windowId: WindowId, title: string): Promise<void>;
+    close(windowId: WindowId): Promise<void>;
+    onCloseRequest(windowId: WindowId, callback: () => void): Promise<void>;
   };
   process: {
     /** Runtime-local state, never a wire call (exempt in ./wire.ts). */
@@ -108,6 +112,11 @@ export function bindSyscalls(target: SyscallTable, pid: Pid): SystemInterface {
       focus: (windowId) => target.focusWindow(pid, windowId),
       setMinimized: (windowId, minimized) =>
         target.setMinimized(pid, windowId, minimized),
+      setTitle: (windowId, title) =>
+        target.setWindowTitle(pid, windowId, title),
+      close: (windowId) => target.closeWindow(pid, windowId),
+      onCloseRequest: (windowId, callback) =>
+        target.onWindowCloseRequest(pid, windowId, callback),
     },
     process: {
       get signal() {

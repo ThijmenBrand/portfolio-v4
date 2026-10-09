@@ -88,6 +88,11 @@ export interface Process {
   faults: number;
   lastFault?: FaultInfo;
   cwd: string;
+  /**
+   * Iframe processes only: the window the kernel created at exec, whose body
+   * holds the app's iframe. `windows.create` over the wire claims it.
+   */
+  surface?: { windowId: WindowId; claimed: boolean };
 }
 
 export interface ProcessInfo {

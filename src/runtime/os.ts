@@ -1,6 +1,6 @@
-import { enosys, logError } from "../kernel/errors";
+import { logError } from "../kernel/errors";
 import type { AppInterface } from "../kernel/syscalls/api";
-import type { Pid, ProcessSignal } from "../kernel/types";
+import type { Pid, ProcessSignal, WindowId } from "../kernel/types";
 import type { Member, WirePath } from "../kernel/wire/protocol";
 import type { WireClient } from "./client";
 
@@ -31,12 +31,28 @@ export function buildAppInterface(client: WireClient, pid: Pid): AppInterface {
     },
 
     windows: {
-      // Needs handles-by-id (iframe milestone); the server refuses it too.
-      create: () => Promise.reject(enosys("windows.create")),
+      // Claims the window the kernel made at exec, then builds the handle
+      // from its id. No `body`: the app owns its whole document instead.
+      create: async (options) => {
+        // The one call whose wire result differs from its AppInterface result:
+        // the kernel answers with the claimed window's id, we build the handle.
+        const id = (await client.call("windows.create", [options])) as WindowId;
+        return {
+          id,
+          setTitle: (title) => call("windows.setTitle", id, title),
+          close: () => call("windows.close", id),
+          onCloseRequest: (callback) =>
+            call("windows.onCloseRequest", id, callback),
+        };
+      },
       list: () => call("windows.list"),
       focus: (windowId) => call("windows.focus", windowId),
       setMinimized: (windowId, minimized) =>
         call("windows.setMinimized", windowId, minimized),
+      setTitle: (windowId, title) => call("windows.setTitle", windowId, title),
+      close: (windowId) => call("windows.close", windowId),
+      onCloseRequest: (windowId, callback) =>
+        call("windows.onCloseRequest", windowId, callback),
     },
 
     process: {

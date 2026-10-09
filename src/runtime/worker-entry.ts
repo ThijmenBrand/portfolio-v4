@@ -1,12 +1,4 @@
-import { KernelError } from "../kernel/errors";
-import type { AppInterface } from "../kernel/syscalls/api";
-import { PROTOCOL_VERSION, type BootMessage } from "../kernel/wire/protocol";
-import { WireClient } from "./client";
-import { buildAppInterface } from "./os";
-
-interface WorkerAppModule {
-  main(os: AppInterface, args: string[]): void | Promise<void>;
-}
+import { isBoot, runApp, type RealmAppModule } from "./boot";
 
 /**
  * The apps that may run in a worker. Listed explicitly rather than
@@ -14,7 +6,7 @@ interface WorkerAppModule {
  * bundled into the worker. Add an app here when you give it
  * `format: "worker"` in binfmt.
  */
-const apps = import.meta.glob<WorkerAppModule>([
+const apps = import.meta.glob<RealmAppModule>([
   "../apps/echo/main.ts",
   "../apps/cat/main.ts",
   "../apps/loop/main.ts",
@@ -23,33 +15,13 @@ const apps = import.meta.glob<WorkerAppModule>([
   "../apps/clear/main.ts",
 ]);
 
-/** Split an error into the fault message's fields, keeping a KernelError's code. */
-function describe(error: unknown): { message: string; code?: string } {
-  if (error instanceof KernelError)
-    return { message: error.message, code: error.code };
-  return { message: error instanceof Error ? error.message : String(error) };
-}
-
-self.onmessage = async (event: MessageEvent) => {
-  self.onmessage = null;
-
-  const boot = event.data as BootMessage;
+/** The realm's first and only message on its own channel: boot, carrying the port. */
+self.onmessage = (event: MessageEvent) => {
+  self.onmessage = null; // boot exactly once
   const port = event.ports[0];
-  if (boot?.t !== "boot" || boot.v !== PROTOCOL_VERSION || !port) {
-    self.close();
+  if (!isBoot(event.data, port)) {
+    self.close(); // not from our kernel, or a version mismatch
     return;
   }
-
-  const client = new WireClient(port);
-  try {
-    const load = apps[`../apps/${boot.entry}/main.ts`];
-    if (!load)
-      throw new KernelError("ENOEXEC", `not a worker app: ${boot.entry}`);
-
-    const module = await load();
-    await module.main(buildAppInterface(client, boot.pid), boot.args);
-  } catch (error) {
-    const { message, code } = describe(error);
-    client.fault(message, code);
-  }
+  void runApp(event.data, port, apps, "../apps");
 };

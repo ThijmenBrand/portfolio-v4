@@ -93,11 +93,14 @@ export type WirePath = Exclude<Paths<AppInterface>, RuntimeLocal>;
 export const WIRE_CALLS = {
   "display.workArea": "getWorkArea",
 
-  // Returns a handle object; needs handle-by-id support (iframe milestone).
-  "windows.create": null,
+  // Over the wire this claims the window made at exec (iframe processes).
+  "windows.create": "claimWindow",
   "windows.list": "listWindows",
   "windows.focus": "focusWindow",
   "windows.setMinimized": "setMinimized",
+  "windows.setTitle": "setWindowTitle",
+  "windows.close": "closeWindow",
+  "windows.onCloseRequest": "onWindowCloseRequest",
 
   "process.onSignal": "onSignal",
   "process.wait": "wait",

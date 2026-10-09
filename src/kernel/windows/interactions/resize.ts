@@ -1,5 +1,6 @@
 import { selectElementFromTemplate } from "../../../utils/html";
 import type { WindowCommmands, WindowRecord } from "../types";
+import { shieldIframes, unshieldIframes } from "./shield";
 
 export function enableResize(
   record: Readonly<WindowRecord>,
@@ -70,10 +71,12 @@ export function enableResize(
 
     const onMouseUp = () => {
       isResizing = false;
+      unshieldIframes();
       document.removeEventListener("mousemove", onMouseMove);
       document.removeEventListener("mouseup", onMouseUp);
     };
 
+    shieldIframes();
     document.addEventListener("mousemove", onMouseMove);
     document.addEventListener("mouseup", onMouseUp);
   };

@@ -1,0 +1,67 @@
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--app-bg);
+  color: var(--app-text);
+  font: 13px/1.5 var(--app-sans);
+}
+
+.hello {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+}
+
+.hello h1 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.hello dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 12px;
+  margin: 0;
+}
+
+.hello dt {
+  color: var(--app-text-dim);
+}
+
+.hello dd {
+  margin: 0;
+  font-family: var(--app-mono);
+  overflow-wrap: anywhere;
+}
+
+.hello .row {
+  display: flex;
+  gap: 8px;
+}
+
+.hello button {
+  height: var(--app-control);
+  padding: 0 12px;
+  border: 1px solid var(--app-border-hi);
+  border-radius: var(--app-radius-sm);
+  background: var(--app-surface-hi);
+  color: var(--app-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.hello button:hover {
+  border-color: var(--app-accent);
+}
+
+.hello .confirm {
+  padding: 10px;
+  border: 1px solid var(--app-warn);
+  border-radius: var(--app-radius);
+  background: var(--app-surface);
+}
+
+.hello .confirm[hidden] {
+  display: none;
+}

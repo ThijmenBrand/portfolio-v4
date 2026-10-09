@@ -68,3 +68,16 @@
 .minimized {
     display: none;
 }
+
+/* Iframe apps (src/kernel/proc/realm.ts): fill the content area exactly. */
+.app-frame {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border: 0;
+}
+
+/* While dragging/resizing, iframes must not swallow the mouse (interactions/shield.ts). */
+body.wm-interacting iframe {
+    pointer-events: none;
+}

@@ -2,7 +2,7 @@ import type { FileEntry } from "../binfmt";
 import { enoexec } from "../errors";
 import type { AppModule, KernelContext, Process } from "../types";
 import { faultProcess } from "./faultproc";
-import { executeWorker } from "./realm";
+import { executeIframe, executeWorker } from "./realm";
 import { terminateProcess } from "./terminate";
 
 export type Executable = () => Promise<AppModule>;
@@ -22,6 +22,9 @@ export async function execute(
 ): Promise<void> {
   try {
     if (file.format === "worker") return executeWorker(ctx, proc, file.entry);
+    if (file.format === "iframe") {
+      return executeIframe(ctx, proc, file.entry, file.window);
+    }
 
     const module = await file.load();
 

@@ -1,5 +1,6 @@
 import { selectElementFromTemplate } from "../../../utils/html";
 import type { WindowCommmands, WindowRecord } from "../types";
+import { shieldIframes, unshieldIframes } from "./shield";
 
 export function enableDrag(
   record: Readonly<WindowRecord>,
@@ -16,6 +17,7 @@ export function enableDrag(
 
   const handleMouseDown = (event: MouseEvent) => {
     isDragging = true;
+    shieldIframes();
     offsetX = event.clientX - record.frame.x;
     offsetY = event.clientY - record.frame.y;
   };
@@ -27,6 +29,7 @@ export function enableDrag(
   };
 
   const handleMouseUp = () => {
+    if (isDragging) unshieldIframes();
     isDragging = false;
   };
 

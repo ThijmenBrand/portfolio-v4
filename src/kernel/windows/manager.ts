@@ -19,6 +19,16 @@ import { enableControls } from "./interactions/controls";
 import type { Pid, Rect, WindowId } from "../types";
 import { kernelError, logError } from "../errors";
 
+/**
+ * Second ✕ on a window whose app is handling a close request:
+ *  - within DOUBLE_CLICK_MS: ignored (a double-click is not "force quit");
+ *  - within FORCE_WINDOW_MS: the user insists → force close (SIGKILL);
+ *  - later: the app evidently answered (e.g. the user picked Cancel), so
+ *    this is a NEW request and the app is asked again.
+ */
+const DOUBLE_CLICK_MS = 500;
+const FORCE_WINDOW_MS = 5000;
+
 export class WindowManager implements WindowManagerInterface {
   private readonly WindowGeometry: WindowGeometryInterface;
   private readonly WindowChrome: WindowChromeInterface;
@@ -281,12 +291,18 @@ export class WindowManager implements WindowManagerInterface {
       return;
     }
 
+    const now = Date.now();
     if (record.closeRequestedAt !== undefined) {
-      this.actions.forceClose(windowId, record.ownerPid);
-      return;
+      const sinceAsked = now - record.closeRequestedAt;
+      if (sinceAsked < DOUBLE_CLICK_MS) return;
+      if (sinceAsked <= FORCE_WINDOW_MS) {
+        this.actions.forceClose(windowId, record.ownerPid);
+        return;
+      }
+      // Too long ago to count as insisting: fall through and ask again.
     }
 
-    record.closeRequestedAt = Date.now();
+    record.closeRequestedAt = now;
     for (const handler of [...record.closeRequestHandlers]) {
       try {
         handler();

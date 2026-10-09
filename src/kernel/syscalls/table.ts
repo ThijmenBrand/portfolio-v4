@@ -39,6 +39,8 @@ export interface SyscallTable {
     callerPid: Pid,
     options: WindowOptions,
   ): Promise<ElementWindowHandle>;
+  /** Over-the-wire `windows.create`: claim the window made at exec. */
+  claimWindow(callerPid: Pid, options: WindowOptions): Promise<WindowId>;
   setWindowTitle(
     callerPid: Pid,
     windowId: WindowId,

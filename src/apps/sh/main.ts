@@ -2,7 +2,8 @@ import { KernelError } from "../../kernel/errors";
 import type { AppInterface } from "../../kernel/syscalls/api";
 import type { Pid } from "../../kernel/types";
 
-const SEARCH_PATH = ["", "/ProgramFiles/", "/System/"];
+/** Where bare command names are looked up. Explicit paths skip this. */
+const SEARCH_PATH = ["/ProgramFiles/", "/System/"];
 
 interface Redirect {
   path: string;
@@ -262,14 +263,17 @@ class Shell {
     fds: Record<number, number>,
   ): Promise<Pid> {
     const [name, ...args] = command.argv;
-    let last: unknown;
+
+    // An explicit path is run as given, and keeps its real error.
+    if (name.includes("/")) {
+      return await this.os.process.spawn(name, args, { fds });
+    }
 
     for (const prefix of SEARCH_PATH) {
       try {
         return await this.os.process.spawn(`${prefix}${name}`, args, { fds });
       } catch (error) {
         if (errorCode(error) !== "ENOENT") throw error;
-        last = error;
       }
     }
 
