@@ -31,11 +31,11 @@ export async function runApp(
   boot: BootMessage,
   port: MessagePort,
   apps: AppLoaders,
-  dir: string,
 ): Promise<void> {
   const client = new WireClient(port);
   try {
-    const load = apps[`${dir}/${boot.entry}/main.ts`];
+    // entry is a module path relative to src/, e.g. "apps/cat/main".
+    const load = apps[`../${boot.entry}.ts`];
     if (!load) throw new KernelError("ENOEXEC", `not an app for this realm: ${boot.entry}`);
     const module = await load();
     await module.main(buildAppInterface(client, boot.pid), boot.args);

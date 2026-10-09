@@ -251,6 +251,7 @@ export class WindowManager implements WindowManagerInterface {
     }
 
     this.WindowChrome.applyStateToWindow(record, true);
+    this.focusContent(record);
 
     this.events.emit({
       type: "window.focused",
@@ -337,6 +338,17 @@ export class WindowManager implements WindowManagerInterface {
       record.frame = { ...area };
       this.WindowChrome.applyFrameToWindow(record);
     }
+  }
+
+  /**
+   * Keyboard goes where the window is: for an iframe app, raising its window
+   * must also move focus INTO the iframe, or typing would go nowhere. (No
+   * loop with interactions/focus.ts: focusWindow returns early when the
+   * window is already focused.)
+   */
+  private focusContent(record: WindowRecord): void {
+    const frame = record.bodyEl.querySelector("iframe");
+    if (frame && document.activeElement !== frame) frame.focus();
   }
 
   private focusTopmostWindow(): void {

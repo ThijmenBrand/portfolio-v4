@@ -1,5 +1,5 @@
-import type { SystemInterface } from "../../kernel/syscalls/api";
-import type { ElementWindowHandle } from "../../kernel/windows/types";
+import type { AppInterface } from "../../kernel/syscalls/api";
+import type { WindowHandle } from "../../kernel/windows/types";
 import {
   htmlStringToTemplate,
   selectElementFromTemplate,
@@ -149,7 +149,7 @@ async function expectCode(
  * Anything touching SEEK_END uses /tmp — procfs reports size 0, so seeking to
  * "end" there lands at 0 and proves nothing.
  */
-function buildCases(os: SystemInterface): TestCase[] {
+function buildCases(os: AppInterface): TestCase[] {
   return [
     {
       name: "offset advances across reads",
@@ -513,7 +513,7 @@ function buildCases(os: SystemInterface): TestCase[] {
 
 // ----------------------------------------------------------------------- app
 
-export async function main(os: SystemInterface): Promise<void> {
+export async function main(os: AppInterface): Promise<void> {
   const handle = await os.windows.create({
     title: "io (debug)",
     width: 860,
@@ -532,7 +532,7 @@ export async function main(os: SystemInterface): Promise<void> {
 type LogKind = "in" | "out" | "err" | "info" | "ok";
 
 class IoDebug {
-  private readonly os: SystemInterface;
+  private readonly os: AppInterface;
   private readonly close: () => void;
 
   private readonly root: HTMLElement;
@@ -551,14 +551,15 @@ class IoDebug {
     (args: string[], rest: string) => Promise<string>
   >;
 
-  constructor(os: SystemInterface, handle: ElementWindowHandle) {
+  constructor(os: AppInterface, handle: WindowHandle) {
     this.os = os;
 
     this.close = () => void handle.close();
     void handle.onCloseRequest(() => void os.process.exit(0));
 
     this.root = htmlStringToTemplate(ioDebugHTML);
-    handle.body.appendChild(this.root);
+    // An iframe app owns its whole document.
+    document.body.appendChild(this.root);
 
     this.log = this.field("log");
     this.input = this.field<HTMLInputElement>("input");

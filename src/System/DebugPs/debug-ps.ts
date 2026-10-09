@@ -13,8 +13,8 @@ import {
 } from "../../utils/html";
 import type { Signal } from "../../kernel/proc/signals";
 import { logError } from "../../kernel/errors";
-import type { SystemInterface } from "../../kernel/syscalls/api";
-import type { ElementWindowHandle } from "../../kernel/windows/types";
+import type { AppInterface } from "../../kernel/syscalls/api";
+import type { WindowHandle } from "../../kernel/windows/types";
 
 type Tab = "running" | "terminated";
 type Direction = "ascending" | "descending";
@@ -43,7 +43,7 @@ interface TerminatedRow {
   at: number;
 }
 
-export async function main(os: SystemInterface): Promise<void> {
+export async function main(os: AppInterface): Promise<void> {
   const handle = await os.windows.create({
     title: "Process Monitor",
     width: 760,
@@ -56,7 +56,7 @@ export async function main(os: SystemInterface): Promise<void> {
 }
 
 class DebugPs {
-  private readonly os: SystemInterface;
+  private readonly os: AppInterface;
   private readonly root: HTMLElement;
 
   private readonly runningBody: HTMLElement;
@@ -78,7 +78,7 @@ class DebugPs {
     terminated: { key: "at", direction: "descending" },
   };
 
-  constructor(os: SystemInterface, handle: ElementWindowHandle) {
+  constructor(os: AppInterface, handle: WindowHandle) {
     this.os = os;
     this.root = htmlStringToTemplate(debugPsHTML);
 
@@ -91,7 +91,8 @@ class DebugPs {
     this.summary = this.select('[data-field="summary"]');
     this.searchInput = this.select<HTMLInputElement>("#debug-ps-search");
 
-    handle.body.appendChild(this.root);
+    // An iframe app owns its whole document.
+    document.body.appendChild(this.root);
     void handle.onCloseRequest(() => void this.os.process.exit(0));
 
     this.bindEvents();

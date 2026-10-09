@@ -1,6 +1,6 @@
 import type { DirEntry } from "../../kernel/fs/types";
-import type { SystemInterface } from "../../kernel/syscalls/api";
-import type { ElementWindowHandle } from "../../kernel/windows/types";
+import type { AppInterface } from "../../kernel/syscalls/api";
+import type { WindowHandle } from "../../kernel/windows/types";
 import {
   htmlStringToTemplate,
   selectElementFromTemplate,
@@ -51,7 +51,7 @@ function formatTime(ms: number): string {
   return new Date(ms).toLocaleTimeString();
 }
 
-export async function main(os: SystemInterface): Promise<void> {
+export async function main(os: AppInterface): Promise<void> {
   const handle = await os.windows.create({
     title: "Files (debug)",
     width: 780,
@@ -68,7 +68,7 @@ export async function main(os: SystemInterface): Promise<void> {
 }
 
 class FsDebug {
-  private readonly os: SystemInterface;
+  private readonly os: AppInterface;
   private readonly close: () => void;
 
   private readonly root: HTMLElement;
@@ -86,14 +86,15 @@ class FsDebug {
   private selected: DirEntry | null = null;
   private disposed = false;
 
-  constructor(os: SystemInterface, handle: ElementWindowHandle) {
+  constructor(os: AppInterface, handle: WindowHandle) {
     this.os = os;
 
     this.close = () => void handle.close();
     void handle.onCloseRequest(() => void os.process.exit(0));
 
     this.root = htmlStringToTemplate(fsDebugHTML);
-    handle.body.appendChild(this.root);
+    // An iframe app owns its whole document.
+    document.body.appendChild(this.root);
 
     this.list = this.field("list");
     this.pathInput = this.field<HTMLInputElement>("path");

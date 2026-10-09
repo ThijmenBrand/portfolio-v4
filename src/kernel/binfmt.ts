@@ -13,41 +13,54 @@ export type FileEntry =
     };
 
 const files: Record<string, FileEntry> = {
-  "/ProgramFiles/echo": { format: "worker", entry: "echo" },
-  "/ProgramFiles/cat": { format: "worker", entry: "cat" },
-  "/ProgramFiles/loop": { format: "worker", entry: "loop" },
-  "/ProgramFiles/sh": { format: "worker", entry: "sh" },
-  "/ProgramFiles/ls": { format: "worker", entry: "ls" },
-  "/ProgramFiles/clear": { format: "worker", entry: "clear" },
+  // Programs without a UI: workers.
+  "/ProgramFiles/echo": { format: "worker", entry: "apps/echo/main" },
+  "/ProgramFiles/cat": { format: "worker", entry: "apps/cat/main" },
+  "/ProgramFiles/loop": { format: "worker", entry: "apps/loop/main" },
+  "/ProgramFiles/sh": { format: "worker", entry: "apps/sh/main" },
+  "/ProgramFiles/ls": { format: "worker", entry: "apps/ls/main" },
+  "/ProgramFiles/clear": { format: "worker", entry: "apps/clear/main" },
+  "/ProgramFiles/io-child": { format: "worker", entry: "apps/IoDebug/child" },
+
+  // GUI apps: sandboxed iframes. `window` is created at exec; the app
+  // claims it with windows.create (which applies the title).
   "/ProgramFiles/hello": {
     format: "iframe",
-    entry: "hello",
+    entry: "apps/hello/main",
     window: { title: "Hello", width: 380, height: 300, minWidth: 260, minHeight: 200 },
   },
-
-  "/System/desktop": {
-    load: () => import("../System/Desktop/desktop"),
-    privileged: true,
-  },
   "/ProgramFiles/terminal": {
-    load: () => import("../apps/terminal/main"),
+    format: "iframe",
+    entry: "apps/terminal/main",
+    window: { title: "Terminal", width: 680, height: 440, minWidth: 360, minHeight: 220 },
+  },
+  "/ProgramFiles/fs-debug": {
+    format: "iframe",
+    entry: "apps/FsDebug/main",
+    window: { title: "Files (debug)", width: 780, height: 480, minWidth: 520, minHeight: 320 },
+  },
+  "/ProgramFiles/IoDebug": {
+    format: "iframe",
+    entry: "apps/IoDebug/main",
+    window: { title: "io (debug)", width: 860, height: 520, minWidth: 600, minHeight: 340 },
   },
   "/System/DebugPs": {
-    load: () => import("../System/DebugPs/debug-ps"),
+    format: "iframe",
+    entry: "System/DebugPs/debug-ps",
+    // privileged is a per-process grant, checked by the kernel on every call;
+    // it works the same over the wire as in-page.
+    privileged: true,
+    window: { title: "Process Monitor", width: 760, height: 440, minWidth: 520, minHeight: 260 },
+  },
+
+  // The shell surface itself: needs the kernel's document, stays in-page.
+  "/System/desktop": {
+    load: () => import("../System/Desktop/desktop"),
     privileged: true,
   },
   "/System/Taskbar": {
     load: () => import("../System/Taskbar/main"),
     privileged: true,
-  },
-  "/ProgramFiles/fs-debug": {
-    load: () => import("../apps/FsDebug/main"),
-  },
-  "/ProgramFiles/IoDebug": {
-    load: () => import("../apps/IoDebug/main"),
-  },
-  "/ProgramFiles/io-child": {
-    load: () => import("../apps/IoDebug/child"),
   },
 };
 

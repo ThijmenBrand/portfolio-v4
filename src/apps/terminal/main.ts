@@ -1,4 +1,4 @@
-import type { SystemInterface } from "../../kernel/syscalls/api";
+import type { AppInterface } from "../../kernel/syscalls/api";
 import {
   htmlStringToTemplate,
   selectElementFromTemplate,
@@ -7,8 +7,8 @@ import {
 import terminalHTML from "./terminal.html?raw";
 import "./terminal.css";
 import "../../ui/theme.css";
-import type { Pid } from "../../kernel/types";
-import type { ElementWindowHandle } from "../../kernel/windows/types";
+import type { Pid, Termination } from "../../kernel/types";
+import type { WindowHandle } from "../../kernel/windows/types";
 import { AnsiParser } from "./ansi";
 import { complete } from "./complete";
 
@@ -23,7 +23,7 @@ function errorCode(error: unknown): string | undefined {
 }
 
 class Terminal {
-  private readonly os: SystemInterface;
+  private readonly os: AppInterface;
   private readonly out: HTMLElement;
   private readonly input: HTMLInputElement;
   private readonly hints: HTMLElement;
@@ -41,13 +41,14 @@ class Terminal {
   private master = -1;
   private disposed = false;
 
-  public constructor(os: SystemInterface, handle: ElementWindowHandle) {
+  public constructor(os: AppInterface, handle: WindowHandle) {
     this.os = os;
 
     void handle.onCloseRequest(() => void os.process.exit(0));
 
     const root = htmlStringToTemplate(terminalHTML);
-    handle.body.appendChild(root);
+    // An iframe app owns its whole document.
+    document.body.appendChild(root);
 
     this.out = selectElementFromTemplate(root, '[data-field="out"]');
     this.input = selectElementFromTemplate(root, '[data-field="input"]');
@@ -97,8 +98,17 @@ class Terminal {
     }
   }
 
-  private async reap(shell: number): Promise<void> {
-    const termination = await this.os.process.wait(shell as never);
+  private async reap(shell: Pid): Promise<void> {
+    let termination: Termination;
+    try {
+      termination = await this.os.process.wait(shell);
+    } catch (error) {
+      // EINTR: WE are exiting (e.g. the window's ✕) and the kernel cancelled
+      // our pending wait — expected, not a fault. Same rule as pump().
+      if (errorCode(error) === "EINTR" || this.disposed) return;
+      this.append(`\n[terminal: wait failed: ${errorCode(error) ?? "error"}]\n`);
+      return;
+    }
     if (this.disposed) return;
 
     this.append(`\n[${SHELL_PATH} exited with ${termination.code}]\n`);
@@ -233,7 +243,7 @@ class Terminal {
   }
 }
 
-export async function main(os: SystemInterface): Promise<void> {
+export async function main(os: AppInterface): Promise<void> {
   const handle = await os.windows.create({
     title: "Terminal",
     width: 680,

@@ -1,10 +1,9 @@
 import { isBoot, runApp, type RealmAppModule } from "./boot";
 
 /**
- * The apps that may run in a worker. Listed explicitly rather than
- * "../apps/*" so DOM-touching apps (terminal, IoDebug, ...) are never
- * bundled into the worker. Add an app here when you give it
- * `format: "worker"` in binfmt.
+ * The programs that may run in a worker (format: "worker" in binfmt): the
+ * ones without a UI. Listed explicitly so DOM-touching apps are never
+ * bundled into the worker. Keys must match binfmt `entry` + ".ts".
  */
 const apps = import.meta.glob<RealmAppModule>([
   "../apps/echo/main.ts",
@@ -13,6 +12,7 @@ const apps = import.meta.glob<RealmAppModule>([
   "../apps/sh/main.ts",
   "../apps/ls/main.ts",
   "../apps/clear/main.ts",
+  "../apps/IoDebug/child.ts",
 ]);
 
 /** The realm's first and only message on its own channel: boot, carrying the port. */
@@ -23,5 +23,5 @@ self.onmessage = (event: MessageEvent) => {
     self.close(); // not from our kernel, or a version mismatch
     return;
   }
-  void runApp(event.data, port, apps, "../apps");
+  void runApp(event.data, port, apps);
 };

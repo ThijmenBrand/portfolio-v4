@@ -1,4 +1,4 @@
-import type { SystemInterface } from "../../kernel/syscalls/api";
+import type { AppInterface } from "../../kernel/syscalls/api";
 
 /**
  * Inheritance probe for IoDebug.
@@ -11,7 +11,7 @@ import type { SystemInterface } from "../../kernel/syscalls/api";
  * If fd 3 was not inherited, os.io.write throws EBADF, faultProcess terminates
  * this process at site "main", and the parent sees a file missing the "a".
  */
-export async function main(os: SystemInterface, args: string[]): Promise<void> {
+export async function main(os: AppInterface, args: string[]): Promise<void> {
   await os.io.write(3, new TextEncoder().encode(args[0] ?? "?"));
   await os.process.exit(0);
 }

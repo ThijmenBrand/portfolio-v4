@@ -110,4 +110,6 @@ export function executeIframe(
 
   ctx.processes.setStatus(proc.pid, "running");
   record.bodyEl.appendChild(iframe);
+  // The window was focused before the iframe existed; give it the keyboard now.
+  iframe.focus();
 }
