@@ -15,11 +15,14 @@ const apps = import.meta.glob<RealmAppModule>([
   "../apps/IoDebug/child.ts",
 ]);
 
-/** The realm's first and only message on its own channel: boot, carrying the port. */
+/**
+ * Boot: re-delivered by the worker's bootstrap (src/runtime/worker-host.ts)
+ * once this module has loaded, carrying the kernel port.
+ */
 self.onmessage = (event: MessageEvent) => {
   self.onmessage = null; // boot exactly once
   const port = event.ports[0];
-  if (!isBoot(event.data, port)) {
+  if (!port || !isBoot(event.data, port)) {
     self.close(); // not from our kernel, or a version mismatch
     return;
   }

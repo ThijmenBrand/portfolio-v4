@@ -44,31 +44,92 @@ function bootMessage(proc: Process, entry: string): BootMessage {
   };
 }
 
+/** Realm host pages. BASE_URL keeps them right under a sub-path deploy. */
+const APP_HOST = `${import.meta.env.BASE_URL}app-host.html`;
+const WORKER_HOST = `${import.meta.env.BASE_URL}worker-host.html`;
+
+/**
+ * Every realm lives in a sandboxed iframe: opaque origin, so no access to the
+ * kernel's DOM, cookies, OPFS (/home) or IndexedDB, and the CSP on the host
+ * page (vite.config.ts) blocks network access. Removing the iframe is the kill.
+ */
+function sandboxedFrame(src: string, title: string): HTMLIFrameElement {
+  const iframe = document.createElement("iframe");
+  iframe.setAttribute("sandbox", "allow-scripts");
+  iframe.title = title;
+  iframe.src = src; // before appending: no extra about:blank load
+  return iframe;
+}
+
+/**
+ * A realm document must stay the one we loaded. A sandboxed frame can still
+ * navigate ITSELF (e.g. to leak data in a URL); CSP can't prevent that, but a
+ * second `load` reveals it, and we end the process.
+ */
+function watchNavigation(ctx: KernelContext, proc: Process, iframe: HTMLIFrameElement): void {
+  let loads = 0;
+  iframe.addEventListener("load", () => {
+    if (++loads > 1) {
+      faultProcess(ctx, proc.pid, new Error("realm navigated away from its host page"), "main");
+    }
+  });
+}
+
+/** Invisible, but not display:none — keep the frame a normal, running document. */
+function realmLayer(): HTMLElement {
+  let layer = document.getElementById("realm-layer");
+  if (!layer) {
+    layer = document.createElement("div");
+    layer.id = "realm-layer";
+    layer.setAttribute("aria-hidden", "true");
+    layer.style.cssText =
+      "position:fixed;width:0;height:0;overflow:hidden;visibility:hidden;pointer-events:none";
+    document.body.appendChild(layer);
+  }
+  return layer;
+}
+
+/**
+ * A worker process: an invisible sandboxed iframe (worker-host.html) that
+ * starts the worker, so the worker inherits the frame's opaque origin and CSP.
+ * A worker created straight from the kernel's page would share the kernel's
+ * origin — and could open OPFS and IndexedDB directly, around the VFS.
+ */
 export function executeWorker(
   ctx: KernelContext,
   proc: Process,
   entry: string,
 ): void {
-  const worker = new Worker(
-    new URL("../../runtime/worker-entry.ts", import.meta.url),
-    { type: "module", name: `${proc.path} [${proc.pid}]` },
-  );
+  const iframe = sandboxedFrame(WORKER_HOST, `${proc.path} [${proc.pid}]`);
 
-  const { port } = connectRealm(ctx, proc, () => worker.terminate());
-
-  // Script failed to load or threw synchronously. main() rejections arrive
-  // as `fault` messages through the server instead.
-  worker.onerror = (e) => {
-    e.preventDefault();
-    faultProcess(ctx, proc.pid, new Error(e.message || "worker failed to load"), "main");
+  // The host reports a worker that fails to load (the port is inside the
+  // worker by then). Accept it only from THIS frame.
+  const onMessage = (event: MessageEvent) => {
+    if (event.source !== iframe.contentWindow) return;
+    const data = event.data as { t?: unknown; message?: unknown } | null;
+    if (data?.t !== "realm-error") return;
+    const message = typeof data.message === "string" ? data.message : "worker failed to load";
+    faultProcess(ctx, proc.pid, new Error(message.slice(0, 500)), "main");
   };
+  window.addEventListener("message", onMessage);
+
+  // Removing the frame terminates the worker it created.
+  const { port } = connectRealm(ctx, proc, () => {
+    window.removeEventListener("message", onMessage);
+    iframe.remove();
+  });
+
+  iframe.addEventListener(
+    "load",
+    () => iframe.contentWindow?.postMessage(bootMessage(proc, entry), "*", [port]),
+    { once: true },
+  );
+  watchNavigation(ctx, proc, iframe);
 
   ctx.processes.setStatus(proc.pid, "running");
-  worker.postMessage(bootMessage(proc, entry), [port]);
+  realmLayer().appendChild(iframe);
 }
 
-/** The page every iframe app boots in. BASE_URL keeps it right under a sub-path deploy. */
-const APP_HOST = `${import.meta.env.BASE_URL}app-host.html`;
 
 /**
  * An iframe process: the kernel makes its window FIRST and puts the iframe
@@ -88,11 +149,8 @@ export function executeIframe(
   const record = ctx.windows.createWindow(window, proc.pid);
   proc.surface = { windowId: record.id, claimed: false };
 
-  const iframe = document.createElement("iframe");
+  const iframe = sandboxedFrame(APP_HOST, window.title);
   iframe.className = "app-frame";
-  iframe.setAttribute("sandbox", "allow-scripts");
-  iframe.title = window.title;
-  iframe.src = APP_HOST; // before appending: no extra about:blank load
 
   // Removing the iframe unloads its document: that IS the kill. (The window
   // is destroyed by teardown too; remove() on a detached node is harmless.)
@@ -107,6 +165,7 @@ export function executeIframe(
     },
     { once: true },
   );
+  watchNavigation(ctx, proc, iframe);
 
   ctx.processes.setStatus(proc.pid, "running");
   record.bodyEl.appendChild(iframe);

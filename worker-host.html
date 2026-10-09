@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>worker host</title>
+  </head>
+  <body>
+    <!--
+      Every worker program starts here, inside an invisible
+      <iframe sandbox="allow-scripts">. A worker created from this page gets
+      its opaque ("null") origin — so it cannot reach the kernel's OPFS,
+      IndexedDB or BroadcastChannels. The CSP (vite.config.ts) is inherited
+      by the worker and blocks its network access.
+    -->
+    <script type="module" src="/src/runtime/worker-host.ts"></script>
+  </body>
+</html>
