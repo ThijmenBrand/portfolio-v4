@@ -66,11 +66,20 @@ function sandboxedFrame(src: string, title: string): HTMLIFrameElement {
  * navigate ITSELF (e.g. to leak data in a URL); CSP can't prevent that, but a
  * second `load` reveals it, and we end the process.
  */
-function watchNavigation(ctx: KernelContext, proc: Process, iframe: HTMLIFrameElement): void {
+function watchNavigation(
+  ctx: KernelContext,
+  proc: Process,
+  iframe: HTMLIFrameElement,
+): void {
   let loads = 0;
   iframe.addEventListener("load", () => {
     if (++loads > 1) {
-      faultProcess(ctx, proc.pid, new Error("realm navigated away from its host page"), "main");
+      faultProcess(
+        ctx,
+        proc.pid,
+        new Error("realm navigated away from its host page"),
+        "main",
+      );
     }
   });
 }
@@ -108,7 +117,8 @@ export function executeWorker(
     if (event.source !== iframe.contentWindow) return;
     const data = event.data as { t?: unknown; message?: unknown } | null;
     if (data?.t !== "realm-error") return;
-    const message = typeof data.message === "string" ? data.message : "worker failed to load";
+    const message =
+      typeof data.message === "string" ? data.message : "worker failed to load";
     faultProcess(ctx, proc.pid, new Error(message.slice(0, 500)), "main");
   };
   window.addEventListener("message", onMessage);
@@ -121,7 +131,8 @@ export function executeWorker(
 
   iframe.addEventListener(
     "load",
-    () => iframe.contentWindow?.postMessage(bootMessage(proc, entry), "*", [port]),
+    () =>
+      iframe.contentWindow?.postMessage(bootMessage(proc, entry), "*", [port]),
     { once: true },
   );
   watchNavigation(ctx, proc, iframe);
@@ -129,7 +140,6 @@ export function executeWorker(
   ctx.processes.setStatus(proc.pid, "running");
   realmLayer().appendChild(iframe);
 }
-
 
 /**
  * An iframe process: the kernel makes its window FIRST and puts the iframe
@@ -159,8 +169,6 @@ export function executeIframe(
   iframe.addEventListener(
     "load",
     () => {
-      // "*" is required: a sandboxed frame's origin is "null" and cannot be
-      // targeted. Safe — we post to this exact frame's window object.
       iframe.contentWindow?.postMessage(bootMessage(proc, entry), "*", [port]);
     },
     { once: true },
@@ -169,6 +177,5 @@ export function executeIframe(
 
   ctx.processes.setStatus(proc.pid, "running");
   record.bodyEl.appendChild(iframe);
-  // The window was focused before the iframe existed; give it the keyboard now.
   iframe.focus();
 }
