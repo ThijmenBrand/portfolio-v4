@@ -4,6 +4,7 @@ import { MemFS } from "./fs/drivers/memfs";
 import { opfsAvailable, OpfsFS } from "./fs/drivers/opfs";
 import { ProcFS } from "./fs/drivers/procfs";
 import { VFS } from "./fs/vfs";
+import { KernelError } from "./errors";
 import { faultProcess } from "./proc/faultproc";
 import { ProcessManager } from "./proc/manager";
 import { bindSyscalls, type SystemInterface } from "./syscalls/api";
@@ -65,8 +66,15 @@ export function createKernel(screen: HTMLElement): {
     fs,
     createOs: (pid) => bindSyscalls(table, pid),
     serve: (port, pid) =>
-      new PortServer(port, pid, table, (message) =>
-        faultProcess(ctx, pid, new Error(message), "main"),
+      new PortServer(port, pid, table, (message, code) =>
+        faultProcess(
+          ctx,
+          pid,
+          // Rebuild a KernelError so the fault record keeps its code,
+          // exactly like a crash in an in-page app.
+          code ? new KernelError(code, message) : new Error(message),
+          "main",
+        ),
       ),
   };
 

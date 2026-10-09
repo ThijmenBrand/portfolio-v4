@@ -10,11 +10,22 @@ async function pump(os: AppInterface, fd: number): Promise<void> {
 }
 
 export async function main(os: AppInterface, args: string[]): Promise<void> {
+  const encoder = new TextEncoder();
+  let status = 0;
+
   if (args.length === 0) {
     await pump(os, 0);
   } else {
     for (const path of args) {
-      const fd = await os.io.open(path, { read: true });
+      let fd: number;
+      try {
+        fd = await os.io.open(path, { read: true });
+      } catch (error) {
+        const code = (error as { code?: string }).code ?? "EIO";
+        await os.io.write(2, encoder.encode(`cat: ${path}: ${code}\n`));
+        status = 1;
+        continue;
+      }
       try {
         await pump(os, fd);
       } finally {
@@ -22,5 +33,5 @@ export async function main(os: AppInterface, args: string[]): Promise<void> {
       }
     }
   }
-  await os.process.exit(0);
+  await os.process.exit(status);
 }

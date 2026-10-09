@@ -64,8 +64,8 @@ export class WireClient {
     this.post({ t: "release", cbId });
   }
 
-  fault(message: string): void {
-    this.post({ t: "fault", message });
+  fault(message: string, code?: string): void {
+    this.post(code ? { t: "fault", message, code } : { t: "fault", message });
   }
 
   private send(

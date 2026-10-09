@@ -20,9 +20,10 @@ const apps = import.meta.glob<WorkerAppModule>([
   "../apps/loop/main.ts",
 ]);
 
-function errorMessage(error: unknown): string {
-  if (error instanceof KernelError) return `${error.code}: ${error.message}`;
-  return error instanceof Error ? error.message : String(error);
+/** Split an error into the fault message's fields, keeping a KernelError's code. */
+function describe(error: unknown): { message: string; code?: string } {
+  if (error instanceof KernelError) return { message: error.message, code: error.code };
+  return { message: error instanceof Error ? error.message : String(error) };
 }
 
 self.onmessage = async (event: MessageEvent) => {
@@ -44,6 +45,7 @@ self.onmessage = async (event: MessageEvent) => {
     const module = await load();
     await module.main(buildAppInterface(client, boot.pid), boot.args);
   } catch (error) {
-    client.fault(errorMessage(error));
+    const { message, code } = describe(error);
+    client.fault(message, code);
   }
 };

@@ -40,6 +40,8 @@ export interface ReleaseMessage {
 export interface FaultMessage {
   t: "fault";
   message: string;
+  /** KernelError code when main() died on one (ENOENT, EBADF, ...). */
+  code?: string;
 }
 
 export type AppMessage = CallMessage | ReleaseMessage | FaultMessage;
@@ -183,7 +185,8 @@ export function parseAppMessage(data: unknown): AppMessage | null {
     case "release":
       return isId(data.cbId) ? (data as unknown as ReleaseMessage) : null;
     case "fault":
-      return typeof data.message === "string"
+      return typeof data.message === "string" &&
+        (data.code === undefined || typeof data.code === "string")
         ? (data as unknown as FaultMessage)
         : null;
     default:

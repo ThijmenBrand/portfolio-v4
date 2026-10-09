@@ -20,13 +20,13 @@ export class PortServer {
   private readonly port: MessagePort;
   private readonly pid: Pid;
   private readonly table: SyscallTable;
-  private readonly onFault: (message: string) => void;
+  private readonly onFault: (message: string, code?: string) => void;
 
   constructor(
     port: MessagePort,
     pid: Pid,
     table: SyscallTable,
-    onFault: (message: string) => void,
+    onFault: (message: string, code?: string) => void,
   ) {
     this.port = port;
     this.pid = pid;
@@ -48,7 +48,7 @@ export class PortServer {
       case "release":
         return this.release(msg.cbId);
       case "fault":
-        return this.onFault(msg.message);
+        return this.onFault(msg.message, msg.code);
     }
   }
 
