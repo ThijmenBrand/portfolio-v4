@@ -1,4 +1,4 @@
-import type { KernelInterface } from "../../kernel/syscalls/api";
+import type { SystemInterface } from "../../kernel/syscalls/api";
 import {
   htmlStringToTemplate,
   selectElementFromTemplate,
@@ -8,7 +8,7 @@ import terminalHTML from "./terminal.html?raw";
 import "./terminal.css";
 import "../../ui/theme.css";
 import type { Pid } from "../../kernel/types";
-import type { WindowHandle } from "../../kernel/windows/types";
+import type { ElementWindowHandle } from "../../kernel/windows/types";
 
 const SHELL_PATH = "/ProgramFiles/sh";
 const MAX_CHARS = 200_000;
@@ -21,7 +21,7 @@ function errorCode(error: unknown): string | undefined {
 }
 
 class Terminal {
-  private readonly os: KernelInterface;
+  private readonly os: SystemInterface;
   private readonly out: HTMLElement;
   private readonly input: HTMLInputElement;
 
@@ -37,7 +37,7 @@ class Terminal {
   private master = -1;
   private disposed = false;
 
-  public constructor(os: KernelInterface, handle: WindowHandle) {
+  public constructor(os: SystemInterface, handle: ElementWindowHandle) {
     this.os = os;
 
     void handle.onCloseRequest(() => void os.process.exit(0));
@@ -166,7 +166,7 @@ class Terminal {
   }
 }
 
-export async function main(os: KernelInterface): Promise<void> {
+export async function main(os: SystemInterface): Promise<void> {
   const handle = await os.windows.create({
     title: "Terminal",
     width: 680,

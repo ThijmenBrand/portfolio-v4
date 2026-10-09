@@ -1,8 +1,8 @@
 // echo
-import type { KernelInterface } from "../../kernel/syscalls/api";
+import type { SystemInterface } from "../../kernel/syscalls/api";
 
 export async function main(
-  os: KernelInterface,
+  os: SystemInterface,
   _args: string[],
 ): Promise<void> {
   for (let i = 0; i < 10; i++) {

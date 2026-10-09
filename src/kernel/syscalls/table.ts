@@ -14,7 +14,11 @@ import type {
   Termination,
   WindowId,
 } from "../types";
-import type { WindowHandle, WindowInfo, WindowOptions } from "../windows/types";
+import type {
+  ElementWindowHandle,
+  WindowInfo,
+  WindowOptions,
+} from "../windows/types";
 import { displaySyscalls } from "./display";
 import { eventsSyscalls } from "./events";
 import { fdSyscalls } from "./fd";
@@ -31,7 +35,10 @@ export interface SyscallTable {
     options?: SpawnOptions,
   ): Promise<Pid>;
   exit(callerPid: Pid, code: number): Promise<void>;
-  createWindow(callerPid: Pid, options: WindowOptions): Promise<WindowHandle>;
+  createWindow(
+    callerPid: Pid,
+    options: WindowOptions,
+  ): Promise<ElementWindowHandle>;
   setWindowTitle(
     callerPid: Pid,
     windowId: WindowId,

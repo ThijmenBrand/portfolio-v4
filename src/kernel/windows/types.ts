@@ -31,12 +31,17 @@ export interface WindowRecord {
   disposers: Array<() => void>;
 }
 
+/** Wire-safe window handle: what any app, in any realm, gets back. */
 export interface WindowHandle {
   readonly id: WindowId;
-  readonly body: HTMLElement;
   setTitle(title: string): Promise<void>;
   close(): Promise<void>;
   onCloseRequest(callback: () => void): Promise<void>;
+}
+
+/** In-realm only: the window's content element, lent from the kernel's document. */
+export interface ElementWindowHandle extends WindowHandle {
+  readonly body: HTMLElement;
 }
 
 export interface Constraints {

@@ -13,8 +13,8 @@ import {
 } from "../../utils/html";
 import type { Signal } from "../../kernel/proc/signals";
 import { logError } from "../../kernel/errors";
-import type { KernelInterface } from "../../kernel/syscalls/api";
-import type { WindowHandle } from "../../kernel/windows/types";
+import type { SystemInterface } from "../../kernel/syscalls/api";
+import type { ElementWindowHandle } from "../../kernel/windows/types";
 
 type Tab = "running" | "terminated";
 type Direction = "ascending" | "descending";
@@ -43,7 +43,7 @@ interface TerminatedRow {
   at: number;
 }
 
-export async function main(os: KernelInterface): Promise<void> {
+export async function main(os: SystemInterface): Promise<void> {
   const handle = await os.windows.create({
     title: "Process Monitor",
     width: 760,
@@ -56,7 +56,7 @@ export async function main(os: KernelInterface): Promise<void> {
 }
 
 class DebugPs {
-  private readonly os: KernelInterface;
+  private readonly os: SystemInterface;
   private readonly root: HTMLElement;
 
   private readonly runningBody: HTMLElement;
@@ -78,7 +78,7 @@ class DebugPs {
     terminated: { key: "at", direction: "descending" },
   };
 
-  constructor(os: KernelInterface, handle: WindowHandle) {
+  constructor(os: SystemInterface, handle: ElementWindowHandle) {
     this.os = os;
     this.root = htmlStringToTemplate(debugPsHTML);
 
@@ -144,15 +144,15 @@ class DebugPs {
     }));
 
     const terminated: TerminatedRow[] = history.map((record: ExitRecord) => ({
-        pid: record.pid,
-        parentPid: record.parentPid,
-        path: record.path,
-        code: record.termination.code,
-        reason: record.termination.reason,
-        signal: record.termination.signal ?? "—",
-        lifetime: record.termination.at - record.startedAt,
-        at: record.termination.at,
-      }));
+      pid: record.pid,
+      parentPid: record.parentPid,
+      path: record.path,
+      code: record.termination.code,
+      reason: record.termination.reason,
+      signal: record.termination.signal ?? "—",
+      lifetime: record.termination.at - record.startedAt,
+      at: record.termination.at,
+    }));
 
     this.runningCount.textContent = String(running.length);
     this.terminatedCount.textContent = String(terminated.length);

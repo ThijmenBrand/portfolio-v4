@@ -6,14 +6,14 @@ import { ProcFS } from "./fs/drivers/procfs";
 import { VFS } from "./fs/vfs";
 import { faultProcess } from "./proc/faultproc";
 import { ProcessManager } from "./proc/manager";
-import { bindSyscalls, type KernelInterface } from "./syscalls/api";
+import { bindSyscalls, type SystemInterface } from "./syscalls/api";
 import { createSyscallTable } from "./syscalls/table";
 import type { KernelContext, Pid } from "./types";
 import { defaultClose, forceClose } from "./windows/windowPolicy";
 import { WindowManager } from "./windows/manager";
 
 export function createKernel(screen: HTMLElement): {
-  os: KernelInterface;
+  os: SystemInterface;
   boot(): Promise<void>;
 } {
   const display = new Display(screen);

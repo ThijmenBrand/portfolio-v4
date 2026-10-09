@@ -13,18 +13,19 @@ import type {
   Termination,
   WindowId,
 } from "../types";
-import type { WindowHandle, WindowInfo, WindowOptions } from "../windows/types";
+import type {
+  ElementWindowHandle,
+  WindowHandle,
+  WindowInfo,
+  WindowOptions,
+} from "../windows/types";
 import type { SpawnOptions } from "./process";
 import type { SyscallTable } from "./table";
 import type { WindowHandleCommands } from "./window";
 
-export interface KernelInterface {
+export interface AppInterface {
   display: {
-    root(): Promise<HTMLElement>;
-    taskbar(): Promise<HTMLElement>;
     workArea(): Promise<Rect>;
-    reserveStrut(edge: StrutEdge, size: number): Promise<number>;
-    releaseStrut(resourceId: number): Promise<void>;
   };
   windows: {
     create(options: WindowOptions): Promise<WindowHandle>;
@@ -33,6 +34,7 @@ export interface KernelInterface {
     setMinimized(windowId: WindowId, minimized: boolean): Promise<void>;
   };
   process: {
+    /** Runtime-local state, never a wire call (exempt in ./wire.ts). */
     readonly signal: Promise<ProcessSignal>;
     readonly pid: Pid;
     onSignal(signal: Signal, handler: () => void): Promise<() => void>;
@@ -79,7 +81,24 @@ export interface KernelInterface {
   };
 }
 
-export function bindSyscalls(target: SyscallTable, pid: Pid): KernelInterface {
+/**
+ * In-realm extras: what a process gets by sharing the kernel's document.
+ * Handed out by FORMAT ("module"), not by privilege — privilege stays a
+ * runtime check in the kernel.
+ */
+export interface SystemInterface extends AppInterface {
+  display: AppInterface["display"] & {
+    root(): Promise<HTMLElement>;
+    taskbar(): Promise<HTMLElement>;
+    reserveStrut(edge: StrutEdge, size: number): Promise<number>;
+    releaseStrut(resourceId: number): Promise<void>;
+  };
+  windows: Omit<AppInterface["windows"], "create"> & {
+    create(options: WindowOptions): Promise<ElementWindowHandle>;
+  };
+}
+
+export function bindSyscalls(target: SyscallTable, pid: Pid): SystemInterface {
   return {
     display: {
       root: () => target.getDisplayRoot(pid),
@@ -152,7 +171,7 @@ export function bindWindowHandle(
   target: WindowHandleCommands,
   windowId: WindowId,
   body: HTMLElement,
-): WindowHandle {
+): ElementWindowHandle {
   return {
     id: windowId,
     body: body,

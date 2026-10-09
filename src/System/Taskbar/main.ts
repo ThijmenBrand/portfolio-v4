@@ -1,4 +1,4 @@
-import type { KernelInterface } from "../../kernel/syscalls/api";
+import type { SystemInterface } from "../../kernel/syscalls/api";
 import type { Pid, WindowId } from "../../kernel/types";
 
 import taskbarHtml from "./taskbar.html?raw";
@@ -30,13 +30,13 @@ interface TaskGroup {
   count: HTMLElement;
 }
 
-export async function main(os: KernelInterface): Promise<void> {
+export async function main(os: SystemInterface): Promise<void> {
   const taskbar = new Taskbar(os, await os.display.taskbar());
   await taskbar.start();
 }
 
 class Taskbar {
-  private readonly os: KernelInterface;
+  private readonly os: SystemInterface;
   private readonly root: HTMLElement;
   private readonly taskList: HTMLElement;
   private readonly bar: HTMLElement;
@@ -45,7 +45,7 @@ class Taskbar {
   private readonly paths = new Map<Pid, string>();
   private focusedPid: Pid | null = null;
 
-  constructor(os: KernelInterface, root: HTMLElement) {
+  constructor(os: SystemInterface, root: HTMLElement) {
     this.os = os;
     this.root = root;
     this.root.innerHTML = taskbarHtml;

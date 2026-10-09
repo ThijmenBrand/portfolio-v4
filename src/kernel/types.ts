@@ -5,7 +5,7 @@ import type { FdTable } from "./proc/fdTable";
 import type { ProcessManagerInterface } from "./proc/manager";
 import type { Signal } from "./proc/signals";
 import type { FaultInfo } from "./proc/types";
-import type { KernelInterface } from "./syscalls/api";
+import type { SystemInterface } from "./syscalls/api";
 import type { WindowManagerInterface } from "./windows/managerInterface";
 
 export interface KernelContext {
@@ -14,9 +14,8 @@ export interface KernelContext {
   display: DisplayInterface;
   events: EventBusInterface;
   fs: VFS;
-  createOs(pid: Pid): KernelInterface;
+  createOs(pid: Pid): SystemInterface;
 }
-
 
 export type Pid = number & { readonly __brand: "pid" };
 export type WindowId = number & { readonly __brand: "windowId" };
@@ -111,7 +110,7 @@ export interface ProcessInit {
 }
 
 export type AppModule = {
-  main(os: KernelInterface, args: string[]): void | Promise<void>;
+  main(os: SystemInterface, args: string[]): void | Promise<void>;
 };
 
 export type Bytes = Uint8Array<ArrayBuffer>;

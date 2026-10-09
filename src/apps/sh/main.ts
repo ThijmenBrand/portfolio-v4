@@ -1,4 +1,4 @@
-import type { KernelInterface } from "../../kernel/syscalls/api";
+import type { SystemInterface } from "../../kernel/syscalls/api";
 import type { Pid } from "../../kernel/types";
 
 const SEARCH_PATH = ["", "/ProgramFiles/", "/System/"];
@@ -116,10 +116,10 @@ class LineReader {
   private eof = false;
   private readonly decoder = new TextDecoder();
 
-  private readonly os: KernelInterface;
+  private readonly os: SystemInterface;
   private readonly fd: number;
 
-  public constructor(os: KernelInterface, fd: number) {
+  public constructor(os: SystemInterface, fd: number) {
     this.os = os;
     this.fd = fd;
   }
@@ -152,9 +152,9 @@ class Shell {
   private running = true;
   private foreground: Pid[] = [];
 
-  private readonly os: KernelInterface;
+  private readonly os: SystemInterface;
 
-  public constructor(os: KernelInterface) {
+  public constructor(os: SystemInterface) {
     this.os = os;
     this.lines = new LineReader(os, 0);
   }
@@ -256,7 +256,10 @@ class Shell {
    * binfmt is an exact-match table, so bare names need a search path.
    * spawn throws ENOENT synchronously, which makes "try each" cheap.
    */
-  private async spawn(command: Command, fds: Record<number, number>): Promise<Pid> {
+  private async spawn(
+    command: Command,
+    fds: Record<number, number>,
+  ): Promise<Pid> {
     const [name, ...args] = command.argv;
     let last: unknown;
 
@@ -337,7 +340,7 @@ class Shell {
   }
 }
 
-export async function main(os: KernelInterface): Promise<void> {
+export async function main(os: SystemInterface): Promise<void> {
   const shell = new Shell(os);
   os.process.exit(await shell.run());
 }

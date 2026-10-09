@@ -1,6 +1,6 @@
 import type { DirEntry } from "../../kernel/fs/types";
-import type { KernelInterface } from "../../kernel/syscalls/api";
-import type { WindowHandle } from "../../kernel/windows/types";
+import type { SystemInterface } from "../../kernel/syscalls/api";
+import type { ElementWindowHandle } from "../../kernel/windows/types";
 import {
   htmlStringToTemplate,
   selectElementFromTemplate,
@@ -51,7 +51,7 @@ function formatTime(ms: number): string {
   return new Date(ms).toLocaleTimeString();
 }
 
-export async function main(os: KernelInterface): Promise<void> {
+export async function main(os: SystemInterface): Promise<void> {
   const handle = await os.windows.create({
     title: "Files (debug)",
     width: 780,
@@ -68,7 +68,7 @@ export async function main(os: KernelInterface): Promise<void> {
 }
 
 class FsDebug {
-  private readonly os: KernelInterface;
+  private readonly os: SystemInterface;
   private readonly close: () => void;
 
   private readonly root: HTMLElement;
@@ -86,7 +86,7 @@ class FsDebug {
   private selected: DirEntry | null = null;
   private disposed = false;
 
-  constructor(os: KernelInterface, handle: WindowHandle) {
+  constructor(os: SystemInterface, handle: ElementWindowHandle) {
     this.os = os;
 
     this.close = () => void handle.close();

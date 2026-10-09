@@ -1,5 +1,5 @@
-import type { KernelInterface } from "../../kernel/syscalls/api";
-import type { WindowHandle } from "../../kernel/windows/types";
+import type { SystemInterface } from "../../kernel/syscalls/api";
+import type { ElementWindowHandle } from "../../kernel/windows/types";
 import {
   htmlStringToTemplate,
   selectElementFromTemplate,
@@ -149,7 +149,7 @@ async function expectCode(
  * Anything touching SEEK_END uses /tmp — procfs reports size 0, so seeking to
  * "end" there lands at 0 and proves nothing.
  */
-function buildCases(os: KernelInterface): TestCase[] {
+function buildCases(os: SystemInterface): TestCase[] {
   return [
     {
       name: "offset advances across reads",
@@ -513,7 +513,7 @@ function buildCases(os: KernelInterface): TestCase[] {
 
 // ----------------------------------------------------------------------- app
 
-export async function main(os: KernelInterface): Promise<void> {
+export async function main(os: SystemInterface): Promise<void> {
   const handle = await os.windows.create({
     title: "io (debug)",
     width: 860,
@@ -532,7 +532,7 @@ export async function main(os: KernelInterface): Promise<void> {
 type LogKind = "in" | "out" | "err" | "info" | "ok";
 
 class IoDebug {
-  private readonly os: KernelInterface;
+  private readonly os: SystemInterface;
   private readonly close: () => void;
 
   private readonly root: HTMLElement;
@@ -551,7 +551,7 @@ class IoDebug {
     (args: string[], rest: string) => Promise<string>
   >;
 
-  constructor(os: KernelInterface, handle: WindowHandle) {
+  constructor(os: SystemInterface, handle: ElementWindowHandle) {
     this.os = os;
 
     this.close = () => void handle.close();

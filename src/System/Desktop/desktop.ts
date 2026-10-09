@@ -1,6 +1,6 @@
 import { registry, type AppEntry } from "../../apps/registry";
 import { kernelError, logError } from "../../kernel/errors";
-import type { KernelInterface } from "../../kernel/syscalls/api";
+import type { SystemInterface } from "../../kernel/syscalls/api";
 import type { Rect } from "../../kernel/types";
 
 import {
@@ -32,7 +32,7 @@ import menuHTML from "./menu.html?raw";
 import menuItemHTML from "./menu-item.html?raw";
 import "./desktop.css";
 
-export async function main(os: KernelInterface): Promise<void> {
+export async function main(os: SystemInterface): Promise<void> {
   const desktop = new Desktop(os, registry, await os.display.root());
   await desktop.start();
 
@@ -48,7 +48,7 @@ export async function main(os: KernelInterface): Promise<void> {
 }
 
 /** SIGCHLD only says "a child died" — find out which ones. */
-async function reapZombies(os: KernelInterface): Promise<void> {
+async function reapZombies(os: SystemInterface): Promise<void> {
   const processes = await os.process.list();
   const zombies = processes.filter(
     (proc) => proc.parentPid === os.process.pid && proc.status === "zombie",
@@ -67,7 +67,7 @@ async function reapZombies(os: KernelInterface): Promise<void> {
 }
 
 class Desktop implements DesktopCommands {
-  private readonly os: KernelInterface;
+  private readonly os: SystemInterface;
   private readonly root: HTMLElement;
   private readonly surface: HTMLElement;
   private readonly iconLayer: HTMLElement;
@@ -80,7 +80,7 @@ class Desktop implements DesktopCommands {
   private readonly disposers: Array<() => void> = [];
   private focused: DesktopIcon | null = null;
 
-  constructor(os: KernelInterface, entries: AppEntry[], root: HTMLElement) {
+  constructor(os: SystemInterface, entries: AppEntry[], root: HTMLElement) {
     this.os = os;
     this.root = root;
     this.entries = entries;
@@ -105,8 +105,9 @@ class Desktop implements DesktopCommands {
       enableMarquee(this.surface, this.marquee, this),
       enableKeyboard(this.surface, this),
       this.enableSurfaceMenu(),
-      await this.os.events.subscribe(["display.workAreaChanged"], () =>
-        void this.onWorkAreaChanged(),
+      await this.os.events.subscribe(
+        ["display.workAreaChanged"],
+        () => void this.onWorkAreaChanged(),
       ),
     );
 
