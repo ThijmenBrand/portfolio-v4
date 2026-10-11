@@ -154,6 +154,9 @@ export const WIRE_CALLS = {
   "net.fetch": "netFetch",
 
   "dialog.open": "openDialog",
+
+  "clipboard.writeText": "clipboardWrite",
+  "clipboard.readText": "clipboardRead",
 } as const satisfies Record<WirePath, keyof SyscallTable | null>;
 
 /** The AppInterface member a wire path names, e.g. Member<"io.read">. */

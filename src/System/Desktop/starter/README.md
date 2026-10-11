@@ -24,6 +24,7 @@ apps use:
 - `os.process`: env, spawn, exit…
 - `os.windows`: create, setTitle
 - `os.dialog`: open
+- `os.clipboard`: writeText, readText (reading needs a click or keypress)
 
 ## Imports
 

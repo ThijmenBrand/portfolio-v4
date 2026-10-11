@@ -26,6 +26,7 @@ import type {
 } from "../windows/types";
 import { apiSyscalls, type ApiRequest, type ApiResponse } from "./api-fetch";
 import type { DialogOptions } from "../dialog/list";
+import { clipboardSyscalls } from "./clipboard";
 import { dialogSyscalls } from "./dialog";
 import { displaySyscalls } from "./display";
 import { eventsSyscalls } from "./events";
@@ -144,6 +145,8 @@ export interface SyscallTable {
   apiFetch(callerPid: Pid, path: string, request?: ApiRequest): Promise<ApiResponse>;
   netFetch(callerPid: Pid, url: string, request?: NetRequest): Promise<NetResponse>;
   openDialog(callerPid: Pid, options: DialogOptions): Promise<string | null>;
+  clipboardWrite(callerPid: Pid, text: string): Promise<void>;
+  clipboardRead(callerPid: Pid): Promise<string>;
 }
 
 export function createSyscallTable(ctx: KernelContext): SyscallTable {
@@ -159,6 +162,7 @@ export function createSyscallTable(ctx: KernelContext): SyscallTable {
     ...apiSyscalls(ctx),
     ...netSyscalls(ctx),
     ...dialogSyscalls(ctx),
+    ...clipboardSyscalls(ctx),
   });
 }
 

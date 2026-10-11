@@ -327,10 +327,10 @@ async function toggleContact(contact: Contact, li: HTMLLIElement): Promise<void>
 
 async function copyText(text: string, source: HTMLElement): Promise<void> {
   try {
-    await navigator.clipboard.writeText(text);
+    await os.clipboard.writeText(text);
     toast("Reverse-alias copied. Mail it to reply from your alias.");
   } catch {
-    // ponytail: no clipboard permission in this frame, so let the user copy the selection.
+    // ponytail: the kernel refused it, so let the user copy the selection.
     getSelection()?.selectAllChildren(source);
     toast("Selected. Press ⌘C to copy.");
   }

@@ -89,6 +89,10 @@ export interface AppInterface {
   dialog: {
     open(options: DialogOptions): Promise<string | null>;
   };
+  clipboard: {
+    writeText(text: string): Promise<void>;
+    readText(): Promise<string>;
+  };
   fs: {
     readFile(path: string): Promise<Bytes>;
     writeFile(path: string, data: Bytes): Promise<void>;
@@ -201,6 +205,10 @@ export function bindSyscalls(target: SyscallTable, pid: Pid): SystemInterface {
     },
     dialog: {
       open: (options) => target.openDialog(pid, options),
+    },
+    clipboard: {
+      writeText: (text) => target.clipboardWrite(pid, text),
+      readText: () => target.clipboardRead(pid),
     },
     fs: {
       readFile: (path) => target.readFile(pid, path),

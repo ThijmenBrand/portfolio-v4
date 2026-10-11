@@ -992,7 +992,7 @@ class Editor {
     const root = this.rootDir ?? "/";
     const isRoot = path === root;
     const copyText = (text: string): void =>
-      void navigator.clipboard
+      void this.os.clipboard
         .writeText(text)
         .catch(() => this.flash("Couldn't copy to clipboard", true));
     return [

@@ -18,7 +18,7 @@ The portfolio is a functioning OS, not a mock-up: apps are real sandboxed proces
 
 ## Operating Context
 - Desktop and phone widths; apps run in resizable windows (or full-screen on phones).
-- Apps run in `sandbox="allow-scripts"` iframes with a strict CSP (`img-src 'self' data: blob:`); no external images, no popups. External links go through the kernel's `os.shell.openExternal` (https and mailto only), which opens a new browser tab.
+- Apps run in `sandbox="allow-scripts"` iframes with a strict CSP (`img-src 'self' data: blob:`); no external images, no popups. External links go through the kernel's `os.shell.openExternal` (https and mailto only), which opens a new browser tab. The clipboard goes through the kernel too (`os.clipboard`), so copy/paste works between apps.
 - Per-user configuration lives in `~/.config/*` and is edited by apps; Settings broadcasts SIGHUP so apps re-read accent changes.
 
 ## Capabilities and Constraints

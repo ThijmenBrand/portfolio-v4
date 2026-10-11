@@ -21,8 +21,8 @@ export function dialogSyscalls(
       rejectOnThrow(async () => {
         const proc = requireAlive(ctx, callerPid);
         const kind = options?.kind;
-        if (kind !== "file" && kind !== "directory")
-          throw einval(`dialog.open: kind must be "file" or "directory"`);
+        if (kind !== "file" && kind !== "directory" && kind !== "save")
+          throw einval(`dialog.open: kind must be "file", "directory" or "save"`);
         if (showing.has(callerPid)) throw ebusy("dialog");
         showing.add(callerPid);
 
@@ -31,6 +31,10 @@ export function dialogSyscalls(
           const title =
             typeof options.title === "string"
               ? options.title.slice(0, 120)
+              : undefined;
+          const name =
+            typeof options.name === "string"
+              ? options.name.slice(0, 255)
               : undefined;
           let start = "/";
           try {
@@ -46,7 +50,7 @@ export function dialogSyscalls(
 
           const windowId = proc.surface?.windowId;
           const picker = showPicker(
-            { kind, title },
+            { kind, title, name },
             start,
             String(proc.env.HOME ?? "/"),
             {

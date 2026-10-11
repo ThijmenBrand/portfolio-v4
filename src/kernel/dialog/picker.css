@@ -120,6 +120,13 @@
     padding: 0 6px;
 }
 
+.picker-save-name {
+    flex: 1;
+    height: var(--app-control);
+    margin-right: auto;
+    padding: 0 10px;
+}
+
 .picker-search:focus,
 .picker-name:focus {
     border-color: var(--app-accent);

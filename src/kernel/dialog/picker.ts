@@ -33,12 +33,12 @@ const inside = (path: string, dir: string) =>
   path === dir || path.startsWith(dir === "/" ? "/" : `${dir}/`);
 
 /**
- * The file/folder picker behind `dialog.open`. Kernel-rendered, so an app
+ * The file/folder/save picker behind `dialog.open`. Kernel-rendered, so an app
  * only ever learns the path the user chose. `fs` must carry the caller's
  * credentials; `mount` places the sheet and returns its remover.
  */
 export function showPicker(
-  options: Required<Pick<DialogOptions, "kind">> & { title?: string },
+  options: Required<Pick<DialogOptions, "kind">> & { title?: string; name?: string },
   start: string,
   home: string,
   fs: PickerFs,
@@ -52,9 +52,15 @@ export function showPicker(
   const list = q(".picker-list");
   const search = q<HTMLInputElement>(".picker-search");
   const openBtn = q<HTMLButtonElement>(".picker-open");
+  const nameEl = q<HTMLInputElement>(".picker-save-name");
+  const saving = options.kind === "save";
   q(".picker-title").textContent =
     options.title ??
-    (options.kind === "directory" ? "Open Folder" : "Open File");
+    { directory: "Open Folder", file: "Open File", save: "Save As" }[options.kind];
+  if (saving) {
+    nameEl.hidden = false;
+    nameEl.value = options.name ?? "";
+  }
 
   let dir = start;
   let rows: Row[] = [];
@@ -76,20 +82,47 @@ export function showPicker(
     selected = index;
     rows.forEach((row, i) => row.el.classList.toggle("selected", i === index));
     rows[index]?.el.scrollIntoView({ block: "nearest" });
-    openBtn.disabled = options.kind === "file" && !rows[index];
+    // Saving: clicking a file borrows its name, to replace it.
+    if (saving && rows[index] && !rows[index].isDir)
+      nameEl.value = rows[index].path.slice(rows[index].path.lastIndexOf("/") + 1);
+    refreshButton();
   };
 
-  /** Enter a folder, or (picking a file) choose the file. */
+  /** Save names an existing file → the button says so before it's pressed. */
+  const refreshButton = (): void => {
+    if (!saving) {
+      openBtn.disabled = options.kind === "file" && !rows[selected];
+      return;
+    }
+    const path = join(dir, nameEl.value.trim());
+    openBtn.disabled = !nameEl.value.trim();
+    openBtn.textContent = rows.some((r) => !r.isDir && r.path === path)
+      ? "Replace"
+      : "Save";
+  };
+
+  /** Enter a folder, or choose the file (saving: take its name). */
   const activate = (index: number): void => {
     const row = rows[index];
     if (!row) return;
     if (row.isDir) void go(row.path);
+    else if (saving) nameEl.focus();
     else finish(row.path);
   };
 
   const confirm = (): void => {
     const row = rows[selected];
-    if (options.kind === "directory") finish(row?.path ?? dir);
+    if (saving) {
+      const name = nameEl.value.trim();
+      if (!name || name.includes("/") || name === "." || name === "..") {
+        nameEl.setCustomValidity("Not a valid file name");
+        return void nameEl.reportValidity();
+      }
+      // A selected file (maybe a search hit elsewhere) saves beside itself.
+      const path = join(row && !row.isDir ? dirname(row.path) : dir, name);
+      if (rows.some((r) => r.isDir && r.path === path)) return void go(path);
+      finish(path);
+    } else if (options.kind === "directory") finish(row?.path ?? dir);
     else if (row) activate(selected);
   };
 
@@ -232,7 +265,7 @@ export function showPicker(
     } else if (e.key === "ArrowDown") select(Math.min(rows.length - 1, selected + 1));
     else if (e.key === "ArrowUp") select(Math.max(0, selected - 1));
     else if (e.key === "Enter" && !onButton)
-      selected >= 0 && rows[selected].isDir ? activate(selected) : confirm();
+      e.target !== nameEl && selected >= 0 && rows[selected].isDir ? activate(selected) : confirm();
     else if (e.key === "Backspace" && !onInput && dir !== "/") void go(dirname(dir));
     else if ((e.key === "f" && (e.metaKey || e.ctrlKey)) || (e.key === "/" && !onInput)) search.focus();
     else if (e.key.toLowerCase() === "n" && e.shiftKey && (e.metaKey || e.ctrlKey)) void newFolder();
@@ -244,9 +277,20 @@ export function showPicker(
   q(".picker-new").addEventListener("click", () => void newFolder());
   q(".picker-cancel").addEventListener("click", () => finish(null));
   openBtn.addEventListener("click", confirm);
+  nameEl.addEventListener("input", () => {
+    nameEl.setCustomValidity("");
+    refreshButton();
+  });
 
+  if (saving) openBtn.textContent = "Save";
   unmount = mount(root);
   void go(start);
+  if (saving) {
+    nameEl.focus();
+    // Select the stem so typing keeps the extension.
+    const dot = nameEl.value.lastIndexOf(".");
+    nameEl.setSelectionRange(0, dot > 0 ? dot : nameEl.value.length);
+  }
   return { result, cancel: () => finish(null) };
 }
 

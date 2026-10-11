@@ -1,14 +1,19 @@
 import type { DirEntry } from "../fs/types";
 
-/** What an app asks for with `os.dialog.open`. Plain data: wire-safe. */
+/**
+ * What an app asks for with `os.dialog.open`. Plain data: wire-safe.
+ * "save" resolves to a path that may not exist yet; the app writes it.
+ */
 export interface DialogOptions {
-  kind: "file" | "directory";
+  kind: "file" | "directory" | "save";
   title?: string;
   /** Folder to start in; relative paths resolve from the caller's cwd. */
   startIn?: string;
+  /** "save" only: the suggested file name. */
+  name?: string;
 }
 
-/** What the picker lists: no dot-files, folders first, files only when picking a file. */
+/** What the picker lists: no dot-files, folders first, files unless picking a folder. */
 export function visibleEntries(
   entries: readonly DirEntry[],
   kind: DialogOptions["kind"],
@@ -17,7 +22,7 @@ export function visibleEntries(
     .filter(
       (e) =>
         !e.name.startsWith(".") &&
-        (e.kind === "directory" || (kind === "file" && e.kind === "file")),
+        (e.kind === "directory" || (kind !== "directory" && e.kind === "file")),
     )
     .sort(
       (a, b) =>
@@ -55,6 +60,7 @@ if ((import.meta as { main?: boolean }).main) {
     visibleEntries(raw, kind).map((e) => e.name).join(",");
   assert(names("directory") === "alpha,Zeta", names("directory"));
   assert(names("file") === "alpha,Zeta,b.txt", names("file"));
+  assert(names("save") === "alpha,Zeta,b.txt", names("save"));
   assert(crumbs("/").length === 1, "root");
   const c = crumbs("/home/a");
   assert(c.map((x) => x.path).join(",") === "/,/home,/home/a", "crumb paths");

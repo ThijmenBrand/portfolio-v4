@@ -114,6 +114,11 @@ export function buildAppInterface(client: WireClient, pid: Pid): AppInterface {
       open: (options) => call("dialog.open", options),
     },
 
+    clipboard: {
+      writeText: (text) => call("clipboard.writeText", text),
+      readText: () => call("clipboard.readText"),
+    },
+
     fs: {
       readFile,
       writeFile,
