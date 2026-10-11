@@ -1,0 +1,3 @@
+su [user]
+  Start a shell as another user (root by default). Asks for their password
+  unless you are root.

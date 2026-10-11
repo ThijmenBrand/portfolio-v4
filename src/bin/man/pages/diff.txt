@@ -1,0 +1,6 @@
+diff [-u] file1 file2
+  Compare two files line by line. - reads stdin.
+  -u unified output (3 lines of context), the format patches use.
+  Exit 0 if equal, 1 if different, 2 on error.
+
+  diff -u old.js new.js

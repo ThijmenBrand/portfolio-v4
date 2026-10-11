@@ -1,0 +1,10 @@
+tar -c|-x|-t [-z] [-v] -f archive [path...]
+  Pack directories into one file and back (ustar format).
+  -c create from paths    -x extract into the current directory
+  -t list                 -z gzip (.tgz); -x and -t detect it themselves
+  -v name each file       -f - uses stdin/stdout
+
+  Extraction never writes outside the current directory.
+
+  tar -czf ~/proj.tgz proj        then download it from the Files app
+  tar -xzf ~/proj.tgz

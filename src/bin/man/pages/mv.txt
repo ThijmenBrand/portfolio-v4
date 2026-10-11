@@ -1,0 +1,2 @@
+mv src dst
+  Move or rename. Across mounts it copies, then deletes.

@@ -1,0 +1,2 @@
+wc [-l] [-w] [-c] [file...]
+  Count lines, words, bytes.

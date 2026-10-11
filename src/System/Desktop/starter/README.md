@@ -85,3 +85,10 @@ and window size from `app.json`. `--install` also adds it to the app menu.
 - Double-click the `.app.js` in Files to run it.
 - Right-click → Download to save it outside the OS.
 - Upload it into Files anywhere else to run it there.
+
+To move a whole project folder instead, pack it: `tar -czf proj.tgz proj`,
+and `tar -xzf proj.tgz` on the other side.
+
+## More help
+
+`man` lists every command's manual page; `man sh` covers the shell.

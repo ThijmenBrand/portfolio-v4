@@ -37,6 +37,18 @@
   vertical-align: baseline;
 }
 
+/* Alternate screen (less): no scrolling back, and the key catcher is invisible. */
+.term-out.raw {
+  overflow: hidden;
+  white-space: pre;
+}
+
+.term-out.raw .term-input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .term-input:disabled {
   color: var(--app-text-dim);
 }

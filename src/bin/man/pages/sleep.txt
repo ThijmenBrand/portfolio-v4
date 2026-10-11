@@ -1,0 +1,2 @@
+sleep seconds
+  Wait (fractions allowed). Ctrl-C ends it.

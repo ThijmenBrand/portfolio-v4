@@ -1,0 +1,5 @@
+find [dir] [-name glob]
+  List every path under dir (default .). -name keeps paths whose name
+  matches the glob (* and ?).
+
+  find . -name '*.js' | xargs grep TODO

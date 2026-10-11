@@ -1,0 +1,2 @@
+sudo command [args...]
+  Run one command as root. Admin group only; asks for your own password.

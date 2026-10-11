@@ -1,0 +1,2 @@
+useradd name
+  Add a local user with a home directory. Root only.

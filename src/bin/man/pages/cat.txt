@@ -1,0 +1,2 @@
+cat [file...]
+  Copy files (or stdin) to stdout, byte for byte.

@@ -1,0 +1,2 @@
+usermod [-g group] [-aG group[,group...]] user
+  -g sets the primary group; -aG adds to groups (admin -> may sudo).

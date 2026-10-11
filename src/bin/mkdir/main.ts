@@ -7,7 +7,7 @@ function code(error: unknown): string {
   return (error as { code?: string }).code ?? "EIO";
 }
 
-async function mkdirP(os: AppInterface, path: string): Promise<void> {
+export async function mkdirP(os: AppInterface, path: string): Promise<void> {
   const absolute = path.startsWith("/");
   const parts = path.split("/").filter(Boolean);
   for (let i = 1; i <= parts.length; i++) {

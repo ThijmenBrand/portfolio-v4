@@ -1,0 +1,3 @@
+which command...
+  Show what a name runs: a sh builtin or the file found on $PATH.
+  Exit 1 if any name is not found.

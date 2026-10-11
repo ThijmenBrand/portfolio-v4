@@ -1,0 +1,2 @@
+ls [-l] [path...]
+  List directory contents. -l: mode, owner, size, date.

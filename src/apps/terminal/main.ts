@@ -47,6 +47,12 @@ export class Terminal {
   private disposed = false;
   /** A program asked to hide input (ESC[8m): a password prompt. */
   private concealed = false;
+  /**
+   * A full-screen program (less) is on the alternate screen: keys go to the
+   * pty one by one, and `saved` holds the normal screen to put back.
+   */
+  private raw = false;
+  private saved = "";
   private readonly onExit?: () => void;
 
   /** `onExit` replaces the "shell exited" notice, e.g. to close an embedding panel. */
@@ -169,6 +175,7 @@ export class Terminal {
 
   private bindInput(): void {
     this.input.addEventListener("keydown", (event) => {
+      if (this.raw) return this.sendKey(event);
       if (event.key === "Tab") {
         event.preventDefault(); // keep focus in the input
         void this.completeInput();
@@ -294,9 +301,57 @@ export class Terminal {
     for (const segment of this.ansi.feed(chunk)) {
       if (segment.kind === "clear") this.clearScreen(false);
       else if (segment.kind === "conceal") this.conceal(segment.on);
+      else if (segment.kind === "altscreen") this.altScreen(segment.on);
       else this.append(segment.text);
     }
-    if (chunk.endsWith("$ ") || chunk.endsWith("# ")) this.markPrompted();
+    if (chunk.endsWith("$ ") || chunk.endsWith("# ")) {
+      this.markPrompted();
+      // A program that died on the alternate screen never switched back.
+      if (this.raw) this.altScreen(false);
+    }
+  }
+
+  private altScreen(on: boolean): void {
+    if (on === this.raw) return;
+    this.raw = on;
+    this.out.classList.toggle("raw", on);
+    if (on) {
+      this.saved = this.text();
+      this.setText("");
+    } else {
+      this.setText(this.saved);
+      this.saved = "";
+      this.scrollToEnd();
+    }
+  }
+
+  /** Raw mode: one key -> the bytes a terminal would send for it. */
+  private sendKey(event: KeyboardEvent): void {
+    if (event.metaKey) return; // Cmd-C / Cmd-V stay the browser's
+    const special: Record<string, string> = {
+      Enter: "\r",
+      Backspace: "\x7f",
+      Escape: "\x1b",
+      Tab: "\t",
+      ArrowUp: "\x1b[A",
+      ArrowDown: "\x1b[B",
+      ArrowRight: "\x1b[C",
+      ArrowLeft: "\x1b[D",
+      Home: "\x1b[H",
+      End: "\x1b[F",
+      PageUp: "\x1b[5~",
+      PageDown: "\x1b[6~",
+    };
+    let bytes = special[event.key];
+    if (!bytes && event.key.length === 1) {
+      // Ctrl-letter is its control code: ^C is 0x03, which the pty turns into SIGINT.
+      bytes = event.ctrlKey
+        ? String.fromCharCode(event.key.toUpperCase().charCodeAt(0) & 0x1f)
+        : event.key;
+    }
+    if (!bytes) return;
+    event.preventDefault();
+    void this.send(bytes);
   }
 
   private conceal(on: boolean): void {

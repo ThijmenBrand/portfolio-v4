@@ -11,7 +11,7 @@ export async function print(os: AppInterface, fd: number, text: string): Promise
   if (text) await os.io.write(fd, encoder.encode(text));
 }
 
-async function readFd(os: AppInterface, fd: number): Promise<string> {
+export async function readFd(os: AppInterface, fd: number): Promise<string> {
   const decoder = new TextDecoder();
   let text = "";
   for (;;) {

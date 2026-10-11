@@ -39,6 +39,18 @@ export function createKernel(screen: HTMLElement): {
       fds: (pid) => processes.get(pid)?.files.list() ?? [],
       env: (pid) => processes.get(pid)?.env ?? {},
       log: (pid) => processes.get(pid)?.log ?? "",
+      mounts: () =>
+        fs.listMounts().map(({ path, driver, readonly }) => ({
+          path,
+          readonly,
+          // Not constructor.name: the build minifies it.
+          type:
+            driver instanceof OpfsFS
+              ? "opfs"
+              : driver instanceof ProcFS
+                ? "proc"
+                : "mem",
+        })),
     }),
     readonly: true,
   });

@@ -1,0 +1,2 @@
+uniq [-c] [file...]
+  Drop adjacent duplicate lines. -c prefixes counts.

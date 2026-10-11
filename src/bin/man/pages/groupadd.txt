@@ -1,0 +1,2 @@
+groupadd name
+  Add an empty group. Root only.

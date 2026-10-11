@@ -1,0 +1,2 @@
+cp src dst
+  Copy a file. If dst is a directory, the copy keeps src's name.

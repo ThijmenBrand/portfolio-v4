@@ -287,12 +287,12 @@ class Editor {
 
     void win.onCloseRequest(() => void this.quit());
     this.bindChrome();
-    this.showWelcome();
   }
 
   public async start(args: string[]): Promise<void> {
     const [arg] = args;
     if (arg === undefined) {
+      this.showWelcome();
       const dir = await this.os.fs
         .readTextFile(`${await ensureConfigDir(this.os)}/code-folder`)
         .catch(() => "");
@@ -311,8 +311,13 @@ class Editor {
     } catch {
       // Missing: open() shows an empty buffer and saving creates it.
     }
-    if (isDir) return this.openFolder(path);
+    if (isDir) {
+      this.showWelcome();
+      return this.openFolder(path);
+    }
     await this.open(path, false);
+    // Welcome only if the open failed; showing it up front flashes before the file loads.
+    if (!this.active) this.showWelcome();
     await this.renderTree();
   }
 

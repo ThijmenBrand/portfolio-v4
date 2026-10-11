@@ -1,0 +1,2 @@
+passwd [user]
+  Change a local password. Only root may change someone else's.

@@ -75,7 +75,7 @@ class LoopJump {
 }
 class Interrupt {}
 
-const BUILTINS = new Set([
+export const BUILTINS = new Set([
   "cd", "pwd", "exit", "help", "export", "unset", "source", ".", "jobs", "fg", "bg",
   ":", "true", "false", "echo", "test", "[", "read", "shift", "local", "return",
   "break", "continue",
@@ -1131,7 +1131,7 @@ class Shell {
   }
 }
 
-const HELP = [
+export const HELP = [
   "builtins:  cd <dir>  pwd  exit [code]  help  source <file>  echo [-n]  read [name…]",
   "           test / [ ]  true  false  :  shift [n]  local NAME=v  return [n]  break  continue",
   "vars:      NAME=value  export NAME[=value]  unset NAME  env  $NAME ${NAME} \"$NAME\" '$NAME'",
@@ -1140,12 +1140,13 @@ const HELP = [
   "           while cmd; do …; done   until cmd; do …; done   for x in a b *.js; do …; done",
   "           name() { …; }   { …; }   ! cmd",
   "files:     ls  cat  touch  mkdir [-p]  rmdir  rm [-r]  cp  mv   (globs: * ? [ab])",
-  "text:      head  tail  wc  grep  sort  uniq  tee",
-  "find:      tree  find [-name glob]  stat",
+  "text:      head  tail  wc  grep  sort  uniq  tee  diff  sed  less",
+  "find:      tree  find [-name glob]  stat  which  xargs  du  df",
   "procs:     ps   kill [-SIGNAL] pid|-pgid   sleep N",
   "jobs:      cmd &   jobs   fg [%n]   bg [%n]   Ctrl-Z stops, Ctrl-C interrupts",
   "terminal:  stty [size | -a | [-]echo | [-]icanon | [-]isig]",
-  "misc:      date  whoami  uname  open <url>  bundle <app.js>",
+  "misc:      date  whoami  uname  open <url>  bundle <app.js>  tar  curl",
+  "docs:      man <command>   (man sh for this list in full)",
   "programs:  anything on $PATH (export PATH=/home/bin:$PATH)",
   "scripts:   #!/ProgramFiles/sh, #!/ProgramFiles/node (JS), #!/ProgramFiles/jsapp (GUI)",
   "startup:   $HOME/.profile is sourced when sh starts",

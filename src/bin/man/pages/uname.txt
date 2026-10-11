@@ -1,0 +1,2 @@
+uname [-a]
+  System name. -a adds the browser.

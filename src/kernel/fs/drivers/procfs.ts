@@ -31,6 +31,7 @@ type ProcSource = {
   fds(pid: Pid): FdInfo[];
   env(pid: Pid): Record<string, string>;
   log(pid: Pid): string;
+  mounts(): { path: string; type: string; readonly: boolean }[];
 };
 
 export class ProcFS implements FileSystemDriver {
@@ -44,6 +45,11 @@ export class ProcFS implements FileSystemDriver {
   private readonly statics: Record<string, () => string> = {
     uptime: () => `${((Date.now() - this.bootedAt) / 1000).toFixed(2)}\n`,
     version: () => "ProcFS Version 1.0\n",
+    mounts: () =>
+      this.source
+        .mounts()
+        .map((m) => `${m.type} ${m.path} ${m.readonly ? "ro" : "rw"}\n`)
+        .join(""),
   };
 
   /** Files under /proc/<pid>/. Generators take the pid they were built for. */

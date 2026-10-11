@@ -1,0 +1,2 @@
+clear
+  Erase the terminal screen and scrollback.

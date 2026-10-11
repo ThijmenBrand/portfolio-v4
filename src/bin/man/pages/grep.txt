@@ -1,0 +1,4 @@
+grep [-i] [-v] [-n] pattern [file...]
+  Print lines matching a JavaScript regex.
+  -i ignore case   -v invert   -n line numbers
+  Exit 0 if something matched, 1 if not, 2 on error.

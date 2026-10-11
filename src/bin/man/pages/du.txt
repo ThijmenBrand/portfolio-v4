@@ -1,0 +1,2 @@
+du [-s] [-h] [path...]
+  Bytes used under each directory. -s total only, -h human (1.5K, 3M).

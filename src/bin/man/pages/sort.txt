@@ -1,0 +1,2 @@
+sort [-r] [-n] [file...]
+  Sort lines. -r reverse, -n numeric.

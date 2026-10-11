@@ -1,0 +1,23 @@
+sed [-n] [-i] script [file...]
+  Edit lines as they stream past. The script is ';'-separated commands,
+  each with an optional address:
+
+  addresses   N          line N
+              $          the last line
+              /re/       lines matching re
+              A,B        from A through B (either kind)
+  commands    s/re/rep/[g][i][p]   replace (g all, i ignore case, p print)
+              p                    print the line
+              d                    delete it
+              q                    print it and stop
+              =                    print the line number
+
+  -n  don't print each line automatically (use with p)
+  -i  edit the files in place
+
+  Regexes are JavaScript's. In rep: \1..\9 groups, & the whole match,
+  \n newline. Any delimiter works: s|/usr|/opt|g.
+
+  sed 's/var /let /g' app.js
+  sed -n '10,20p' log.txt
+  sed -i '/console.log/d' main.js

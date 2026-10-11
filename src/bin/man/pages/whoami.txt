@@ -1,0 +1,2 @@
+whoami
+  The effective user's name.

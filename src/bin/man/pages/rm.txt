@@ -1,0 +1,3 @@
+rm [-r] path...
+  Remove files. -r removes directories and their contents.
+  Files removed in the Files app go to the trash; rm does not.

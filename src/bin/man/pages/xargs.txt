@@ -1,0 +1,9 @@
+xargs [-n N] [-I {}] command [args...]
+  Run command with arguments read from stdin (split on whitespace).
+  -n N    at most N arguments per run
+  -I {}   one run per input line, replacing {} in args
+
+  Exit 123 if any run failed, 127 if command was not found.
+
+  find . -name '*.tmp' | xargs rm
+  ls | xargs -I {} cp {} /tmp/{}.bak

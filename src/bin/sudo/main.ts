@@ -4,6 +4,7 @@
 import type { AppInterface } from "../../kernel/syscalls/api";
 import type { Pid } from "../../kernel/types";
 import { askPassword, errorCode, print } from "../lib/input";
+import { spawnOnPath } from "../lib/path";
 import {
   ADMIN_GID,
   nameOf,
@@ -40,7 +41,7 @@ export async function main(os: AppInterface, args: string[]): Promise<void> {
   const env = { USER: "root", LOGNAME: "root", SUDO_USER: name };
   let pid: Pid;
   try {
-    pid = await spawn(os, command, rest, env);
+    pid = await spawnOnPath(os, command, rest, { uid: 0, gid: 0, env });
   } catch (error) {
     const code = errorCode(error);
     await print(
@@ -71,25 +72,4 @@ async function verify(
     })
     .catch(() => ({ status: 0 }));
   return response.status === 204;
-}
-
-/** Bare names are looked up on the caller's PATH, like sh does. */
-async function spawn(
-  os: AppInterface,
-  command: string,
-  args: string[],
-  env: Record<string, string>,
-): Promise<Pid> {
-  const options = { uid: 0, gid: 0, env };
-  if (command.includes("/")) return os.process.spawn(command, args, options);
-  for (const dir of ((await os.process.env()).PATH ?? "")
-    .split(":")
-    .filter(Boolean)) {
-    try {
-      return await os.process.spawn(`${dir}/${command}`, args, options);
-    } catch (error) {
-      if (!["ENOENT", "ENOTDIR"].includes(errorCode(error))) throw error;
-    }
-  }
-  throw Object.assign(new Error(command), { code: "ENOENT" });
 }

@@ -1,0 +1,2 @@
+kill [-SIGNAL] pid|-pgid
+  Send a signal (default SIGTERM). kill -INT 4, kill -CONT -12 (a group).

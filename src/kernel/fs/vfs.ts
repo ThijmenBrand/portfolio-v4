@@ -62,6 +62,10 @@ export class VFS {
     this.mounts.push({ ...mount, path: mountPath });
   }
 
+  public listMounts(): readonly Mount[] {
+    return this.mounts;
+  }
+
   /**
    * returns the stat for a given path
    * @param path string

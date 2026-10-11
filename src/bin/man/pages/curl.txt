@@ -1,0 +1,13 @@
+curl [options] url
+  Fetch an https URL. Needs root or the admin group (sudo curl ...).
+  -o file      save the body to file
+  -X METHOD    GET, HEAD or POST
+  -d body      send body (implies POST)
+  -H 'Content-Type: type'   the only header that is passed on
+  -i           print status and content type before the body
+  -I           HEAD request, status only
+  -s           quiet about HTTP errors
+
+  Exit 22 on an HTTP status >= 400 (like curl -f).
+
+  sudo curl -o ~/lib.js https://cdn.jsdelivr.net/npm/some-lib/index.js

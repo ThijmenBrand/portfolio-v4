@@ -1,0 +1,2 @@
+echo [-n] [word...]
+  Print the words. -n: no trailing newline. (Also a sh builtin.)

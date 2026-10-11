@@ -1,0 +1,9 @@
+less [file...]
+  Page through text. Reads stdin when no file is given.
+  space f PgDn   next page        b PgUp       previous page
+  j Down Enter   next line        k Up         previous line
+  g              start            G            end
+  /pattern       search           n            next match
+  q              quit
+
+  man sh | less

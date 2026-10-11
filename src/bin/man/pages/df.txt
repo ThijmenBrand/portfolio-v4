@@ -1,0 +1,6 @@
+df [-h]
+  Usage per mounted filesystem (from /proc/mounts).
+  mem   in memory: gone on reload, no fixed size
+  opfs  browser storage (/home, /etc): kept; Size is the browser's quota
+  proc  process info, generated on read
+  -h human sizes.

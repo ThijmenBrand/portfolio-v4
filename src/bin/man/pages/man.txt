@@ -1,0 +1,3 @@
+man [command]
+  Show the manual page for command; with none, list all pages.
+  man sh covers the shell itself.

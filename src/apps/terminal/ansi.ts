@@ -14,7 +14,8 @@
 export type Segment =
   | { kind: "text"; text: string }
   | { kind: "clear" }
-  | { kind: "conceal"; on: boolean };
+  | { kind: "conceal"; on: boolean }
+  | { kind: "altscreen"; on: boolean };
 
 const ESC = "\x1b";
 /** Longest incomplete sequence we hold back before giving up on it. */
@@ -72,6 +73,10 @@ export class AnsiParser {
         if (final === "J" && (params === "2" || params === "3")) {
           flush();
           out.push({ kind: "clear" });
+        }
+        if ((final === "h" || final === "l") && ["?1049", "?1047", "?47"].includes(params)) {
+          flush();
+          out.push({ kind: "altscreen", on: final === "h" });
         }
         if (final === "m") {
           const codes = params.split(";");
