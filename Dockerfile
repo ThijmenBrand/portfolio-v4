@@ -35,7 +35,7 @@ COPY deploy/web/Caddyfile /etc/caddy/Caddyfile
 COPY --from=build /app/dist /srv
 # package.json for "type": "module"; hash.ts is also the CLI for OWNER_PASSWORD_HASH.
 COPY package.json /app/
-COPY server/main.ts server/auth.ts server/hash.ts /app/server/
+COPY server/main.ts server/auth.ts server/hash.ts server/simplelogin.ts /app/server/
 # The root filesystem is read-only at runtime; Caddy's (unused) state goes to /tmp.
 ENV XDG_CONFIG_HOME=/tmp/caddy-config XDG_DATA_HOME=/tmp/caddy-data
 USER 65532:65532
