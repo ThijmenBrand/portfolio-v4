@@ -17,8 +17,36 @@ const BUILTINS = ["cd", "pwd", "exit", "help"];
  * TODO: derive this from readdir once /ProgramFiles is a real directory.
  */
 const PROGRAMS = [
-  "cat", "clear", "cp", "echo", "kill", "ls", "mkdir", "mv", "ps",
-  "resume", "rm", "rmdir", "sh", "terminal", "touch",
+  "cat",
+  "clear",
+  "cp",
+  "date",
+  "echo",
+  "find",
+  "grep",
+  "head",
+  "kill",
+  "ls",
+  "mkdir",
+  "mv",
+  "open",
+  "ps",
+  "resume",
+  "rm",
+  "rmdir",
+  "sh",
+  "sleep",
+  "sort",
+  "stat",
+  "tail",
+  "tee",
+  "terminal",
+  "touch",
+  "tree",
+  "uname",
+  "uniq",
+  "wc",
+  "whoami",
 ];
 
 export interface Completion {

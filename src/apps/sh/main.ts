@@ -273,7 +273,10 @@ class Shell {
       [
         "builtins:  cd <dir>   pwd   exit [code]   help",
         "files:     ls  cat  touch  mkdir [-p]  rmdir  rm [-r]  cp  mv",
-        "procs:     ps   kill [-SIGNAL] pid",
+        "text:      head  tail  wc  grep  sort  uniq  tee",
+        "find:      tree  find [-name glob]  stat",
+        "procs:     ps   kill [-SIGNAL] pid   sleep N",
+        "misc:      date  whoami  uname  open <url>",
         "programs:  anything in /ProgramFiles or /System",
         "redirect:  cmd > file   cmd >> file   cmd < file",
         "pipeline:  cmd | cmd | cmd",
