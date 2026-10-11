@@ -63,9 +63,17 @@
   justify-content: flex-end;
   align-items: center;
   padding: 0 8px;
-  background: #1e1e1e;
-  border-bottom: 1px solid #3a3a3a;
+  color: #fff;
+  /* ponytail: wallpaper is a fixed dark gradient, so white + shadow is enough;
+     sample the wallpaper's luminance if it ever becomes user-settable */
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
   pointer-events: auto;
+}
+
+.topbar-clock {
+  margin-right: 8px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
 }
 
 .topbar-user {
@@ -74,13 +82,13 @@
   border: 0;
   border-radius: 11px;
   background: transparent;
-  color: #e6e6e6;
+  color: inherit;
   font: inherit;
   font-size: 13px;
   cursor: pointer;
 }
 .topbar-user:hover,
-.topbar-user:focus-visible { background: #383838; }
+.topbar-user:focus-visible { background: rgba(255, 255, 255, 0.12); }
 .topbar-user::after { content: " ▾"; font-size: 10px; }
 
 /* popover: top layer + light dismiss, no JS for open/close */
@@ -93,6 +101,7 @@
   border-radius: 6px;
   background: #2b2b2b;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  text-shadow: none;
 }
 
 .session-menu button {

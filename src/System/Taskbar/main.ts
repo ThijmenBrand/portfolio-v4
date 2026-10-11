@@ -44,6 +44,7 @@ class Taskbar {
   private readonly groups = new Map<Pid, TaskGroup>();
   private readonly paths = new Map<Pid, string>();
   private focusedPid: Pid | null = null;
+  private clockTimer: ReturnType<typeof setInterval> | undefined;
 
   constructor(os: SystemInterface, root: HTMLElement) {
     this.os = os;
@@ -68,6 +69,7 @@ class Taskbar {
     await this.subscribe();
 
     await this.os.process.onSignal("SIGTERM", () => {
+      clearInterval(this.clockTimer);
       this.root.innerHTML = "";
       void this.os.process.exit(0);
     });
@@ -82,12 +84,28 @@ class Taskbar {
     const topbar = this.root.querySelector<HTMLElement>("#topbar");
     const user = this.root.querySelector<HTMLElement>("#topbar-user");
     const logout = this.root.querySelector<HTMLElement>("#session-logout");
-    if (!topbar || !user || !logout) {
+    const clock = this.root.querySelector<HTMLTimeElement>("#topbar-clock");
+    if (!topbar || !user || !logout || !clock) {
       throw kernelError("ENODEV", "Taskbar top bar not found");
     }
 
     await this.os.display.reserveStrut("top", topbar.offsetHeight || 28);
     user.textContent = (await this.os.process.env()).USER ?? "user";
+
+    const format = new Intl.DateTimeFormat(undefined, {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    const tick = (): void => {
+      const now = new Date();
+      clock.textContent = format.format(now);
+      clock.dateTime = now.toISOString();
+    };
+    tick();
+    this.clockTimer = setInterval(tick, 1000);
 
     logout.addEventListener("click", () => {
       void this.os.process
