@@ -60,6 +60,9 @@ async function runSession(os: SystemInterface, user: User): Promise<void> {
       await os.process.kill(proc.pid, "SIGKILL").catch(() => {});
     }
   }
+  // SIGKILL runs no handlers, so the taskbar's DOM (and an open session menu)
+  // outlives it. Windows and struts the kernel frees; this layer is ours.
+  (await os.display.taskbar()).replaceChildren();
 }
 
 /** The local account for the backend's user, made on first login. */
@@ -104,48 +107,117 @@ async function login(os: SystemInterface, name: string, password: string): Promi
   throw new Error("Wrong user name or password.");
 }
 
+/** Shown for "Other user", where the owner types their name. */
+const PERSON_ICON = `<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8" r="4.2"/><path d="M3.5 20.5c.9-4.2 4.3-6.6 8.5-6.6s7.6 2.4 8.5 6.6z"/></svg>`;
+
+/** A stable, muted color per name, so each account is recognisable. */
+function avatarColor(name: string): string {
+  let hash = 0;
+  for (const char of name) hash = (hash * 31 + char.charCodeAt(0)) | 0;
+  return `oklch(0.55 0.08 ${Math.abs(hash) % 360})`;
+}
+
+function paintAvatar(avatar: HTMLElement, name: string | undefined): void {
+  if (name) {
+    avatar.textContent = name[0].toUpperCase();
+    avatar.style.setProperty("--avatar", avatarColor(name));
+  } else {
+    avatar.innerHTML = PERSON_ICON;
+    avatar.style.setProperty("--avatar", "rgba(255, 255, 255, 0.16)");
+  }
+}
+
+function tick(date: HTMLElement, time: HTMLElement): void {
+  const now = new Date();
+  date.textContent = now.toLocaleDateString(undefined, {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+  // Lock-screen style: "1:17", no AM/PM.
+  time.textContent = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" })
+    .formatToParts(now)
+    .filter((part) => part.type !== "dayPeriod")
+    .map((part) => part.value)
+    .join("")
+    .trim();
+}
+
 async function prompt(os: SystemInterface, root: HTMLElement): Promise<User> {
   const screen = htmlStringToTemplate(loginHTML);
-  const form = selectElementFromTemplate<HTMLFormElement>(screen, '[data-field="form"]');
-  const name = selectElementFromTemplate<HTMLInputElement>(screen, '[data-field="name"]');
-  const password = selectElementFromTemplate<HTMLInputElement>(screen, '[data-field="password"]');
-  const error = selectElementFromTemplate(screen, '[data-field="error"]');
-  const users = selectElementFromTemplate(screen, '[data-field="users"]');
+  const field = <T extends HTMLElement = HTMLElement>(key: string) =>
+    selectElementFromTemplate<T>(screen, `[data-field="${key}"]`);
+  const form = field<HTMLFormElement>("form");
+  const name = field<HTMLInputElement>("name");
+  const password = field<HTMLInputElement>("password");
+  const error = field("error");
+  const users = field("users");
+  const avatar = field("avatar");
+  const title = field("title");
+  const date = field("date");
+  const time = field("time");
   const submit = selectElementFromTemplate<HTMLButtonElement>(screen, "button[type=submit]");
+  const shell = form.parentElement!;
 
-  // Shortcuts for local accounts; the owner types their name.
+  tick(date, time);
+  const clock = setInterval(() => tick(date, time), 1000);
+
+  // Local accounts get a tile; the owner picks "Other user" and types their name.
   const shadow = await readShadow(os);
-  for (const user of await readUsers(os)) {
-    if (user.uid === 0 || user.gid === ADMIN_GID) continue;
-    const chip = document.createElement("button");
-    chip.type = "button";
-    chip.className = "login-user";
-    chip.textContent = user.name;
-    chip.addEventListener("click", () => {
-      name.value = user.name;
-      password.value = "";
-      // No password set: one click is enough.
-      if (shadow.get(user.name) === "") form.requestSubmit();
-      else password.focus();
-    });
-    users.appendChild(chip);
+  const choices: (string | undefined)[] = (await readUsers(os))
+    .filter((user) => user.uid !== 0 && user.gid !== ADMIN_GID)
+    .map((user) => user.name);
+  choices.push(undefined);
+
+  const tiles: HTMLButtonElement[] = [];
+  const select = (choice: string | undefined) => {
+    paintAvatar(avatar, choice);
+    title.textContent = choice ?? "Other user";
+    name.hidden = choice !== undefined;
+    name.value = choice ?? "";
+    password.value = "";
+    error.textContent = "";
+    // No password set: one click on the arrow is enough.
+    const open = choice !== undefined && shadow.get(choice) === "";
+    form.classList.toggle("is-open", open);
+    choices.forEach((other, i) => tiles[i].setAttribute("aria-pressed", String(other === choice)));
+    (choice === undefined ? name : open ? submit : password).focus();
+  };
+
+  for (const choice of choices) {
+    const tile = document.createElement("button");
+    tile.type = "button";
+    tile.className = "login-user";
+    const small = document.createElement("span");
+    small.className = "login-avatar";
+    paintAvatar(small, choice);
+    tile.append(small, choice ?? "Other user");
+    tile.addEventListener("click", () => select(choice));
+    tiles.push(tile);
+    users.appendChild(tile);
   }
 
   root.replaceChildren(screen);
-  name.focus();
+  select(choices[0]);
 
   return new Promise<User>((done) => {
     form.addEventListener("submit", (event) => {
       event.preventDefault();
       submit.disabled = true;
       error.textContent = "";
+      form.classList.remove("is-wrong");
       login(os, name.value.trim(), password.value)
-        .then((user) => {
+        .then(async (user) => {
+          clearInterval(clock);
+          shell.classList.add("is-leaving");
+          await new Promise((resolve) => setTimeout(resolve, 260));
           root.replaceChildren();
           done(user);
         })
         .catch((failure: Error) => {
           error.textContent = failure.message;
+          void form.offsetWidth; // restart the shake on repeat failures
+          form.classList.add("is-wrong");
           password.value = "";
           password.focus();
         })

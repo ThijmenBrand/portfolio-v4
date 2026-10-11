@@ -52,3 +52,60 @@
   text-align: center;
 }
 .task-button-count:empty { display: none; }
+.topbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 28px;
+  box-sizing: border-box;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 0 8px;
+  background: #1e1e1e;
+  border-bottom: 1px solid #3a3a3a;
+  pointer-events: auto;
+}
+
+.topbar-user {
+  height: 22px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: #e6e6e6;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.topbar-user:hover,
+.topbar-user:focus-visible { background: #383838; }
+.topbar-user::after { content: " ▾"; font-size: 10px; }
+
+/* popover: top layer + light dismiss, no JS for open/close */
+.session-menu {
+  inset: 32px 8px auto auto;
+  margin: 0;
+  padding: 4px;
+  min-width: 140px;
+  border: 1px solid #3a3a3a;
+  border-radius: 6px;
+  background: #2b2b2b;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.session-menu button {
+  width: 100%;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #e6e6e6;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.session-menu button:hover,
+.session-menu button:focus-visible { background: #3d3d3d; }

@@ -1,9 +1,13 @@
 <div class="login">
-  <form class="login-card" data-field="form">
-    <h1 class="login-title">Log in</h1>
-    <div class="login-users" data-field="users"></div>
+  <header class="login-clock">
+    <p class="login-date" data-field="date"></p>
+    <p class="login-time" data-field="time"></p>
+  </header>
+  <form class="login-panel" data-field="form">
+    <div class="login-avatar" data-field="avatar" aria-hidden="true"></div>
+    <h1 class="login-name" data-field="title"></h1>
     <input
-      class="login-input"
+      class="login-field"
       data-field="name"
       aria-label="User name"
       placeholder="User name"
@@ -12,15 +16,23 @@
       spellcheck="false"
       required
     />
-    <input
-      class="login-input"
-      data-field="password"
-      type="password"
-      aria-label="Password"
-      placeholder="Password"
-      autocomplete="current-password"
-    />
-    <button class="login-submit" type="submit">Log in</button>
+    <div class="login-row">
+      <input
+        class="login-field"
+        data-field="password"
+        type="password"
+        aria-label="Password"
+        placeholder="Enter password"
+        autocomplete="current-password"
+      />
+      <button class="login-go" type="submit" aria-label="Log in">
+        <span class="login-go-label">Log in</span>
+        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+          <path d="M3 8h9M8.5 4.5 12 8l-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </button>
+    </div>
     <p class="login-error" data-field="error" role="alert"></p>
   </form>
+  <nav class="login-users" data-field="users" aria-label="Users"></nav>
 </div>

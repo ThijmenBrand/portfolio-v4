@@ -1,90 +1,333 @@
+/* Lock screen: same wallpaper as the desktop, so logging in reads as the
+   screen waking up rather than a page change. */
 .login {
+  --login-ink: #f4f7f5;
+  --login-ink-dim: rgba(236, 244, 240, 0.72);
+  --login-frost: rgba(18, 30, 27, 0.42);
+  --login-frost-hi: rgba(255, 255, 255, 0.14);
+  --login-edge: rgba(255, 255, 255, 0.16);
+  --login-ease: cubic-bezier(0.16, 1, 0.3, 1);
+
+  position: absolute;
+  inset: 0;
   display: grid;
-  place-items: center;
-  width: 100%;
-  height: 100%;
+  grid-template-rows: 1fr auto auto;
+  justify-items: center;
+  padding: clamp(40px, 9vh, 96px) 16px clamp(24px, 5vh, 48px);
+  overflow: hidden;
   font-family: var(--app-sans);
-  color: var(--app-text);
+  color: var(--login-ink);
   background:
     radial-gradient(120% 90% at 20% 0%, #2b5c4c 0%, transparent 60%),
     radial-gradient(100% 80% at 100% 100%, #1d3550 0%, transparent 55%),
     linear-gradient(160deg, #16241f 0%, #0c1418 100%);
+  animation: login-wake 700ms var(--login-ease) both;
 }
 
-.login-card {
+/* Darken toward the edges so the clock and panel carry the eye. */
+.login::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(70% 60% at 50% 45%, transparent 40%, rgba(0, 0, 0, 0.45) 100%);
+  pointer-events: none;
+}
+
+.login > * {
+  position: relative;
+}
+
+.login.is-leaving {
+  animation: login-sleep 260ms ease-in both;
+}
+
+/* Clock */
+
+.login-clock {
+  align-self: start;
+  text-align: center;
+  user-select: none;
+}
+
+.login-date {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 500;
+  color: var(--login-ink-dim);
+}
+
+.login-time {
+  margin: 0;
+  font-size: clamp(72px, 13vw, 132px);
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.035em;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.25);
+}
+
+/* Panel: who is logging in, and their password */
+
+.login-panel {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  width: min(320px, calc(100% - 32px));
-  padding: 24px;
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius);
-  background: var(--app-surface);
-  box-shadow: var(--app-shadow);
+  align-items: center;
+  width: min(280px, 100%);
 }
 
-.login-title {
-  margin: 0 0 4px;
-  font-size: 18px;
+.login-avatar {
+  display: grid;
+  place-items: center;
+  width: 88px;
+  height: 88px;
+  margin-bottom: 14px;
+  border-radius: 50%;
+  background: var(--avatar, #4b6b62);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.18),
+    0 10px 30px rgba(0, 0, 0, 0.35);
+  font-size: 36px;
   font-weight: 600;
+  color: #fff;
+  user-select: none;
 }
+
+.login-avatar svg {
+  width: 44px;
+  height: 44px;
+}
+
+.login-name {
+  margin: 0 0 16px;
+  font-size: 20px;
+  font-weight: 600;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.3);
+}
+
+.login-field {
+  width: 100%;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--login-edge);
+  border-radius: 18px;
+  background: var(--login-frost);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  color: var(--login-ink);
+  font: inherit;
+  font-size: 14px;
+  transition: border-color 160ms ease, background-color 160ms ease;
+}
+
+.login-field::placeholder {
+  color: var(--login-ink-dim);
+}
+
+.login-field:focus {
+  border-color: rgba(255, 255, 255, 0.42);
+  background: rgba(18, 30, 27, 0.55);
+  outline: none;
+}
+
+.login-field[data-field="name"] {
+  margin-bottom: 8px;
+}
+
+.login-row {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.login-row .login-field {
+  padding-right: 40px;
+}
+
+.login-go {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 13px;
+  background: var(--login-frost-hi);
+  color: var(--login-ink);
+  cursor: pointer;
+  transition: background-color 160ms ease, opacity 160ms ease;
+}
+
+.login-go:hover,
+.login-go:focus-visible {
+  background: rgba(255, 255, 255, 0.28);
+  outline: none;
+}
+
+.login-go:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.login-go-label {
+  display: none;
+}
+
+/* No password set: the field goes, the arrow becomes the button. */
+.login-panel.is-open .login-row .login-field {
+  display: none;
+}
+
+.login-panel.is-open .login-go {
+  position: static;
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  width: auto;
+  height: 36px;
+  padding: 0 18px;
+  border: 1px solid var(--login-edge);
+  border-radius: 18px;
+  background: var(--login-frost);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.login-panel.is-open .login-go:hover,
+.login-panel.is-open .login-go:focus-visible {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.login-panel.is-open .login-go-label {
+  display: inline;
+}
+
+.login-error {
+  min-height: 1.4em;
+  margin: 10px 0 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: #ffd2d2;
+  text-align: center;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
+}
+
+.login-panel.is-wrong .login-row {
+  animation: login-shake 420ms var(--login-ease);
+}
+
+/* User switcher */
 
 .login-users {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  justify-content: center;
+  gap: 4px;
+  margin-top: clamp(24px, 6vh, 56px);
 }
 
 .login-user {
-  padding: 4px 10px;
-  border: 1px solid var(--app-border-hi);
-  border-radius: 999px;
-  background: var(--app-surface-hi);
-  color: var(--app-text);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 76px;
+  padding: 8px 4px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--login-ink-dim);
   font: inherit;
+  font-size: 12px;
   cursor: pointer;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+.login-user .login-avatar {
+  width: 40px;
+  height: 40px;
+  margin: 0;
+  font-size: 17px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+  opacity: 0.8;
+  transition: opacity 160ms ease;
+}
+
+.login-user .login-avatar svg {
+  width: 20px;
+  height: 20px;
 }
 
 .login-user:hover,
 .login-user:focus-visible {
-  border-color: var(--app-accent);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--login-ink);
   outline: none;
 }
 
-.login-input {
-  height: 32px;
-  padding: 0 10px;
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-sm);
-  background: var(--app-well);
-  color: var(--app-text);
-  font: inherit;
+.login-user:focus-visible {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4);
 }
 
-.login-input:focus {
-  border-color: var(--app-accent);
-  outline: none;
+.login-user[aria-pressed="true"] {
+  color: var(--login-ink);
 }
 
-.login-submit {
-  height: 32px;
-  border: 0;
-  border-radius: var(--app-radius-sm);
-  background: var(--app-accent);
-  color: #fff;
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
+.login-user[aria-pressed="true"] .login-avatar,
+.login-user:hover .login-avatar {
+  opacity: 1;
 }
 
-.login-submit:disabled {
-  opacity: 0.6;
-  cursor: progress;
+.login-user[aria-pressed="true"] .login-avatar {
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);
 }
 
-.login-error {
-  min-height: 1.2em;
-  margin: 0;
-  color: var(--app-danger);
-  font-size: 13px;
+@keyframes login-wake {
+  from {
+    opacity: 0;
+    filter: blur(12px);
+    transform: scale(1.03);
+  }
+}
+
+@keyframes login-sleep {
+  to {
+    opacity: 0;
+    filter: blur(8px);
+    transform: scale(0.985);
+  }
+}
+
+@keyframes login-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-9px); }
+  40% { transform: translateX(7px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(2px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login,
+  .login.is-leaving,
+  .login-panel.is-wrong .login-row {
+    animation: none;
+  }
+}
+
+@media (max-height: 560px) {
+  .login-time {
+    font-size: 56px;
+  }
+
+  .login-avatar {
+    width: 64px;
+    height: 64px;
+    font-size: 26px;
+  }
 }

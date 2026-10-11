@@ -62,6 +62,7 @@ class Taskbar {
   /** Everything that needs a syscall, so the constructor can stay sync. */
   public async start(): Promise<void> {
     await this.os.display.reserveStrut("bottom", this.bar.offsetHeight || 48);
+    await this.startTopbar();
 
     await this.seed();
     await this.subscribe();
@@ -69,6 +70,33 @@ class Taskbar {
     await this.os.process.onSignal("SIGTERM", () => {
       this.root.innerHTML = "";
       void this.os.process.exit(0);
+    });
+  }
+
+  /**
+   * The session menu. The taskbar is started by the desktop's autostart, so
+   * logging out is SIGTERM to our parent: the desktop exits and login ends
+   * the rest of the session, this process included.
+   */
+  private async startTopbar(): Promise<void> {
+    const topbar = this.root.querySelector<HTMLElement>("#topbar");
+    const user = this.root.querySelector<HTMLElement>("#topbar-user");
+    const logout = this.root.querySelector<HTMLElement>("#session-logout");
+    if (!topbar || !user || !logout) {
+      throw kernelError("ENODEV", "Taskbar top bar not found");
+    }
+
+    await this.os.display.reserveStrut("top", topbar.offsetHeight || 28);
+    user.textContent = (await this.os.process.env()).USER ?? "user";
+
+    logout.addEventListener("click", () => {
+      void this.os.process
+        .list()
+        .then((processes) => {
+          const self = processes.find((proc) => proc.pid === this.os.process.pid);
+          if (self) return this.os.process.kill(self.parentPid, "SIGTERM");
+        })
+        .catch(logError);
     });
   }
 

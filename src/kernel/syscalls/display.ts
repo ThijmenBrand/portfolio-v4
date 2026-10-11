@@ -20,7 +20,10 @@ export function displaySyscalls(
     }),
     getTaskbarRoot: alive(ctx, (pid: Pid) => {
       requirePrivilege(ctx, pid, "getTaskbarRoot");
-      return ctx.display.getTaskbarLayer();
+      const layer = ctx.display.getTaskbarLayer();
+      // A killed taskbar can't clean up after itself (logout SIGKILLs it).
+      ctx.processes.registerResource(pid, "taskbar", () => layer.replaceChildren());
+      return layer;
     }),
     getWorkArea: alive(ctx, (_pid: Pid) => ctx.display.workArea()),
     reserveStrut: alive(ctx, (pid: Pid, edge: StrutEdge, size: number) => {
