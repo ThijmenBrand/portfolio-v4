@@ -38,7 +38,7 @@ services:
     cap_drop: [ALL]
     security_opt:
       - no-new-privileges:true
-    mem_limit: 96m
+    mem_limit: 128m
     cpus: 0.5
     restart: unless-stopped
     # Replaces the image's HEALTHCHECK, which probes web's Caddy.

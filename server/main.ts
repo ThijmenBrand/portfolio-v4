@@ -12,6 +12,7 @@ import {
   OWNER_USERNAME,
   PUBLIC_ORIGIN,
   SESSION_MAX_AGE,
+  rateKey,
   requireSession,
   signSession,
   verifyPassword,
@@ -26,18 +27,23 @@ const BODY_LIMIT = 64 * 1024;
 // --- login rate limit ---------------------------------------------------------
 // ponytail: in-memory, per process. Resets on restart and only works with a
 // single instance; move it to a shared store (Redis, the DB) if that changes.
+// Per client (IPv4 address or IPv6 /64), plus a ceiling for everyone together
+// so rotating addresses doesn't buy unlimited guesses.
+// ponytail: a global flood locks the owner out for the window too; that beats
+// unlimited guessing.
 const LOGIN_ATTEMPTS = 5;
+const LOGIN_ATTEMPTS_GLOBAL = 50;
 const LOGIN_WINDOW = 15 * 60 * 1000;
 const attempts = new Map<string, { count: number; resetAt: number }>();
 
-function loginAllowed(ip: string, now = Date.now()): boolean {
+function loginAllowed(key: string, limit: number, now = Date.now()): boolean {
   // Drop stale entries now and then so the map can't grow without bound.
   if (attempts.size > 10_000)
     for (const [k, v] of attempts) if (v.resetAt <= now) attempts.delete(k);
-  let entry = attempts.get(ip);
+  let entry = attempts.get(key);
   if (!entry || entry.resetAt <= now)
-    attempts.set(ip, (entry = { count: 0, resetAt: now + LOGIN_WINDOW }));
-  return ++entry.count <= LOGIN_ATTEMPTS;
+    attempts.set(key, (entry = { count: 0, resetAt: now + LOGIN_WINDOW }));
+  return ++entry.count <= limit;
 }
 
 // Only Caddy can reach the API, and it sets X-Forwarded-For to the real client
@@ -108,8 +114,12 @@ async function handle(
   }
 
   if (method === "POST" && pathname === "/api/auth/login") {
-    const ip = clientIp(req);
-    if (!loginAllowed(ip))
+    const client = rateKey(clientIp(req));
+    // Per client first: a blocked client doesn't use up the global budget.
+    if (
+      !loginAllowed(client, LOGIN_ATTEMPTS) ||
+      !loginAllowed("global", LOGIN_ATTEMPTS_GLOBAL)
+    )
       throw new HttpError(429, "too many attempts, try again later");
     const { username, password } = await readJson(req);
     if (typeof username !== "string" || typeof password !== "string")
@@ -118,7 +128,7 @@ async function handle(
     const passwordOk = await verifyPassword(password);
     if (!passwordOk || username !== OWNER_USERNAME)
       throw new HttpError(401, "invalid credentials");
-    attempts.delete(ip); // the limit is for guessing, not for logging in often
+    attempts.delete(client); // the limit is for guessing, not for logging in often
     setSession(res, signSession(username), SESSION_MAX_AGE);
     res.writeHead(204).end();
     return;

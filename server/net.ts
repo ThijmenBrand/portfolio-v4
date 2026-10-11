@@ -24,12 +24,14 @@ for (const [net, prefix] of [
 ] as const)
   blocked.addSubnet(net, prefix, "ipv4");
 for (const [net, prefix] of [
-  ["::", 127],
+  ["::", 96], // unspecified, loopback, deprecated IPv4-compatible
+  ["64:ff9b::", 96], // NAT64: would reach IPv4 behind a NAT64 gateway
+  ["64:ff9b:1::", 48], // local-use NAT64
   ["fc00::", 7],
   ["fe80::", 10],
   ["ff00::", 8],
 ] as const) {
-  blocked.addSubnet(net, prefix, "ipv6"); // ::/127 = unspecified + loopback
+  blocked.addSubnet(net, prefix, "ipv6");
 }
 
 /** Loopback, LAN, link-local, Docker's network…: anywhere the internet isn't. */

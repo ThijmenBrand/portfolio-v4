@@ -89,6 +89,8 @@ async function startProcess(
     args,
     path: shownAs,
     privileged: file.privileged === true,
+    // VFS code (and anything it starts, sudo included) never gets /api.
+    untrusted: parent.untrusted || ("host" in file && file.host === "user"),
     cwd: parent?.cwd ?? "/",
     env: { ...parent.env, ...options?.env },
     ...ids,

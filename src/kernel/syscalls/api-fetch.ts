@@ -22,7 +22,9 @@ export interface ApiResponse {
  * for them and the session cookie goes along.
  *
  * The gid check only keeps visitors' programs from poking at it. It is NOT
- * the protection: the backend checks the session on every request.
+ * the protection: the backend checks the session on every request. Code from
+ * the VFS (user-* realms, and what they start) is refused outright, so an app
+ * the owner runs can't reach their private routes; it keeps net.fetch.
  */
 export function apiSyscalls(
   ctx: KernelContext,
@@ -30,7 +32,7 @@ export function apiSyscalls(
   return {
     apiFetch: async (callerPid: Pid, path: string, request?: ApiRequest) => {
       const proc = requireAlive(ctx, callerPid);
-      if (proc.euid !== 0 && proc.gid !== ADMIN_GID) {
+      if (proc.untrusted || (proc.euid !== 0 && proc.gid !== ADMIN_GID)) {
         throw eperm(callerPid, "api.fetch");
       }
       const url = new URL(String(path), window.location.origin);

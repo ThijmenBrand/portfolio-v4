@@ -15,7 +15,7 @@ good one; an unhealthy image is rolled back automatically.
 server/                         the API (Node, stdlib only, run as .ts): owner login, /api/private/*
 ├── main.ts                     routes, CSRF + body limit, login rate limit
 ├── auth.ts                     password check, signed session cookie
-├── hash.ts                     `node server/hash.ts <password>` → OWNER_PASSWORD_HASH
+├── hash.ts                     password on stdin → OWNER_PASSWORD_HASH
 └── selftest.ts                 `node server/selftest.ts`
 deploy/
 ├── web/Caddyfile               Caddy inside the container (CSP, CORS on /assets/, caching, /api/* → api)
@@ -65,9 +65,10 @@ owner login. Write it in your checkout, install it as in step 3, then delete
 the local copy:
 
 ```sh
+read -rs PW    # the owner password, not echoed and not in shell history
 cat > api.env <<EOF
 OWNER_USERNAME=thijmen
-OWNER_PASSWORD_HASH=$(node server/hash.ts '<password>')
+OWNER_PASSWORD_HASH=$(printf '%s' "$PW" | node server/hash.ts)
 SESSION_SECRET=$(openssl rand -hex 32)
 PUBLIC_ORIGIN=https://thijmenbrand.nl
 SIMPLELOGIN_API_KEY=<key from SimpleLogin → Settings → API Keys>
@@ -75,7 +76,7 @@ EOF
 ```
 
 `NODE_ENV` and `PORT` come from `docker-compose.yml`. After changing the file
-(new password, or a new `SESSION_SECRET` to sign out every session), recreate
+(a new password or a new `SESSION_SECRET` signs out every session), recreate
 the api with `sudo portfolio-deploy deploy "$(cat /srv/portfolio/current)"`.
 
 ### Reverse proxy + TLS

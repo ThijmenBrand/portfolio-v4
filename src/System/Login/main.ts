@@ -34,15 +34,57 @@ export async function main(os: SystemInterface): Promise<void> {
 
   // Boot goes straight in: as the owner if still signed in to the backend,
   // else as guest. Other users log out first and pick themselves at the prompt.
-  let user = (await ownerFromSession(os)) ?? userByName(await readUsers(os), "guest");
+  let user = (await ownerFromSession(os, root)) ?? userByName(await readUsers(os), "guest");
   for (;;) {
     user ??= await prompt(os, root);
     await runSession(os, user);
-    if (user.gid === ADMIN_GID) {
-      await os.api.fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
-    }
+    if (user.gid === ADMIN_GID) await signOut(os, root);
     user = undefined;
   }
+}
+
+/**
+ * Ends the backend session; returns only once the cookie is gone. Until then
+ * nobody else may get a session in this browser: root is one `su` away for any
+ * local user, and root may call the API with the owner's cookie.
+ */
+async function signOut(os: SystemInterface, root: HTMLElement): Promise<void> {
+  for (;;) {
+    const response = await os.api
+      .fetch("/api/auth/logout", { method: "POST" })
+      .catch(() => ({ status: 0 }));
+    if (response.status === 204) return;
+    await signOutFailed(root);
+  }
+}
+
+/** Blocks on a "try again" screen; resolves when the user asks to retry. */
+function signOutFailed(root: HTMLElement): Promise<void> {
+  const screen = document.createElement("div");
+  screen.className = "login";
+  const panel = document.createElement("div");
+  panel.className = "login-panel";
+  const title = document.createElement("h1");
+  title.className = "login-name";
+  title.textContent = "Couldn't sign out";
+  const detail = document.createElement("p");
+  detail.className = "login-error";
+  detail.setAttribute("role", "alert");
+  detail.textContent = "Your session is still active. Check the connection and try again.";
+  const retry = document.createElement("button");
+  retry.type = "button";
+  retry.className = "login-user";
+  retry.textContent = "Try again";
+  panel.append(title, detail, retry);
+  screen.append(panel);
+  root.replaceChildren(screen);
+  retry.focus();
+  return new Promise((done) =>
+    retry.addEventListener("click", () => {
+      root.replaceChildren();
+      done();
+    }, { once: true }),
+  );
 }
 
 async function runSession(os: SystemInterface, user: User): Promise<void> {
@@ -73,15 +115,20 @@ async function ownerAccount(os: SystemInterface, name: string): Promise<User | u
   return addUser(os, name, ADMIN_GID);
 }
 
-async function ownerFromSession(os: SystemInterface): Promise<User | undefined> {
+async function ownerFromSession(os: SystemInterface, root: HTMLElement): Promise<User | undefined> {
+  let username: string;
   try {
     const response = await os.api.fetch("/api/auth/me");
     if (response.status !== 200) return undefined;
-    const { username } = JSON.parse(response.body) as { username: string };
-    return await ownerAccount(os, username);
+    ({ username } = JSON.parse(response.body) as { username: string });
   } catch {
     return undefined; // no backend (offline, or plain `vite`): local users only
   }
+  const owner = await ownerAccount(os, username);
+  // A local non-admin account took the owner's name: don't fall back to guest
+  // with the owner's cookie still live.
+  if (!owner) await signOut(os, root);
+  return owner;
 }
 
 /** Resolves with the user once their password checks out. */

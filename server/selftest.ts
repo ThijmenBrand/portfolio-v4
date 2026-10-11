@@ -9,7 +9,7 @@ process.env.OWNER_PASSWORD_HASH = `${salt.toString("hex")}:${(await scryptKey("h
 process.env.SESSION_SECRET = "x".repeat(32);
 process.env.PUBLIC_ORIGIN = "http://localhost:5173";
 // auth.ts reads the env on import, so import it only now.
-const { signSession, verifySession, verifyPassword, SESSION_MAX_AGE } =
+const { signSession, verifySession, verifyPassword, rateKey, SESSION_MAX_AGE } =
   await import("./auth.ts");
 
 const token = signSession("owner");
@@ -32,6 +32,22 @@ assert.equal(verifySession(expired), null, "expired session");
 
 assert.equal(await verifyPassword("hunter2"), true, "right password");
 assert.equal(await verifyPassword("hunter3"), false, "wrong password");
+// Queued one at a time, but each caller still gets its own answer.
+const guesses = ["hunter2", "x", "hunter2", "y", "z", "hunter2", "w", "v"];
+assert.deepEqual(
+  await Promise.all(guesses.map((g) => verifyPassword(g))),
+  guesses.map((g) => g === "hunter2"),
+  "parallel passwords",
+);
+
+// Rate limit: an IPv6 /64 is one client; IPv4-mapped is plain IPv4.
+assert.equal(rateKey("1.2.3.4"), "1.2.3.4");
+assert.equal(rateKey("::ffff:1.2.3.4"), "1.2.3.4", "mapped");
+assert.equal(rateKey("2001:db8:1:2::1"), "2001:db8:1:2::/64");
+assert.equal(rateKey("2001:0db8:1:2:ffff::9"), "2001:db8:1:2::/64", "same /64");
+assert.notEqual(rateKey("2001:db8:1:3::1"), rateKey("2001:db8:1:2::1"), "other /64");
+assert.equal(rateKey("::1"), "0:0:0:0::/64", "loopback");
+assert.equal(rateKey("fe80::1:2:3:4"), "fe80:0:0:0::/64");
 
 // SimpleLogin proxy: only the allowlisted calls map through.
 const { slRoute } = await import("./simplelogin.ts");
@@ -97,6 +113,8 @@ for (const a of [
   "::1",
   "169.254.169.254",
   "172.18.0.2",
+  "::7f00:1",
+  "64:ff9b::7f00:1",
   "not-an-ip",
 ]) {
   assert.equal(isPrivate(a), true, `private: ${a}`);

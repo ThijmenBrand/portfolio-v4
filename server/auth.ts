@@ -2,11 +2,12 @@
 // and a signed session cookie.
 //
 // ponytail: stateless sessions. Logout only clears the cookie; a stolen cookie
-// stays valid until it expires (7 days). Rotate SESSION_SECRET to kill every
-// session at once; add a server-side session store if single sessions ever
-// need revoking.
+// stays valid until it expires (12 hours). A new password or SESSION_SECRET
+// kills every session at once (both key the HMAC); add a server-side session
+// store if single sessions ever need revoking.
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage } from "node:http";
+import { isIP } from "node:net";
 import { scryptKey } from "./hash.ts";
 
 export class HttpError extends Error {
@@ -25,21 +26,42 @@ function env(name: string): string {
 }
 export const OWNER_USERNAME = env("OWNER_USERNAME");
 export const PUBLIC_ORIGIN = env("PUBLIC_ORIGIN");
-const [salt, hash] = env("OWNER_PASSWORD_HASH").split(":").map((h) => Buffer.from(h, "hex"));
+const OWNER_PASSWORD_HASH = env("OWNER_PASSWORD_HASH");
+const [salt, hash] = OWNER_PASSWORD_HASH.split(":").map((h) => Buffer.from(h, "hex"));
 if (!salt?.length || hash?.length !== 64) {
-  throw new Error("OWNER_PASSWORD_HASH must be salthex:hashhex (node server/hash.ts <password>)");
+  throw new Error("OWNER_PASSWORD_HASH must be salthex:hashhex (password on stdin: node server/hash.ts)");
 }
 const SESSION_SECRET = env("SESSION_SECRET");
 if (SESSION_SECRET.length < 32) throw new Error("SESSION_SECRET must be at least 32 characters");
 
-export const SESSION_MAX_AGE = 7 * 24 * 60 * 60; // seconds
+export const SESSION_MAX_AGE = 12 * 60 * 60; // seconds
 
-export async function verifyPassword(password: string): Promise<boolean> {
-  return timingSafeEqual(await scryptKey(password, salt), hash);
+// One scrypt at a time: each takes 16 MiB, and a few in parallel would push the
+// API past its container memory limit (an OOM restart also resets the login
+// rate limit). ponytail: global queue, ~50 ms per login; fine for one owner.
+let queue: Promise<unknown> = Promise.resolve();
+export function verifyPassword(password: string): Promise<boolean> {
+  const key = queue.then(() => scryptKey(password, salt));
+  queue = key.catch(() => {});
+  return key.then((k) => timingSafeEqual(k, hash));
 }
 
+/** Rate-limit key: the IPv4 address, or the /64 of an IPv6 one (one subscriber's block). */
+export function rateKey(ip: string): string {
+  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(ip)?.[1];
+  if (mapped) return mapped;
+  if (isIP(ip) !== 6) return ip;
+  const [head = "", tail = ""] = ip.toLowerCase().split("::");
+  const left = head ? head.split(":") : [];
+  const right = ip.includes("::") ? (tail ? tail.split(":") : []) : [];
+  const groups = [...left, ...Array(8 - left.length - right.length).fill("0"), ...right];
+  return `${groups.slice(0, 4).map((g) => g.replace(/^0+(?=.)/, "")).join(":")}::/64`;
+}
+
+// The password hash keys the HMAC too, so a new password signs out every session.
+const SESSION_KEY = `${SESSION_SECRET}:${OWNER_PASSWORD_HASH}`;
 const sign = (payload: string) =>
-  createHmac("sha256", SESSION_SECRET).update(payload).digest("base64url");
+  createHmac("sha256", SESSION_KEY).update(payload).digest("base64url");
 
 /** Cookie value: base64url(JSON {u, exp}) "." base64url(HMAC-SHA256). exp in ms. */
 export function signSession(user: string, now = Date.now()): string {

@@ -88,6 +88,8 @@ export interface Process {
   pid: Pid;
   parentPid: Pid;
   privileged: boolean;
+  /** Runs code from the VFS (a user-* realm), or descends from one: no api.fetch. */
+  untrusted: boolean;
   path: string;
   args: string[];
   status: ProcessStatus;
@@ -149,6 +151,7 @@ export interface ProcessInit {
   cwd: string;
   env: Record<string, string>;
   privileged: boolean;
+  untrusted?: boolean;
   uid: number;
   euid: number;
   gid: number;

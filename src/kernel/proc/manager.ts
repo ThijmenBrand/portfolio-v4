@@ -57,6 +57,7 @@ export class ProcessManager implements ProcessManagerInterface {
       pid,
       parentPid: init.parentPid,
       privileged: init.privileged,
+      untrusted: init.untrusted ?? false,
       args: init.args,
       path: init.path,
       status: "loading",

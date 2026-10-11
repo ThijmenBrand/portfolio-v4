@@ -202,6 +202,10 @@ async function makeHome(os: AppInterface, user: User, mode: number): Promise<voi
 /**
  * First boot: root (password "root") and guest (no password). Shadow is
  * root-only; homes belong to their users. Runs as root (login).
+ *
+ * The well-known root password is deliberate (visitors can play with su).
+ * Root may call the API, so the owner's backend cookie is the real gate:
+ * Login never starts another session while it may still be live.
  */
 export async function seedUsers(os: AppInterface): Promise<void> {
   const exists = await os.fs.stat(PASSWD).then(() => true, () => false);
