@@ -106,6 +106,10 @@ export function buildAppInterface(client: WireClient, pid: Pid): AppInterface {
       fetch: (path, request) => call("api.fetch", path, request),
     },
 
+    net: {
+      fetch: (url, request) => call("net.fetch", url, request),
+    },
+
     dialog: {
       open: (options) => call("dialog.open", options),
     },

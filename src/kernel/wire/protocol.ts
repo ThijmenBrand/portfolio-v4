@@ -151,6 +151,7 @@ export const WIRE_CALLS = {
   "shell.download": "download",
 
   "api.fetch": "apiFetch",
+  "net.fetch": "netFetch",
 
   "dialog.open": "openDialog",
 } as const satisfies Record<WirePath, keyof SyscallTable | null>;

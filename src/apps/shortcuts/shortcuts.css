@@ -45,6 +45,11 @@ body {
   text-shadow: none;
 }
 
+/* The real favicon, when the network brought one (owner only). */
+.mono.has-icon { background: #fff; text-shadow: none; }
+.mono.has-icon .mono-letter { display: none; }
+.mono-icon { width: 60%; height: 60%; object-fit: contain; }
+
 .mono-sm { width: 22px; height: 22px; border-radius: 6px; font-size: 11px; }
 
 /* Keycap on the icon's corner: the number that opens it. */

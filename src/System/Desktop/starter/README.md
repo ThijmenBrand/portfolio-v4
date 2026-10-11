@@ -37,6 +37,9 @@ import { h, mount } from "os:ui";    // the OS's UI helpers
 
 - npm packages and `fetch` aren't available. Apps are sandboxed and talk
   only to the OS.
+- For the internet, ask the OS: `await os.net.fetch("https://…")` returns
+  `{ status, contentType, body }` (body is bytes). https only, owner only
+  (others get EPERM).
 - Import cycles aren't supported.
 
 ## Look native

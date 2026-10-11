@@ -24,6 +24,7 @@ import type {
   WindowOptions,
 } from "../windows/types";
 import type { ApiRequest, ApiResponse } from "./api-fetch";
+import type { NetRequest, NetResponse } from "./net";
 import type { Ids, SpawnOptions } from "./process";
 import type { SyscallTable } from "./table";
 import type { WindowHandleCommands } from "./window";
@@ -81,6 +82,9 @@ export interface AppInterface {
   };
   api: {
     fetch(path: string, request?: ApiRequest): Promise<ApiResponse>;
+  };
+  net: {
+    fetch(url: string, request?: NetRequest): Promise<NetResponse>;
   };
   dialog: {
     open(options: DialogOptions): Promise<string | null>;
@@ -191,6 +195,9 @@ export function bindSyscalls(target: SyscallTable, pid: Pid): SystemInterface {
     },
     api: {
       fetch: (path, request) => target.apiFetch(pid, path, request),
+    },
+    net: {
+      fetch: (url, request) => target.netFetch(pid, url, request),
     },
     dialog: {
       open: (options) => target.openDialog(pid, options),

@@ -32,6 +32,7 @@ import { eventsSyscalls } from "./events";
 import { fdSyscalls } from "./fd";
 import { shellSyscalls } from "./shell";
 import { fsSyscalls } from "./fs";
+import { netSyscalls, type NetRequest, type NetResponse } from "./net";
 import { processSyscalls, type Ids, type SpawnOptions } from "./process";
 import { timersSyscalls } from "./timers";
 import { windowSyscalls } from "./window";
@@ -141,6 +142,7 @@ export interface SyscallTable {
   getLocation(callerPid: Pid): Promise<LocationInfo>;
   download(callerPid: Pid, path: string): Promise<void>;
   apiFetch(callerPid: Pid, path: string, request?: ApiRequest): Promise<ApiResponse>;
+  netFetch(callerPid: Pid, url: string, request?: NetRequest): Promise<NetResponse>;
   openDialog(callerPid: Pid, options: DialogOptions): Promise<string | null>;
 }
 
@@ -155,6 +157,7 @@ export function createSyscallTable(ctx: KernelContext): SyscallTable {
     ...fdSyscalls(ctx),
     ...shellSyscalls(ctx),
     ...apiSyscalls(ctx),
+    ...netSyscalls(ctx),
     ...dialogSyscalls(ctx),
   });
 }

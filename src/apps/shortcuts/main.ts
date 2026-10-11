@@ -56,7 +56,17 @@ async function load(): Promise<Shortcut[]> {
     // Someone may have edited the file by hand: keep only entries that still open.
     return list.flatMap((item: Partial<Shortcut>) => {
       const url = typeof item?.url === "string" ? toUrl(item.url) : null;
-      return url ? [{ name: typeof item.name === "string" && item.name.trim() ? item.name : guessName(url), url: url.href }] : [];
+      return url
+        ? [
+            {
+              name:
+                typeof item.name === "string" && item.name.trim()
+                  ? item.name
+                  : guessName(url),
+              url: url.href,
+            },
+          ]
+        : [];
     });
   } catch {
     return [];
@@ -64,10 +74,12 @@ async function load(): Promise<Shortcut[]> {
 }
 
 function save(): void {
-  os.fs.writeTextFile(file, JSON.stringify(shortcuts, null, 2) + "\n").catch((error) => {
-    console.error("[shortcuts]", error);
-    showStatus("Couldn't save. Try again.", true);
-  });
+  os.fs
+    .writeTextFile(file, JSON.stringify(shortcuts, null, 2) + "\n")
+    .catch((error) => {
+      console.error("[shortcuts]", error);
+      showStatus("Couldn't save. Try again.", true);
+    });
 }
 
 // ------------------------------------------------------------------ render --
@@ -75,7 +87,9 @@ function save(): void {
 function render(): void {
   const dial = field("dial");
   dial.replaceChildren(
-    ...shortcuts.map((shortcut, i) => (editing === i ? editorItem(i) : tileItem(shortcut, i))),
+    ...shortcuts.map((shortcut, i) =>
+      editing === i ? editorItem(i) : tileItem(shortcut, i),
+    ),
     editing === "new" ? editorItem("new") : addItem(),
   );
   field("empty").hidden = shortcuts.length > 0;
@@ -86,6 +100,40 @@ function paintMono(mono: HTMLElement, name: string, url: URL | null): void {
   mono.style.setProperty("--hue", String(url ? hueOf(hostOf(url)) : 250));
   mono.classList.toggle("is-blank", !url);
   mono.querySelector(".mono-letter")!.textContent = url ? initialOf(name) : "+";
+}
+
+// ponytail: only /favicon.ico, kept in memory for this run. Read <link rel=icon>
+// from the page if too many sites miss, cache to ~/.cache if refetching shows.
+const favicons = new Map<string, Promise<string | null>>();
+
+function favicon(host: string): Promise<string | null> {
+  let icon = favicons.get(host);
+  if (!icon) {
+    icon = os.net
+      .fetch(`https://${host}/favicon.ico`)
+      .then(({ status, contentType, body }) =>
+        status === 200 && contentType.startsWith("image/") && body.length
+          ? URL.createObjectURL(new Blob([body], { type: contentType }))
+          : null,
+      )
+      .catch(() => null);
+    favicons.set(host, icon);
+  }
+  return icon;
+}
+
+function showFavicon(mono: HTMLElement, url: URL): void {
+  if (url.protocol !== "https:") return;
+  void favicon(url.host).then((src) => {
+    if (!src) return;
+    const img = Object.assign(document.createElement("img"), {
+      className: "mono-icon",
+      alt: "",
+      src,
+    });
+    mono.prepend(img);
+    mono.classList.add("has-icon");
+  });
 }
 
 function tileItem(shortcut: Shortcut, i: number): HTMLLIElement {
@@ -103,6 +151,7 @@ function tileItem(shortcut: Shortcut, i: number): HTMLLIElement {
   const tile = li.querySelector<HTMLButtonElement>(".tile")!;
   const mono = li.querySelector<HTMLElement>(".mono")!;
   paintMono(mono, shortcut.name, url);
+  showFavicon(mono, url);
   if (i < 9) {
     const key = document.createElement("kbd");
     key.className = "key";
@@ -146,7 +195,9 @@ function renderSuggestions(): void {
       chip.type = "button";
       chip.className = "chip";
       chip.innerHTML = `<span class="mono mono-sm" aria-hidden="true"><span class="mono-letter"></span></span><span class="chip-name"></span>`;
-      paintMono(chip.querySelector(".mono")!, suggestion.name, new URL(suggestion.url));
+      const mono = chip.querySelector<HTMLElement>(".mono")!;
+      paintMono(mono, suggestion.name, new URL(suggestion.url));
+      showFavicon(mono, new URL(suggestion.url));
       chip.querySelector(".chip-name")!.textContent = suggestion.name;
       chip.setAttribute("aria-label", `Add ${suggestion.name}`);
       chip.addEventListener("click", () => {
@@ -176,14 +227,18 @@ function closeEditor(focus: number): void {
 
 function editorItem(target: number | "new"): HTMLLIElement {
   const template = document.querySelector<HTMLTemplateElement>("#editor")!;
-  const li = template.content.firstElementChild!.cloneNode(true) as HTMLLIElement;
+  const li = template.content.firstElementChild!.cloneNode(
+    true,
+  ) as HTMLLIElement;
   const urlInput = li.querySelector<HTMLInputElement>('[name="url"]')!;
   const nameInput = li.querySelector<HTMLInputElement>('[name="name"]')!;
   const error = li.querySelector<HTMLElement>(".editor-error")!;
   const mono = li.querySelector<HTMLElement>(".mono")!;
   const existing = target === "new" ? null : shortcuts[target];
 
-  li.querySelector('[data-action="save"]')!.textContent = existing ? "Save" : "Add";
+  li.querySelector('[data-action="save"]')!.textContent = existing
+    ? "Save"
+    : "Add";
   li.querySelector<HTMLElement>('[data-action="remove"]')!.hidden = !existing;
   if (existing) {
     urlInput.value = existing.url;
@@ -215,7 +270,10 @@ function editorItem(target: number | "new"): HTMLLIElement {
       urlInput.focus();
       return;
     }
-    const shortcut = { name: nameInput.value.trim() || guessName(url), url: url.href };
+    const shortcut = {
+      name: nameInput.value.trim() || guessName(url),
+      url: url.href,
+    };
     if (target === "new") shortcuts.push(shortcut);
     else shortcuts[target] = shortcut;
     save();
@@ -223,13 +281,20 @@ function editorItem(target: number | "new"): HTMLLIElement {
   };
 
   li.querySelector('[data-action="save"]')!.addEventListener("click", commit);
-  li.querySelector('[data-action="cancel"]')!.addEventListener("click", () => closeEditor(back));
-  li.querySelector('[data-action="remove"]')!.addEventListener("click", () => remove(back));
+  li.querySelector('[data-action="cancel"]')!.addEventListener("click", () =>
+    closeEditor(back),
+  );
+  li.querySelector('[data-action="remove"]')!.addEventListener("click", () =>
+    remove(back),
+  );
   // ponytail: no <form> submit; the realm sandbox lacks allow-forms (see apps/code)
   li.addEventListener("keydown", (event) => {
     event.stopPropagation();
     if (event.key === "Escape") closeEditor(back);
-    else if (event.key === "Enter" && event.target instanceof HTMLInputElement) {
+    else if (
+      event.key === "Enter" &&
+      event.target instanceof HTMLInputElement
+    ) {
       event.preventDefault();
       commit();
     }
@@ -273,7 +338,9 @@ function move(from: number, to: number): void {
   save();
   render();
   focusTile(to);
-  showStatus(to < 9 ? `${shortcut.name} is now ${to + 1}` : `Moved ${shortcut.name}`);
+  showStatus(
+    to < 9 ? `${shortcut.name} is now ${to + 1}` : `Moved ${shortcut.name}`,
+  );
 }
 
 function bindDrag(li: HTMLLIElement, i: number): void {
@@ -285,7 +352,8 @@ function bindDrag(li: HTMLLIElement, i: number): void {
   });
   li.addEventListener("dragend", () => {
     dragFrom = null;
-    for (const el of document.querySelectorAll(".is-dragging, .is-drop")) el.classList.remove("is-dragging", "is-drop");
+    for (const el of document.querySelectorAll(".is-dragging, .is-drop"))
+      el.classList.remove("is-dragging", "is-drop");
   });
   li.addEventListener("dragover", (event) => {
     if (dragFrom === null) return;
@@ -322,24 +390,37 @@ function onDialKey(event: KeyboardEvent): void {
   const i = all.indexOf(document.activeElement as HTMLButtonElement);
   if (i < 0) return;
   const isShortcut = i < shortcuts.length;
-  const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -columns(), ArrowDown: columns() }[event.key];
+  const step = {
+    ArrowLeft: -1,
+    ArrowRight: 1,
+    ArrowUp: -columns(),
+    ArrowDown: columns(),
+  }[event.key];
 
   if (step !== undefined && event.altKey) {
-    if (isShortcut) move(i, Math.max(0, Math.min(i + step, shortcuts.length - 1)));
+    if (isShortcut)
+      move(i, Math.max(0, Math.min(i + step, shortcuts.length - 1)));
   } else if (step !== undefined) {
     const next = i + step;
     if (next >= 0 && next < all.length) focusTile(next);
   } else if (event.key === "Home") focusTile(0);
   else if (event.key === "End") focusTile(all.length - 1);
   else if (isShortcut && (event.key === "e" || event.key === "F2")) edit(i);
-  else if (isShortcut && (event.key === "Delete" || event.key === "Backspace")) remove(i);
+  else if (isShortcut && (event.key === "Delete" || event.key === "Backspace"))
+    remove(i);
   else return;
   event.preventDefault();
 }
 
 function onGlobalKey(event: KeyboardEvent): void {
   if (event.target instanceof HTMLInputElement) return;
-  if (event.altKey || event.ctrlKey || event.metaKey || !/^[1-9]$/.test(event.key)) return;
+  if (
+    event.altKey ||
+    event.ctrlKey ||
+    event.metaKey ||
+    !/^[1-9]$/.test(event.key)
+  )
+    return;
   const i = Number(event.key) - 1;
   if (!shortcuts[i] || editing !== null) return;
   event.preventDefault();
@@ -353,7 +434,9 @@ let statusTimer: ReturnType<typeof setTimeout> | undefined;
 
 function showStatus(text: string, isError = false, undo?: () => void): void {
   const status = field("status");
-  const undoButton = status.querySelector<HTMLButtonElement>('[data-action="undo"]')!;
+  const undoButton = status.querySelector<HTMLButtonElement>(
+    '[data-action="undo"]',
+  )!;
   field("status-text").textContent = text;
   status.classList.toggle("is-error", isError);
   status.classList.add("is-shown");
@@ -367,10 +450,13 @@ function showStatus(text: string, isError = false, undo?: () => void): void {
       }
     : null;
   clearTimeout(statusTimer);
-  statusTimer = setTimeout(() => {
-    status.classList.remove("is-shown");
-    undoButton.hidden = true;
-  }, undo ? 6000 : isError ? 4000 : 1600);
+  statusTimer = setTimeout(
+    () => {
+      status.classList.remove("is-shown");
+      undoButton.hidden = true;
+    },
+    undo ? 6000 : isError ? 4000 : 1600,
+  );
 }
 
 function field(name: string): HTMLElement {

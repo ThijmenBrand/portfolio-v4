@@ -1,5 +1,5 @@
 // What a shortcut's address means: parsing what people type, and the name,
-// letter and colour that stand in for the site's favicon (the CSP blocks those).
+// letter and colour that stand in for the site's favicon until (or unless) it loads.
 
 /**
  * "github.com" -> https://github.com/. Only what openExternal accepts:
