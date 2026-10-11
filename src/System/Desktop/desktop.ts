@@ -12,6 +12,7 @@ import {
   loadAutostart,
   loadIconLayout,
   loadPathList,
+  LIVE_WALLPAPERS,
   loadSettings,
   saveIconLayout,
   wallpaperCSS,
@@ -311,7 +312,9 @@ class Desktop implements DesktopCommands {
 
   public async applySettings(): Promise<void> {
     const settings = await loadSettings(this.os);
-    this.surface.style.background = await wallpaperCSS(this.os, settings);
+    this.surface.style.background = LIVE_WALLPAPERS.has(settings.wallpaper)
+      ? "transparent"
+      : await wallpaperCSS(this.os, settings);
     applyAccent(settings, this.root.ownerDocument);
 
     // Keep each icon on its cell while the cells change size.

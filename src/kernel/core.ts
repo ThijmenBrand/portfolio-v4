@@ -142,7 +142,7 @@ export function createKernel(screen: HTMLElement): {
       // ~/.config/autostart. One path per line, started in order.
       await fs.writeFile(
         "/etc/autostart",
-        new TextEncoder().encode("/System/Taskbar\n/System/launcher\n"),
+        new TextEncoder().encode("/System/wallpaper\n/System/Taskbar\n/System/launcher\n"),
       );
       await os.process.spawn("/System/login");
     },

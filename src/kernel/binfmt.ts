@@ -118,6 +118,10 @@ const files: Record<string, FileEntry> = {
     load: () => import("../System/Taskbar/main"),
     privileged: true,
   },
+  "/System/wallpaper": {
+    load: () => import("../System/Wallpaper/main"),
+    privileged: true,
+  },
 };
 
 export const paths = Object.keys(files);
