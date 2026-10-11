@@ -13,17 +13,18 @@ import {
   clockFormat,
   CUSTOM_WALLPAPER,
   hasCustomWallpaper,
-  loadAutostart,
+  loadPathList,
   loadSettings,
   saveCustomWallpaper,
-  setAutostart,
+  setInPathList,
+  type PathList,
   saveSettings,
   wallpaperCSS,
   WALLPAPERS,
   type Settings,
 } from "../../utils/settings";
 import { defaultAppFor, FILE_APPS, FILE_TYPES } from "../../utils/filetypes";
-import { registry } from "../registry";
+import { allApps, registry } from "../registry";
 import settingsHTML from "./settings.html?raw";
 import "../../ui/theme.css";
 import "./settings.css";
@@ -50,16 +51,17 @@ export async function main(os: AppInterface, args: string[] = []): Promise<void>
   setUpTabs(args[0]);
   bindOpenWith(settings);
   await bindForm(os, settings);
-  await bindStartup(os);
+  await bindPathList(os, "autostart", "startup");
+  await bindPathList(os, "taskbar", "pins");
   await showAccount(os);
 }
 
-/** One switch per app, each adding or removing it in ~/.config/autostart. */
-async function bindStartup(os: AppInterface): Promise<void> {
+/** One switch per app, each adding or removing it in ~/.config/<list> (autostart, taskbar pins). */
+async function bindPathList(os: AppInterface, list: PathList, field: string): Promise<void> {
   const { gid } = await os.process.ids();
-  const enabled = new Set(await loadAutostart(os));
-  const [group] = fields("startup");
-  for (const app of registry.filter((app) => !app.admin || gid === ADMIN_GID)) {
+  const enabled = new Set(await loadPathList(os, list));
+  const [group] = fields(field);
+  for (const app of (await allApps(os)).filter((app) => !app.admin || gid === ADMIN_GID)) {
     const row = document.createElement("label");
     row.className = "row";
     row.innerHTML = `<span class="row-label"></span><input type="checkbox" role="switch" />`;
@@ -69,14 +71,16 @@ async function bindStartup(os: AppInterface): Promise<void> {
     input.addEventListener("change", (event) => {
       // Not a settings.json field: keep the form's change handler out of it.
       event.stopPropagation();
-      void setAutostart(os, app.exec, input.checked).then(
-        () => showStatus("Saved"),
-        (error) => {
-          console.error("[settings]", error);
-          input.checked = !input.checked;
-          showStatus("Couldn't save. Try again.", true);
-        },
-      );
+      void setInPathList(os, list, app.exec, input.checked)
+        .then(() => reload(os))
+        .then(
+          () => showStatus("Saved"),
+          (error) => {
+            console.error("[settings]", error);
+            input.checked = !input.checked;
+            showStatus("Couldn't save. Try again.", true);
+          },
+        );
     });
     group.append(row);
   }
@@ -212,6 +216,9 @@ async function bindForm(os: AppInterface, settings: Settings): Promise<void> {
   radio("avatar").value = settings.avatar;
   radio("dateFormat").value = settings.dateFormat;
   radio("iconSize").value = settings.iconSize;
+  radio("dockAlign").value = settings.dockAlign;
+  radio("dockHide").value = settings.dockHide;
+  radio("dockSize").value = settings.dockSize;
   check("clock24h").checked = settings.clock24h;
   check("clockSeconds").checked = settings.clockSeconds;
   check("animateMinimize").checked = settings.animateMinimize;
@@ -230,6 +237,9 @@ async function bindForm(os: AppInterface, settings: Settings): Promise<void> {
     settings.avatar = radio("avatar").value;
     settings.dateFormat = radio("dateFormat").value as Settings["dateFormat"];
     settings.iconSize = radio("iconSize").value as Settings["iconSize"];
+    settings.dockAlign = radio("dockAlign").value as Settings["dockAlign"];
+    settings.dockHide = radio("dockHide").value as Settings["dockHide"];
+    settings.dockSize = radio("dockSize").value as Settings["dockSize"];
     settings.clock24h = check("clock24h").checked;
     settings.clockSeconds = check("clockSeconds").checked;
     settings.animateMinimize = check("animateMinimize").checked;
@@ -336,6 +346,10 @@ function showStatus(text: string, isError = false): void {
 
 async function apply(os: AppInterface, settings: Settings): Promise<void> {
   await saveSettings(os, settings);
+  await reload(os);
+}
+
+async function reload(os: AppInterface): Promise<void> {
   const { uid } = await os.process.ids();
   for (const proc of await os.process.list()) {
     if (proc.uid === uid && proc.status === "running" && RELOAD_ON_HUP.includes(proc.path)) {

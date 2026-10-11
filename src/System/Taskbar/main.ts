@@ -17,6 +17,7 @@ import {
   loadPathList,
   loadSettings,
   setInPathList,
+  type Settings,
 } from "../../utils/settings";
 import { shortcutsTo } from "../../utils/filetypes";
 import { confirmDialog } from "../../utils/confirm";
@@ -60,6 +61,7 @@ class Taskbar {
   private focusedPid: Pid | null = null;
   private clockTimer: ReturnType<typeof setInterval> | undefined;
   private animateMinimize = true;
+  private strut: { id: number; size: number } | undefined;
 
   /** Exec paths pinned to the dock: ~/.config/taskbar, which this process owns. */
   private pins: string[] = [];
@@ -93,7 +95,6 @@ class Taskbar {
 
   /** Everything that needs a syscall, so the constructor can stay sync. */
   public async start(): Promise<void> {
-    await this.os.display.reserveStrut("bottom", this.bar.offsetHeight || 48);
     await this.startTopbar();
 
     this.gid = (await this.os.process.ids()).gid;
@@ -131,6 +132,7 @@ class Taskbar {
     const initial = await loadSettings(this.os);
     let format = clockFormat(initial);
     this.animateMinimize = initial.animateMinimize;
+    await this.applyDock(initial);
     const tick = (): void => {
       const now = new Date();
       clock.textContent = format.format(now);
@@ -147,6 +149,7 @@ class Taskbar {
           tick();
           this.animateMinimize = settings.animateMinimize;
           for (const pid of this.groups.keys()) this.renderGroup(pid);
+          return Promise.all([this.applyDock(settings), this.loadPins()]);
         })
         .catch(logError);
     });
@@ -166,6 +169,20 @@ class Taskbar {
     logout.addEventListener("click", () => {
       void this.signalDesktop("SIGTERM").catch(logError);
     });
+  }
+
+  /** Alignment and auto-hide are CSS (data-align, data-hide); the strut follows auto-hide. */
+  private async applyDock(settings: Settings): Promise<void> {
+    this.bar.dataset.align = settings.dockAlign;
+    this.bar.dataset.hide = settings.dockHide;
+    this.bar.dataset.size = settings.dockSize;
+    // ponytail: phones never hide the dock (taskbar.css), but "always" still drops the strut there
+    const size = settings.dockHide === "always" ? 0 : this.bar.offsetHeight || 64;
+    if (size === (this.strut?.size ?? 0)) return;
+    if (this.strut) await this.os.display.releaseStrut(this.strut.id);
+    this.strut = size
+      ? { id: await this.os.display.reserveStrut("bottom", size), size }
+      : undefined;
   }
 
   /** Our parent is the desktop: it started us from its autostart. */

@@ -58,6 +58,11 @@ export interface Settings {
   iconSize: keyof typeof ICON_SCALES;
   /** Minimized windows fly into their taskbar button instead of vanishing. */
   animateMinimize: boolean;
+  /** Where the dock sits along the bottom edge. */
+  dockAlign: "center" | "left";
+  /** When the dock slides out of view; "always" also gives its strip back to windows. */
+  dockHide: "maximized" | "always" | "never";
+  dockSize: keyof typeof ICON_SCALES;
   /** "" shows the name's initial; else an AVATARS key or CUSTOM_AVATAR. */
   avatar: string;
   /** Extension -> program path, overriding filetypes' built-in default app. */
@@ -72,6 +77,9 @@ export const DEFAULTS: Settings = {
   dateFormat: "weekday",
   iconSize: "medium",
   animateMinimize: true,
+  dockAlign: "center",
+  dockHide: "maximized",
+  dockSize: "medium",
   avatar: "",
   openWith: {},
 };
@@ -185,8 +193,6 @@ export async function setInPathList(os: AppInterface, name: PathList, path: stri
 }
 
 export const loadAutostart = (os: AppInterface): Promise<string[]> => loadPathList(os, "autostart");
-export const setAutostart = (os: AppInterface, path: string, enabled: boolean): Promise<void> =>
-  setInPathList(os, "autostart", path, enabled);
 
 /** Desktop icon cells by file name in ~/Desktop, saved by the desktop after the user moves icons. */
 export type IconLayout = Record<string, { column: number; row: number }>;
