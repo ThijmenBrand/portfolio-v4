@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>user worker host</title>
+  </head>
+  <body>
+    <!--
+      worker-host.html for user CLI programs (#!/ProgramFiles/node): same
+      opaque-origin sandbox, but its CSP adds blob: so the worker can import
+      code from the VFS (src/runtime/jsload.ts).
+    -->
+    <script type="module" src="/src/runtime/user-worker-host.ts"></script>
+  </body>
+</html>

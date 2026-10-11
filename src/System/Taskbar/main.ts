@@ -10,7 +10,7 @@ import {
   htmlStringToTemplate,
   selectElementFromTemplate,
 } from "../../utils/html";
-import { registry, type AppEntry } from "../../apps/registry";
+import { allApps, registry, type AppEntry } from "../../apps/registry";
 import { ADMIN_GID } from "../../kernel/fs/perm";
 import {
   clockFormat,
@@ -62,6 +62,9 @@ class Taskbar {
 
   /** Exec paths pinned to the dock: ~/.config/taskbar, which this process owns. */
   private pins: string[] = [];
+  /** Built-in and installed apps; re-read whenever the app menu opens. */
+  private apps: AppEntry[] = registry;
+  private gid = -1;
   private readonly pinButtons = new Map<string, HTMLElement>();
 
   constructor(os: SystemInterface, root: HTMLElement) {
@@ -92,11 +95,9 @@ class Taskbar {
     await this.os.display.reserveStrut("bottom", this.bar.offsetHeight || 48);
     await this.startTopbar();
 
-    // Cosmetic, like the desktop: exec of an admin app fails anyway (EACCES).
-    const { gid } = await this.os.process.ids();
-    this.startAppMenu(
-      registry.filter((app) => !app.admin || gid === ADMIN_GID),
-    );
+    this.gid = (await this.os.process.ids()).gid;
+    this.apps = await allApps(this.os);
+    this.startAppMenu();
     await this.loadPins();
 
     await this.seed();
@@ -175,12 +176,22 @@ class Taskbar {
 
   // --------------------------------------------------------------- app menu
 
-  private startAppMenu(apps: AppEntry[]): void {
+  private startAppMenu(): void {
     const menu = this.require("#app-menu");
     const search = this.require<HTMLInputElement>("#app-menu-search");
     const tileMenu = this.require("#tile-menu");
 
-    const tiles = apps.map((entry) => {
+    // Cosmetic, like the desktop: exec of an admin app fails anyway (EACCES).
+    const render = () => {
+      tiles = this.apps
+        .filter((app) => !app.admin || this.gid === ADMIN_GID)
+        .map(tileFor);
+      this.require("#app-menu-grid").replaceChildren(
+        ...tiles.map(({ tile }) => tile),
+      );
+    };
+
+    const tileFor = (entry: AppEntry) => {
       const tile = htmlStringToTemplate(appTileHtml);
       const icon = selectElementFromTemplate<HTMLImageElement>(
         tile,
@@ -201,10 +212,9 @@ class Taskbar {
           .catch(logError);
       });
       return { entry, tile };
-    });
-    this.require("#app-menu-grid").replaceChildren(
-      ...tiles.map(({ tile }) => tile),
-    );
+    };
+    let tiles: { entry: AppEntry; tile: HTMLElement }[] = [];
+    render();
 
     search.addEventListener("input", () => {
       const query = search.value.trim().toLowerCase();
@@ -232,8 +242,15 @@ class Taskbar {
     menu.addEventListener("toggle", (event) => {
       if ((event as ToggleEvent).newState !== "open") return;
       search.value = "";
-      search.dispatchEvent(new Event("input"));
       search.focus();
+      // Pick up apps installed since (bundle --install).
+      void allApps(this.os)
+        .then((apps) => {
+          this.apps = apps;
+          render();
+          search.dispatchEvent(new Event("input"));
+        })
+        .catch(logError);
     });
   }
 
@@ -298,7 +315,7 @@ class Taskbar {
     this.pinButtons.clear();
     this.pinList.replaceChildren(
       ...this.pins.flatMap((exec) => {
-        const entry = registry.find((app) => app.exec === exec);
+        const entry = this.apps.find((app) => app.exec === exec);
         if (!entry) return [];
 
         const button = htmlStringToTemplate(taskbarButtonHtml);
@@ -479,7 +496,7 @@ class Taskbar {
     button.addEventListener("contextmenu", (event) => {
       event.preventDefault();
       const path = this.groups.get(pid)?.path ?? "";
-      if (!registry.some((app) => app.exec === path)) return;
+      if (!this.apps.some((app) => app.exec === path)) return;
       this.showMenu(this.require("#task-menu"), event, [this.pinItem(path)]);
     });
     this.taskList.appendChild(button);
@@ -491,7 +508,7 @@ class Taskbar {
     const group = this.groups.get(pid);
     if (!group) return;
 
-    const entry = registry.find((app) => app.exec === group.path);
+    const entry = this.apps.find((app) => app.exec === group.path);
     const name = entry?.name ?? group.path.split("/").pop() ?? `pid ${pid}`;
     const windows = [...group.windows.values()];
 

@@ -1,6 +1,7 @@
 import {
   eacces,
   ebusy,
+  eexist,
   efbig,
   eintr,
   einval,
@@ -180,7 +181,13 @@ export class VFS {
 
   public async mkdir(path: string, cred: Cred = ROOT): Promise<void> {
     const normalized = normalize(path);
+    // Existing (a mount point like /home included): EEXIST before any
+    // permission check, like POSIX, so `mkdir -p /home/me/x` walks past
+    // /home and /home/me instead of failing with EBUSY / EACCES.
+    const at = findMount(this.mounts, normalized);
+    if (relativeSegments(at, normalized).length === 0) throw eexist(normalized);
     const { mount, parent, name } = await this.resolveParent(normalized);
+    if (await mount.driver.lookup(parent, name)) throw eexist(normalized);
     this.assertWritable(mount, normalized);
     this.assertCanModifyParent(normalized, cred);
 

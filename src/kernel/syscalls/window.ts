@@ -51,6 +51,12 @@ export function windowSyscalls(
       if (options?.title) {
         ctx.windows.setTitle(proc.surface.windowId, String(options.title));
       }
+      // The window was sized at exec, from binfmt; a generic host (jsapp)
+      // only learns the program's size here.
+      const { width, height } = options ?? {};
+      if (Number.isFinite(width) && Number.isFinite(height)) {
+        ctx.windows.resizeTo(proc.surface.windowId, width!, height!);
+      }
       return proc.surface.windowId;
     }),
     listWindows: async (pid: Pid) => {

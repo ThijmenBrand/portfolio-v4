@@ -99,6 +99,7 @@ export function buildAppInterface(client: WireClient, pid: Pid): AppInterface {
     shell: {
       openExternal: (url) => call("shell.openExternal", url),
       location: () => call("shell.location"),
+      download: (path) => call("shell.download", path),
     },
 
     api: {

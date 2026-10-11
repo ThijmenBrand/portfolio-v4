@@ -54,15 +54,20 @@ async function startScript(
   if (!interpreter || !resolve(interpreter)) throw enoexec(path);
 
   const argv = [...(arg ? [arg] : []), script, ...args];
-  return startProcess(ctx, interpreter, argv, options, parentPid);
+  return startProcess(ctx, interpreter, argv, options, parentPid, script);
 }
 
+/**
+ * `shownAs`: a script's process goes by the script's path (ps, the taskbar,
+ * pins), not its interpreter's; argv still starts with the script.
+ */
 async function startProcess(
   ctx: KernelContext,
   path: string,
   args: string[],
   options: SpawnOptions,
   parentPid: Pid,
+  shownAs = path,
 ): Promise<Pid> {
   const file = resolve(path);
   if (!file) {
@@ -82,7 +87,7 @@ async function startProcess(
   const process = ctx.processes.allocate({
     parentPid,
     args,
-    path,
+    path: shownAs,
     privileged: file.privileged === true,
     cwd: parent?.cwd ?? "/",
     env: { ...parent.env, ...options?.env },

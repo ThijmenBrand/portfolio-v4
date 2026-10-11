@@ -7,14 +7,21 @@ import type { WindowOptions } from "./windows/types";
  */
 type Flags = { privileged?: boolean; setuid?: boolean; admin?: boolean };
 
+/**
+ * Which realm host page a worker/iframe boots in. "user" hosts may run code
+ * from the VFS (blob: modules); only the JS interpreters below use them.
+ */
+export type Host = "system" | "user";
+
 export type FileEntry = Flags &
   (
     | { format?: "module"; load: Executable }
-    | { format: "worker"; entry: string }
+    | { format: "worker"; entry: string; host?: Host }
     | {
         format: "iframe";
         entry: string;
         window: WindowOptions;
+        host?: Host;
       }
     | { format: "web"; url: string; window: WindowOptions }
   );
@@ -72,6 +79,16 @@ const files: Record<string, FileEntry> = {
           },
     ]),
   ),
+
+  // Interpreters for JS programs in the VFS: `#!/ProgramFiles/jsapp` (GUI)
+  // and `#!/ProgramFiles/node` (CLI). See src/runtime/jsload.ts.
+  "/ProgramFiles/jsapp": {
+    format: "iframe",
+    host: "user",
+    entry: "runtime/jsapp",
+    window: { title: "App", width: 640, height: 480, minWidth: 240, minHeight: 160 },
+  },
+  "/ProgramFiles/node": { format: "worker", host: "user", entry: "runtime/jsrun" },
 
   "/System/launcher": { format: "worker", entry: "System/Launcher/main" },
 

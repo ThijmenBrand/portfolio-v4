@@ -45,3 +45,20 @@ export async function runApp(
     client.fault(message, code);
   }
 }
+
+/**
+ * A worker realm's boot: re-delivered by the worker's bootstrap
+ * (src/runtime/worker-frame.ts) once the entry module has loaded, carrying
+ * the kernel port.
+ */
+export function bootWorker(apps: AppLoaders): void {
+  self.onmessage = (event: MessageEvent) => {
+    self.onmessage = null; // boot exactly once
+    const port = event.ports[0];
+    if (!port || !isBoot(event.data, port)) {
+      self.close(); // not from our kernel, or a version mismatch
+      return;
+    }
+    void runApp(event.data, port, apps);
+  };
+}

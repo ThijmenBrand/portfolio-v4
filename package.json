@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc && tsc -p server && vite build",
     "dev:api": "node --watch --env-file=.env server/main.ts",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "check": "node src/bin/sh/syntax.check.ts"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",

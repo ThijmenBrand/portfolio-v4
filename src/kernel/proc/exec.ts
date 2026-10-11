@@ -21,9 +21,11 @@ export async function execute(
   file: FileEntry,
 ): Promise<void> {
   try {
-    if (file.format === "worker") return executeWorker(ctx, proc, file.entry);
+    if (file.format === "worker") {
+      return executeWorker(ctx, proc, file.entry, file.host);
+    }
     if (file.format === "iframe") {
-      return executeIframe(ctx, proc, file.entry, file.window);
+      return executeIframe(ctx, proc, file.entry, file.window, file.host);
     }
     if (file.format === "web") {
       return executeWeb(ctx, proc, file.url, file.window);

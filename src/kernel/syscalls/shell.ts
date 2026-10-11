@@ -1,6 +1,7 @@
 import { einval } from "../errors";
 import type { KernelContext, LocationInfo, Pid } from "../types";
-import { alive } from "./guards";
+import { basename, resolveFrom } from "../fs/path";
+import { alive, requireAlive } from "./guards";
 import type { SyscallTable } from "./table";
 
 /** Schemes an app may ask the kernel to open. Nothing that runs code. */
@@ -19,7 +20,7 @@ const ALLOWED = new Set(["https:", "mailto:"]);
  */
 export function shellSyscalls(
   ctx: KernelContext,
-): Pick<SyscallTable, "openExternal" | "getLocation"> {
+): Pick<SyscallTable, "openExternal" | "getLocation" | "download"> {
   return {
     /**
      * Read-only: a copy of the page URL, so programs can react to links like
@@ -42,6 +43,26 @@ export function shellSyscalls(
       }
       // noopener: the new tab gets no handle back to the kernel's window.
       window.open(target.href, "_blank", "noopener,noreferrer");
+    }),
+    /**
+     * Hand a VFS file to the browser as a download. Realms can't (their
+     * sandbox has no allow-downloads), so the kernel's page does it, with
+     * the caller's own read permission. Bytes only: the type is fixed to
+     * octet-stream, so nothing is ever rendered on our origin.
+     */
+    download: alive(ctx, async (pid: Pid, path: string) => {
+      const proc = requireAlive(ctx, pid);
+      const file = resolveFrom(proc.cwd, String(path));
+      const bytes = await ctx.fs.readFile(file, proc.abortController.signal, proc);
+      const url = URL.createObjectURL(
+        new Blob([bytes as BlobPart], { type: "application/octet-stream" }),
+      );
+      const link = Object.assign(document.createElement("a"), {
+        href: url,
+        download: basename(file),
+      });
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
     }),
   };
 }

@@ -1,4 +1,5 @@
-import { registry } from "../../apps/registry";
+import { allApps, registry } from "../../apps/registry";
+import { isAppFile } from "../../utils/appfile";
 import { dirname } from "../../kernel/fs/path";
 import { kernelError, logError } from "../../kernel/errors";
 import type { SystemInterface } from "../../kernel/syscalls/api";
@@ -67,6 +68,7 @@ export async function main(os: SystemInterface): Promise<void> {
   await os.process.chdir(home).catch(() => os.process.chdir("/"));
   // Created as the user, so they own them. Deleted ones come back next login, like XDG.
   for (const dir of USER_DIRS) await os.fs.mkdir(`${home}/${dir}`).catch(() => {});
+  await seedProjects(os, `${home}/Projects`).catch(logError);
   const folder = `${home}/Desktop`;
   await createDesktopFolder(os, folder);
 
@@ -102,6 +104,30 @@ async function createDesktopFolder(os: SystemInterface, folder: string): Promise
   for (const exec of await loadPathList(os, "desktop")) {
     const app = registry.find((entry) => entry.exec === exec);
     if (app) await os.fs.writeTextFile(`${folder}/${app.name}.app`, `${exec}\n`).catch(logError);
+  }
+}
+
+/** The sample app (./starter), as text: what a new ~/Projects starts with. */
+const STARTER = import.meta.glob<string>("./starter/*", {
+  query: "?raw",
+  import: "default",
+  eager: true,
+});
+
+/**
+ * First login: ~/Projects/notes, a small app to learn from and build on
+ * (README.md explains running, the os API, and `bundle`). Only when
+ * ~/Projects is new, so an edited or deleted copy is left alone.
+ */
+async function seedProjects(os: SystemInterface, folder: string): Promise<void> {
+  try {
+    await os.fs.mkdir(folder);
+  } catch {
+    return;
+  }
+  await os.fs.mkdir(`${folder}/notes`);
+  for (const [key, text] of Object.entries(STARTER)) {
+    await os.fs.writeTextFile(`${folder}/notes/${key.slice(key.lastIndexOf("/") + 1)}`, text);
   }
 }
 
@@ -340,6 +366,7 @@ class Desktop implements DesktopCommands {
     for (const icon of [...this.icons]) {
       if (!names.has(icon.item.name)) this.removeIcon(icon);
     }
+    const apps = await allApps(this.os);
     for (const entry of entries) {
       if (this.icons.some((icon) => icon.item.name === entry.name)) continue;
       const path = `${this.folder}/${entry.name}`;
@@ -352,7 +379,7 @@ class Desktop implements DesktopCommands {
         directory,
         label: exec ? entry.name.slice(0, -".app".length) : entry.name,
         image: exec
-          ? (registry.find((app) => app.exec === exec)?.icon ?? "/assets/icons/default-app.svg")
+          ? (apps.find((app) => app.exec === exec)?.icon ?? "/assets/icons/default-app.svg")
           : undefined,
         svg: directory ? FOLDER_SVG : FILE_SVG,
       });
@@ -543,6 +570,8 @@ class Desktop implements DesktopCommands {
       await this.os.process.spawn(item.exec);
     } else if (item.directory) {
       await this.os.process.spawn("/ProgramFiles/files", [item.path]);
+    } else if (isAppFile(item.path)) {
+      await this.os.process.spawn(item.path); // a one-file app runs itself
     } else {
       const { openWith } = await loadSettings(this.os);
       await this.os.process.spawn(defaultAppFor(item.path, openWith), [item.path]);

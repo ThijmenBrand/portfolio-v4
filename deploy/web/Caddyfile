@@ -44,17 +44,17 @@
 	}
 
 	# --- CSP ---------------------------------------------------------------
-	# The realm host pages (app-host / worker-host) ship their own, stricter
+	# The realm host pages ([user-]app-host / [user-]worker-host) ship their own, stricter
 	# CSP as a <meta> tag (vite.config.ts). A header CSP would be enforced IN
 	# ADDITION to it, so they only get what a <meta> can't express:
 	# frame-ancestors — only the kernel page on this origin may frame them.
-	@realm path /app-host.html /worker-host.html
+	@realm path /app-host.html /worker-host.html /user-app-host.html /user-worker-host.html
 	header @realm Content-Security-Policy "frame-ancestors 'self'"
 
 	# Everything else, i.e. the kernel page (index.html). It runs the window
 	# manager and frames the realm hosts; it loads no third-party code and
 	# talks to no server.
-	@kernel not path /app-host.html /worker-host.html
+	@kernel not path /app-host.html /worker-host.html /user-app-host.html /user-worker-host.html
 	header @kernel Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' data: blob:; connect-src 'self'; worker-src 'none'; frame-src 'self' https://finance.thijmenbrand.nl; child-src 'self' https://finance.thijmenbrand.nl; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 
 	# --- CORS --------------------------------------------------------------

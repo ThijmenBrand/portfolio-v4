@@ -28,7 +28,7 @@ const cors = {
  * Injected as <meta> so it ships with the page on any static host.
  */
 function realmCsp(): Plugin {
-  const hosts = /(?:^|\/)(app-host|worker-host)\.html$/;
+  const hosts = /(?:^|\/)((?:user-)?(?:app|worker)-host)\.html$/;
   return {
     name: "realm-csp",
     transformIndexHtml: {
@@ -37,11 +37,14 @@ function realmCsp(): Plugin {
         const page = hosts.exec(ctx.filename)?.[1];
         if (!page) return html;
         const dev = ctx.server !== undefined;
+        // The user-* hosts run code from the VFS (src/runtime/jsload.ts),
+        // loaded as blob: modules. Only they get blob:; the rest stays 'self'.
+        const user = page.startsWith("user-");
         const policy = [
           "default-src 'none'",
-          "script-src 'self'",
-          // worker-host builds its worker from a blob: URL; app iframes get none.
-          `worker-src ${page === "worker-host" ? "data:" : "'none'"}`,
+          `script-src 'self'${user ? " blob:" : ""}`,
+          // worker hosts build their worker from a data: URL; app iframes get none.
+          `worker-src ${page.endsWith("worker-host") ? "data:" : "'none'"}`,
           // Dev only: Vite's HMR client needs its websocket + ping.
           `connect-src ${dev ? "'self' ws: wss:" : "'none'"}`,
           // Vite injects CSS as <style> in dev; app-host has an inline <style>.
@@ -83,6 +86,8 @@ export default defineConfig({
         // The pages every realm boots in (src/kernel/proc/realm.ts).
         appHost: root("app-host.html"),
         workerHost: root("worker-host.html"),
+        userAppHost: root("user-app-host.html"),
+        userWorkerHost: root("user-worker-host.html"),
       },
     },
   },

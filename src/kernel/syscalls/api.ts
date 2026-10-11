@@ -76,6 +76,8 @@ export interface AppInterface {
     openExternal(url: string): Promise<void>;
     /** Read-only copy of the page URL. Untrusted: the link's author chose it. */
     location(): Promise<LocationInfo>;
+    /** Save a file the caller can read to the user's real Downloads. */
+    download(path: string): Promise<void>;
   };
   api: {
     fetch(path: string, request?: ApiRequest): Promise<ApiResponse>;
@@ -185,6 +187,7 @@ export function bindSyscalls(target: SyscallTable, pid: Pid): SystemInterface {
     shell: {
       openExternal: (url) => target.openExternal(pid, url),
       location: () => target.getLocation(pid),
+      download: (path) => target.download(pid, path),
     },
     api: {
       fetch: (path, request) => target.apiFetch(pid, path, request),

@@ -25,8 +25,10 @@ import { markdown } from "@codemirror/lang-markdown";
 import { python } from "@codemirror/lang-python";
 
 import codeHTML from "./code.html?raw";
-import { followAccent } from "../../utils/settings";
+import { ensureConfigDir, followAccent } from "../../utils/settings";
 import { extOf, IMAGE_TYPES } from "../../utils/filetypes";
+import { copyTree, moveTree, removeTree } from "../../utils/tree";
+import { freeName } from "../files/names";
 import "../../ui/theme.css";
 import "./code.css";
 
@@ -115,6 +117,18 @@ interface Pending {
   kind: "file" | "directory";
 }
 
+/** One context-menu entry; `null` in a list is a separator. */
+interface MenuEntry {
+  label: string;
+  action: () => void;
+  disabled?: boolean;
+  danger?: boolean;
+}
+
+/** `path` is `root` or inside it. */
+const isInside = (path: string, root: string): boolean =>
+  path === root || path.startsWith(`${root}/`);
+
 const basename = (p: string): string => p.slice(p.lastIndexOf("/") + 1);
 const dirname = (p: string): string =>
   p.slice(0, Math.max(p.lastIndexOf("/"), 1));
@@ -177,6 +191,10 @@ class Editor {
   private selectedDir = "/";
   private readonly expanded = new Set<string>();
   private pending: Pending | null = null;
+  /** Path whose name is being edited inline in the tree. */
+  private renaming: string | null = null;
+  private clipboard: { path: string; cut: boolean } | null = null;
+  private readonly menu: HTMLElement;
 
   private tabs: Tab[] = [];
   private active: Tab | null = null;
@@ -244,6 +262,10 @@ class Editor {
       EditorView.updateListener.of((u) => this.onUpdate(u)),
     ];
     this.view = new EditorView({ parent: this.editorHost });
+    this.menu = el("div", "code-menu");
+    this.menu.setAttribute("role", "menu");
+    this.menu.hidden = true;
+    this.root.append(this.menu);
 
     void win.onCloseRequest(() => void this.quit());
     this.bindChrome();
@@ -252,7 +274,13 @@ class Editor {
 
   public async start(args: string[]): Promise<void> {
     const [arg] = args;
-    if (arg === undefined) return this.renderTree();
+    if (arg === undefined) {
+      const dir = await this.os.fs
+        .readTextFile(`${await ensureConfigDir(this.os)}/code-folder`)
+        .catch(() => "");
+      const ok = dir !== "" && (await this.os.fs.stat(dir).then((s) => s.kind === "directory", () => false));
+      return ok ? this.openFolder(dir) : this.renderTree();
+    }
     const path = resolve(await this.os.process.cwd(), arg);
     let isDir = false;
     try {
@@ -272,6 +300,10 @@ class Editor {
     this.pending = null;
     this.field("root-name").textContent = basename(dir) || "/";
     this.root.classList.remove("no-folder");
+    // Reopened on the next start without arguments.
+    void ensureConfigDir(this.os)
+      .then((config) => this.os.fs.writeTextFile(`${config}/code-folder`, dir))
+      .catch(() => {});
     await this.renderTree();
   }
 
@@ -359,6 +391,7 @@ class Editor {
       this.expanded.clear();
       void this.renderTree();
     });
+    this.bindMenu();
 
     // Capture phase: beats CodeMirror and the browser's own Save dialog.
     window.addEventListener(
@@ -716,6 +749,205 @@ class Editor {
     });
   }
 
+  // ---- context menu -------------------------------------------------------
+
+  private bindMenu(): void {
+    this.tree.addEventListener("contextmenu", (e) => {
+      if (this.rootDir === null) return;
+      e.preventDefault();
+      const row = (e.target as HTMLElement).closest<HTMLElement>(
+        ".code-row[data-path]",
+      );
+      const path = row?.dataset.path;
+      const isDir = row ? row.dataset.dir === "true" : true;
+      // New items and pastes land in the folder that was clicked (or holds the file).
+      const dir = path === undefined ? this.rootDir : isDir ? path : dirname(path);
+      this.selectedDir = dir;
+      this.highlight();
+      this.openMenu(e.clientX, e.clientY, [
+        { label: "New File…", action: () => void this.startCreate("file") },
+        { label: "New Folder…", action: () => void this.startCreate("directory") },
+        null,
+        ...(path === undefined
+          ? []
+          : this.itemMenu(path, row?.dataset.readonly === "true")),
+        {
+          label: "Paste",
+          action: () => void this.paste(dir),
+          disabled: !this.clipboard,
+        },
+      ]);
+    });
+    this.menu.addEventListener("keydown", (e) => {
+      const buttons = [
+        ...this.menu.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"),
+      ];
+      const at = buttons.indexOf(document.activeElement as HTMLButtonElement);
+      const next = { ArrowDown: at + 1, ArrowUp: at - 1 }[e.key];
+      if (e.key === "Escape" || e.key === "Tab") {
+        e.preventDefault();
+        this.closeMenu();
+      } else if (next !== undefined) {
+        e.preventDefault();
+        buttons[(next + buttons.length) % buttons.length]?.focus();
+      }
+    });
+    document.addEventListener("pointerdown", (e) => {
+      if (!this.menu.contains(e.target as Node)) this.closeMenu();
+    });
+    window.addEventListener("blur", () => this.closeMenu());
+  }
+
+  private itemMenu(path: string, readonly: boolean): (MenuEntry | null)[] {
+    const root = this.rootDir ?? "/";
+    const isRoot = path === root;
+    const copyText = (text: string): void =>
+      void navigator.clipboard
+        .writeText(text)
+        .catch(() => this.flash("Couldn't copy to clipboard", true));
+    return [
+      {
+        label: "Cut",
+        action: () => this.setClipboard(path, true),
+        disabled: readonly,
+      },
+      { label: "Copy", action: () => this.setClipboard(path, false) },
+      null,
+      { label: "Copy Path", action: () => copyText(path) },
+      {
+        label: "Copy Relative Path",
+        action: () =>
+          copyText(isRoot ? "." : path.slice(root === "/" ? 1 : root.length + 1)),
+      },
+      null,
+      {
+        label: "Rename…",
+        action: () => {
+          this.renaming = path;
+          void this.renderTree();
+        },
+        disabled: readonly || isRoot,
+      },
+      {
+        label: "Delete",
+        action: () => void this.remove(path),
+        disabled: readonly || isRoot,
+        danger: true,
+      },
+      null,
+    ];
+  }
+
+  private openMenu(x: number, y: number, entries: (MenuEntry | null)[]): void {
+    // Drop separators that would sit at an edge or next to another.
+    const tidy = entries.filter(
+      (entry, i) => entry || (i > 0 && i < entries.length - 1 && entries[i - 1]),
+    );
+    this.menu.replaceChildren(
+      ...tidy.map((entry) => {
+        if (!entry) return el("div", "code-menu-sep");
+        const button = el(
+          "button",
+          `code-menu-item${entry.danger ? " danger" : ""}`,
+          entry.label,
+        );
+        button.type = "button";
+        button.setAttribute("role", "menuitem");
+        button.disabled = !!entry.disabled;
+        button.addEventListener("click", () => {
+          this.closeMenu();
+          entry.action();
+        });
+        return button;
+      }),
+    );
+    this.menu.hidden = false;
+    this.menu.style.left = `${Math.min(x, innerWidth - this.menu.offsetWidth - 4)}px`;
+    this.menu.style.top = `${Math.min(y, innerHeight - this.menu.offsetHeight - 4)}px`;
+    this.menu.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
+  }
+
+  private closeMenu(): void {
+    this.menu.hidden = true;
+  }
+
+  private setClipboard(path: string, cut: boolean): void {
+    this.clipboard = { path, cut };
+    this.flash(`${cut ? "Cut" : "Copied"} ${basename(path)}`);
+    this.highlight();
+  }
+
+  private async paste(dir: string): Promise<void> {
+    const clip = this.clipboard;
+    if (!clip) return;
+    if (isInside(dir, clip.path)) {
+      return this.flash("A folder can't be pasted into itself", true);
+    }
+    if (clip.cut && dirname(clip.path) === dir) {
+      this.clipboard = null;
+      return this.renderTree();
+    }
+    try {
+      const taken = new Set((await this.os.fs.readdir(dir)).map((e) => e.name));
+      const to = join(dir, freeName(basename(clip.path), taken));
+      if (clip.cut) {
+        await moveTree(this.os, clip.path, to);
+        this.moved(clip.path, to);
+        this.clipboard = null;
+      } else {
+        await copyTree(this.os, clip.path, to);
+      }
+      if (dir !== this.rootDir) this.expanded.add(dir);
+    } catch (error) {
+      this.flash(`Couldn't paste ${basename(clip.path)} (${errorCode(error)})`, true);
+    }
+    await this.renderTree();
+  }
+
+  private async rename(path: string, name: string): Promise<void> {
+    this.renaming = null;
+    if (name === basename(path)) return this.renderTree();
+    if (name.includes("/") || name === "." || name === "..") {
+      this.flash(`"${name}" is not a valid name`, true);
+      return this.renderTree();
+    }
+    const to = join(dirname(path), name);
+    try {
+      // moveTree would happily overwrite; refuse like VS Code does.
+      if (await this.os.fs.stat(to).then(() => true, () => false))
+        throw Object.assign(new Error(), { code: "EEXIST" });
+      await moveTree(this.os, path, to);
+      this.moved(path, to);
+    } catch (error) {
+      this.flash(`Couldn't rename ${basename(path)} (${errorCode(error)})`, true);
+    }
+    await this.renderTree();
+  }
+
+  /** After a move/rename: open tabs, expanded folders and selection follow along. */
+  private moved(from: string, to: string): void {
+    const remap = (p: string): string =>
+      isInside(p, from) ? to + p.slice(from.length) : p;
+    for (const tab of this.tabs) {
+      if (!isInside(tab.path, from)) continue;
+      tab.path = remap(tab.path);
+      // Rebuilt, since its handlers close over the old path.
+      const node = this.tabEl(tab.path);
+      node.className = tab.el.className;
+      node.setAttribute("aria-selected", String(tab === this.active));
+      tab.el.replaceWith(node);
+      tab.el = node;
+      if (tab === this.active) {
+        this.renderCrumbs();
+        this.updateTitle();
+      }
+    }
+    const expanded = [...this.expanded].map(remap);
+    this.expanded.clear();
+    for (const p of expanded) this.expanded.add(p);
+    this.selectedDir = remap(this.selectedDir);
+  }
+
   // ---- explorer -----------------------------------------------------------
 
   private async renderTree(): Promise<void> {
@@ -759,6 +991,11 @@ class Editor {
       row.setAttribute("role", "treeitem");
       row.dataset.path = path;
       row.dataset.dir = String(isDir);
+      row.dataset.readonly = String(entry.readonly);
+      row.classList.toggle(
+        "cut",
+        !!this.clipboard?.cut && this.clipboard.path === path,
+      );
       row.style.paddingLeft = `${10 + depth * 12}px`;
       row.title = path;
 
@@ -770,6 +1007,14 @@ class Editor {
       } else {
         row.append(el("span", "code-chevron-spacer"), badge(path));
       }
+      if (this.renaming === path) {
+        row.classList.add("editing");
+        row.append(this.renameInput(path));
+        into.append(row);
+        if (isDir && this.expanded.has(path))
+          await this.renderDir(path, depth + 1, into);
+        continue;
+      }
       row.append(el("span", "code-row-name", entry.name));
 
       if (!entry.readonly) {
@@ -778,7 +1023,7 @@ class Editor {
         del.setAttribute("aria-label", del.title);
         del.addEventListener("click", (e) => {
           e.stopPropagation();
-          void this.remove(path, isDir);
+          void this.remove(path);
         });
         row.append(del);
       }
@@ -804,6 +1049,34 @@ class Editor {
         row.dataset.dir === "true" && path === this.selectedDir,
       );
     }
+  }
+
+  private renameInput(path: string): HTMLInputElement {
+    const input = el("input", "code-row-input");
+    input.spellcheck = false;
+    input.value = basename(path);
+    let settled = false;
+    const settle = (commit: boolean): void => {
+      if (settled) return;
+      settled = true;
+      const name = input.value.trim();
+      if (commit && name) void this.rename(path, name);
+      else {
+        this.renaming = null;
+        void this.renderTree();
+      }
+    };
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") settle(true);
+      else if (e.key === "Escape") settle(false);
+    });
+    input.addEventListener("blur", () => settle(true));
+    // Select the stem, like VS Code, so typing keeps the extension.
+    requestAnimationFrame(() => {
+      const dot = input.value.lastIndexOf(".");
+      input.setSelectionRange(0, dot > 0 ? dot : input.value.length);
+    });
+    return input;
   }
 
   private async startCreate(kind: Pending["kind"]): Promise<void> {
@@ -870,29 +1143,24 @@ class Editor {
     if (kind === "file") await this.open(path);
   }
 
-  private async remove(path: string, isDir: boolean): Promise<void> {
+  private async remove(path: string): Promise<void> {
     const choice = await this.dialog(
       `Delete '${basename(path)}'?`,
-      isDir ? "Only empty folders can be deleted." : "This can't be undone.",
+      "This can't be undone.",
       ["Delete", "Cancel"],
     );
     if (choice !== "Delete") return;
     try {
-      await (isDir ? this.os.fs.rmdir(path) : this.os.fs.unlink(path));
+      await removeTree(this.os, path);
     } catch (error) {
-      const code = errorCode(error);
-      this.flash(
-        code === "ENOTEMPTY"
-          ? "Folder is not empty"
-          : `Couldn't delete (${code})`,
-        true,
-      );
-      return;
+      this.flash(`Couldn't delete (${errorCode(error)})`, true);
     }
-    for (const tab of this.tabs.filter((t) => t.path === path))
+    // Even a failed removeTree may have deleted part of the folder.
+    for (const tab of this.tabs.filter((t) => isInside(t.path, path)))
       this.dropTab(tab);
-    if (this.selectedDir === path) this.selectedDir = dirname(path);
-    this.expanded.delete(path);
+    if (isInside(this.selectedDir, path)) this.selectedDir = dirname(path);
+    for (const p of this.expanded) if (isInside(p, path)) this.expanded.delete(p);
+    if (this.clipboard && isInside(this.clipboard.path, path)) this.clipboard = null;
     await this.renderTree();
   }
 

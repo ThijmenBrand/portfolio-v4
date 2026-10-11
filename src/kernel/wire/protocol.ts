@@ -148,6 +148,7 @@ export const WIRE_CALLS = {
 
   "shell.openExternal": "openExternal",
   "shell.location": "getLocation",
+  "shell.download": "download",
 
   "api.fetch": "apiFetch",
 

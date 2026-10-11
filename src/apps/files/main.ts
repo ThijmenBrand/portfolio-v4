@@ -6,6 +6,7 @@ import type { WindowHandle } from "../../kernel/windows/types";
 import { permits, W } from "../../kernel/fs/perm";
 import { errorCode } from "../../bin/lib/input";
 import { registry } from "../registry";
+import { isAppFile, readManifest } from "../../utils/appfile";
 import { followAccent, loadSettings } from "../../utils/settings";
 import { formatSize, freeName } from "./names";
 import { PLACES } from "../../utils/places";
@@ -275,6 +276,7 @@ function kindOf(item: Item): string {
   if (isProgram(item)) return "Program";
   const ext = extOf(item.name);
   if (ext === "app") return "Shortcut";
+  if (isAppFile(item.path)) return "Application";
   if (IMAGE_TYPES[ext]) return `${ext.toUpperCase()} image`;
   return TYPES[ext]?.[0] ?? (ext ? `${ext.toUpperCase()} file` : "Document");
 }
@@ -334,6 +336,15 @@ function iconFor(item: Item): HTMLElement {
     );
   } else if (isProgram(item)) {
     icon.innerHTML = PROGRAM_SVG;
+  } else if (isAppFile(item.path)) {
+    // Its //@app manifest, read as data; only ever an <img src>.
+    icon.innerHTML = PROGRAM_SVG;
+    void readManifest((p) => os.fs.readFile(p), item.path).then((manifest) => {
+      if (manifest?.icon)
+        icon.replaceChildren(
+          Object.assign(el("img"), { src: manifest.icon, alt: "", draggable: false }),
+        );
+    });
   } else if (ext === "app") {
     icon.innerHTML = PROGRAM_SVG;
     void readShortcut(os, item.path).then((exec) => {
@@ -640,7 +651,8 @@ async function open(item: Item): Promise<void> {
     return openTerminalHere(
       dirname(item.path) === "/ProgramFiles" ? item.name : item.path,
     );
-  const exec = await readShortcut(os, item.path);
+  // A one-file app (bundle) runs itself; a .app shortcut names what to run.
+  const exec = isAppFile(item.path) ? item.path : await readShortcut(os, item.path);
   if (exec) {
     await os.process
       .spawn(exec)
@@ -996,6 +1008,14 @@ function itemMenu(): (MenuEntry | null)[] {
       hint: "Space",
       action: () => void peek(one ?? undefined),
       disabled: !one,
+    },
+    {
+      label: "Download",
+      action: () =>
+        void (one && os.shell.download(one.path).catch((error) =>
+          toast(`Couldn't download ${one.name} (${errorCode(error)}).`, true),
+        )),
+      disabled: !one || one.kind !== "file" || isProgram(one),
     },
     null,
     {

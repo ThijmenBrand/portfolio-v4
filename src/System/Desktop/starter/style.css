@@ -1,0 +1,4 @@
+/* Buttons, inputs, .list, .toolbar… already look native (the OS's kit.css). */
+form.row { margin-bottom: 12px; }
+form.row input { flex: 1; }
+.notes li { padding-block: 4px; }

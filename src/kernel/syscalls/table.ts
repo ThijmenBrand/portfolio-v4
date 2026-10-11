@@ -139,6 +139,7 @@ export interface SyscallTable {
   setsid(callerPid: Pid): Promise<Pid>;
   openExternal(callerPid: Pid, url: string): Promise<void>;
   getLocation(callerPid: Pid): Promise<LocationInfo>;
+  download(callerPid: Pid, path: string): Promise<void>;
   apiFetch(callerPid: Pid, path: string, request?: ApiRequest): Promise<ApiResponse>;
   openDialog(callerPid: Pid, options: DialogOptions): Promise<string | null>;
 }

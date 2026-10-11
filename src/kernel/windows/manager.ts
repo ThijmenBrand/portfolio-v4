@@ -159,6 +159,12 @@ export class WindowManager implements WindowManagerInterface {
     this.WindowChrome.applyFrameToWindow(windowRecord);
   }
 
+  /** Change only the size, keeping the position (clamped like any resize). */
+  public resizeTo(windowId: WindowId, width: number, height: number): void {
+    const { frame } = this.getWindowRecord(windowId);
+    this.resizeWindow(windowId, { ...frame, width, height });
+  }
+
   public setWindowState(
     windowId: WindowId,
     state: "normal" | "maximized",

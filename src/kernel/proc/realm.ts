@@ -1,3 +1,4 @@
+import type { Host } from "../binfmt";
 import type { KernelContext, Process } from "../types";
 import type { WindowOptions } from "../windows/types";
 import { PROTOCOL_VERSION, type BootMessage } from "../wire/protocol";
@@ -44,9 +45,19 @@ function bootMessage(proc: Process, entry: string): BootMessage {
   };
 }
 
-/** Realm host pages. BASE_URL keeps them right under a sub-path deploy. */
-const APP_HOST = `${import.meta.env.BASE_URL}app-host.html`;
-const WORKER_HOST = `${import.meta.env.BASE_URL}worker-host.html`;
+/**
+ * Realm host pages. BASE_URL keeps them right under a sub-path deploy.
+ * The user-* pages differ only in CSP: they allow blob: scripts (VFS code).
+ */
+const base = import.meta.env.BASE_URL;
+const APP_HOST: Record<Host, string> = {
+  system: `${base}app-host.html`,
+  user: `${base}user-app-host.html`,
+};
+const WORKER_HOST: Record<Host, string> = {
+  system: `${base}worker-host.html`,
+  user: `${base}user-worker-host.html`,
+};
 
 /**
  * Every realm lives in a sandboxed iframe: opaque origin, so no access to the
@@ -110,8 +121,9 @@ export function executeWorker(
   ctx: KernelContext,
   proc: Process,
   entry: string,
+  host: Host = "system",
 ): void {
-  const iframe = sandboxedFrame(WORKER_HOST, `${proc.path} [${proc.pid}]`);
+  const iframe = sandboxedFrame(WORKER_HOST[host], `${proc.path} [${proc.pid}]`);
 
   // The host reports a worker that fails to load (the port is inside the
   // worker by then). Accept it only from THIS frame.
@@ -157,11 +169,12 @@ export function executeIframe(
   proc: Process,
   entry: string,
   window: WindowOptions,
+  host: Host = "system",
 ): void {
   const record = ctx.windows.createWindow(window, proc.pid);
   proc.surface = { windowId: record.id, claimed: false };
 
-  const iframe = sandboxedFrame(APP_HOST, window.title);
+  const iframe = sandboxedFrame(APP_HOST[host], window.title);
   iframe.className = "app-frame";
 
   // Removing the iframe unloads its document: that IS the kill. (The window
