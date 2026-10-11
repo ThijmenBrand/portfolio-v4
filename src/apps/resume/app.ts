@@ -9,6 +9,7 @@ export default {
     height: 640,
     minWidth: 380,
     minHeight: 320,
+    translucent: true,
   },
   launcher: { name: "Resume", icon: "/assets/icons/resume.svg" },
 } satisfies AppManifest;
