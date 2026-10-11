@@ -5,8 +5,8 @@ Every push to `main` runs `.github/workflows/deploy.yml`:
 1. **check** — `pnpm build` (type check incl. the wire-safety checks + Vite build)
 2. **build** — Docker image (`Dockerfile`: Vite build → Caddy, non-root), pushed
    to `ghcr.io/thijmenbrand/portfolio-v4`, pinned by digest
-3. **deploy** — SSH to the server as `deploy`, with a key that can only run
-   `/usr/local/bin/deploy-portfolio deploy <image@digest>`
+3. **deploy** — SSH to the server as `deploy`, with a key whose forced command
+   only accepts `deploy <image@digest>`, `rollback` or `status`
 
 The script starts the new image, waits for its healthcheck and keeps the last
 good one; an unhealthy image is rolled back automatically.
@@ -17,25 +17,36 @@ deploy/
 ├── docker-compose.yml          → /srv/portfolio/docker-compose.yml on the server
 ├── caddy/portfolio.caddy       site block for the host's Caddy (reference copy)
 └── server/
-    └── deploy-portfolio        → /usr/local/bin/deploy-portfolio (the key's forced command)
+    ├── portfolio-deploy-ssh    → /usr/local/bin/portfolio-deploy-ssh (the key's forced command, runs as deploy)
+    └── portfolio-deploy        → /usr/local/sbin/portfolio-deploy (does the work, runs as root via sudo)
 ```
 
 ## One-time server setup
 
 Uses the same `deploy` user as FinTrack, with a **separate key**: each key can
-only deploy its own app.
+only deploy its own app. `deploy` is **not** in the `docker` group (that would
+be root-equivalent); like FinTrack, the forced command validates the request and
+calls one root-owned script through a single `sudo` rule.
 
 ```sh
 # 1. On your machine: a key just for this repo
 ssh-keygen -t ed25519 -N "" -C portfolio-deploy -f portfolio-deploy
 
 # 2. On the server (as your admin user), from a checkout of this repo
-sudo install -d -o deploy -g deploy -m 755 /srv/portfolio
-sudo install -o deploy -g deploy -m 644 deploy/docker-compose.yml /srv/portfolio/
-sudo install -m 755 deploy/server/deploy-portfolio /usr/local/bin/deploy-portfolio
+#    Everything root-owned: the root script runs this compose file, so `deploy`
+#    must not be able to edit it.
+sudo install -d -o root -g root -m 755 /srv/portfolio
+sudo install -o root -g root -m 644 deploy/docker-compose.yml /srv/portfolio/
+sudo install -o root -g root -m 755 deploy/server/portfolio-deploy /usr/local/sbin/portfolio-deploy
+sudo install -o root -g root -m 755 deploy/server/portfolio-deploy-ssh /usr/local/bin/portfolio-deploy-ssh
 
-# 3. Allow the key — restricted to that one command (one line, in ~deploy/.ssh/authorized_keys)
-restrict,command="/usr/local/bin/deploy-portfolio" ssh-ed25519 AAAA…(portfolio-deploy.pub)… portfolio-deploy
+# 3. Let deploy run (only) the root script
+echo 'deploy ALL=(root) NOPASSWD: /usr/local/sbin/portfolio-deploy' |
+  sudo tee /etc/sudoers.d/portfolio-deploy >/dev/null
+sudo chmod 440 /etc/sudoers.d/portfolio-deploy && sudo visudo -c
+
+# 4. Allow the key — restricted to the wrapper (one line, in ~deploy/.ssh/authorized_keys)
+restrict,command="/usr/local/bin/portfolio-deploy-ssh" ssh-ed25519 AAAA…(portfolio-deploy.pub)… portfolio-deploy
 ```
 
 ### Reverse proxy + TLS
@@ -60,10 +71,11 @@ sudo systemctl reload caddy
 
 The CSP, CORS and cache headers come from the Caddy inside the container
 (`deploy/web/Caddyfile`); the host's Caddy adds HSTS and compression. A 502 from Caddy means the container isn't
-running — check `deploy-portfolio status`.
+running — check `sudo portfolio-deploy status`.
 
-If the GitHub package is private, the `deploy` user needs to be logged in to
-ghcr.io (`docker login ghcr.io` with a token that has `read:packages`) — or
+If the GitHub package is private, **root** needs to be logged in to ghcr.io
+(`sudo docker login ghcr.io` with a token that has `read:packages`), since the
+pull runs in the root script — or
 make the package public under the repo's *Packages* settings; it only contains
 the built static site.
 
@@ -81,8 +93,8 @@ reviewers there if you want to approve each deploy by hand.
 ## By hand, on the server
 
 ```sh
-sudo -u deploy deploy-portfolio status
-sudo -u deploy deploy-portfolio rollback
+sudo portfolio-deploy status
+sudo portfolio-deploy rollback
 ```
 
 ## Checking a deploy

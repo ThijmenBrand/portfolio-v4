@@ -83,7 +83,7 @@ jobs:
           printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy
           chmod 600 ~/.ssh/deploy
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
-          # This key can only run /usr/local/bin/deploy-portfolio:
+          # This key's forced command (portfolio-deploy-ssh) only accepts:
           #   deploy <image> | rollback | status
           ssh -i ~/.ssh/deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
             "deploy@${HOST}" "deploy ${IMAGE}"

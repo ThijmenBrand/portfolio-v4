@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Forced command for the portfolio's deploy key (unprivileged, runs as `deploy`).
+# In ~deploy/.ssh/authorized_keys:
+#
+#   restrict,command="/usr/local/bin/portfolio-deploy-ssh" ssh-ed25519 AAAA… portfolio-deploy
+#
+# Accepts exactly:  deploy <image@digest> | rollback | status
+# and hands it to the root-owned /usr/local/sbin/portfolio-deploy via sudo.
+set -euo pipefail
+
+usage() { echo "usage: deploy <image@digest> | rollback | status" >&2; exit 2; }
+
+read -r -a argv <<< "${SSH_ORIGINAL_COMMAND:-}"
+
+case "${argv[0]:-}" in
+  deploy)
+    [[ ${#argv[@]} -eq 2 ]] || usage
+    # Checked again by portfolio-deploy; rejected here so junk never reaches sudo.
+    [[ "${argv[1]}" =~ ^ghcr\.io/thijmenbrand/portfolio-v4@sha256:[a-f0-9]{64}$ ]] || usage
+    exec sudo -n /usr/local/sbin/portfolio-deploy deploy "${argv[1]}"
+    ;;
+  rollback|status)
+    [[ ${#argv[@]} -eq 1 ]] || usage
+    exec sudo -n /usr/local/sbin/portfolio-deploy "${argv[0]}"
+    ;;
+  *)
+    usage
+    ;;
+esac

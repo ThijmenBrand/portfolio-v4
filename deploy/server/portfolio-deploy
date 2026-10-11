@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
-# Forced command for the portfolio's deploy key. In ~deploy/.ssh/authorized_keys:
+# Privileged half of the portfolio deploy. Installed root-owned at
+# /usr/local/sbin/portfolio-deploy and run ONLY through sudo:
 #
-#   restrict,command="/usr/local/bin/deploy-portfolio" ssh-ed25519 AAAA… portfolio-deploy
+#   /etc/sudoers.d/portfolio-deploy:
+#     deploy ALL=(root) NOPASSWD: /usr/local/sbin/portfolio-deploy
 #
-# That key can then only run:  deploy <image@digest> | rollback | status
-# — and only for the portfolio. (FinTrack's key keeps its own command.)
+# The deploy key's forced command is the unprivileged wrapper
+# /usr/local/bin/portfolio-deploy-ssh, which parses SSH_ORIGINAL_COMMAND and
+# calls this script with plain arguments. Same split as FinTrack
+# (fintrack-deploy-ssh -> sudo fintrack-deploy); `deploy` never gets Docker access.
+#
+#   portfolio-deploy deploy <image@digest> | rollback | status
 set -euo pipefail
 
 APP_DIR=/srv/portfolio
@@ -12,11 +18,11 @@ COMPOSE=(docker compose --project-name portfolio -f "$APP_DIR/docker-compose.yml
 # Only images built by this repo's pipeline, pinned by digest.
 IMAGE_PATTERN='^ghcr\.io/thijmenbrand/portfolio-v4@sha256:[a-f0-9]{64}$'
 
-# The workflow's command arrives in SSH_ORIGINAL_COMMAND (or as args when run by hand).
-read -r -a argv <<< "${SSH_ORIGINAL_COMMAND:-$*}"
+# Arguments only: sudo resets the environment, and this script must not trust it.
+argv=("$@")
 action="${argv[0]:-}"
 
-log() { printf '[deploy-portfolio] %s\n' "$*"; }
+log() { printf '[portfolio-deploy] %s\n' "$*"; }
 
 start() {  # start <image>; returns non-zero if it doesn't become healthy
   IMAGE="$1" "${COMPOSE[@]}" up -d --wait --wait-timeout 60
