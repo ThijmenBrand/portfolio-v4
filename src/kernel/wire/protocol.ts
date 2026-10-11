@@ -114,6 +114,7 @@ export const WIRE_CALLS = {
   "process.env": "getenv",
   "process.setenv": "setenv",
   "process.ids": "ids",
+  "process.setsid": "setsid",
 
   "events.subscribe": "subscribe",
 
@@ -123,6 +124,7 @@ export const WIRE_CALLS = {
   "fs.stat": "stat",
   "fs.mkdir": "mkdir",
   "fs.unlink": "unlink",
+  "fs.rename": "rename",
   "fs.rmdir": "rmdir",
   "fs.chmod": "chmod",
   "fs.chown": "chown",
@@ -137,6 +139,12 @@ export const WIRE_CALLS = {
   "io.listFds": "listFds",
   "io.pipe": "pipe",
   "io.openpty": "openpty",
+  "io.tcgetattr": "tcgetattr",
+  "io.tcsetattr": "tcsetattr",
+  "io.tcgetpgrp": "tcgetpgrp",
+  "io.tcsetpgrp": "tcsetpgrp",
+  "io.getWinsize": "getWinsize",
+  "io.setWinsize": "setWinsize",
 
   "shell.openExternal": "openExternal",
   "shell.location": "getLocation",

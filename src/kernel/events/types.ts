@@ -43,6 +43,10 @@ type window_minimized = {
   windowId: WindowId;
   minimized: boolean;
 };
+type fs_changed = {
+  type: "fs.changed";
+  path: string;
+};
 type display_work_area_changed = {
   type: "display.workAreaChanged";
   area: Rect;
@@ -56,7 +60,8 @@ export type KernelEvent =
   | window_title_changed
   | window_focused
   | window_minimized
-  | display_work_area_changed;
+  | display_work_area_changed
+  | fs_changed;
 
 export type EventType = KernelEvent["type"];
 

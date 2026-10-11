@@ -1,4 +1,4 @@
-import { ebadf, einval, eperm, espipe, logError } from "../errors";
+import { ebadf, einval, enotty, eperm, espipe, logError } from "../errors";
 import { resolveFrom } from "../fs/path";
 import type { Stat } from "../fs/types";
 import type {
@@ -9,7 +9,8 @@ import type {
   PipeFds,
 } from "../io/openfile";
 import { createPipe } from "../io/pipe";
-import { createPty } from "../io/pty";
+import { createPty, PtyEnd, type Termios, type Tty, type Winsize } from "../io/pty";
+import { signalGroup } from "./signals";
 import { requireAlive } from "../syscalls/guards";
 import type { Bytes, KernelContext, Pid } from "../types";
 
@@ -179,7 +180,9 @@ export async function ptyFd(
   pid: Pid,
 ): Promise<{ master: number; slave: number }> {
   const proc = requireAlive(ctx, pid);
-  const { master, slave } = createPty();
+  const { master, slave } = createPty((pgid, signal) =>
+    signalGroup(ctx, pgid, signal),
+  );
 
   const readFd = proc.files.allocate(master, { read: true, write: true });
   try {
@@ -192,4 +195,68 @@ export async function ptyFd(
     await slave.close().catch(logError);
     throw e;
   }
+}
+
+function ttyOf(ctx: KernelContext, pid: Pid, fd: number): Tty {
+  const { file } = description(ctx, pid, fd);
+  if (!(file instanceof PtyEnd)) throw enotty(fd);
+  return file.tty;
+}
+
+export function tcgetattr(ctx: KernelContext, pid: Pid, fd: number): Termios {
+  return { ...ttyOf(ctx, pid, fd).termios };
+}
+
+/** Only the flags we know, only booleans: this comes off the wire. */
+export function tcsetattr(
+  ctx: KernelContext,
+  pid: Pid,
+  fd: number,
+  changes: Partial<Termios>,
+): void {
+  const tty = ttyOf(ctx, pid, fd);
+  const known: Partial<Termios> = {};
+  for (const key of ["echo", "icanon", "isig"] as const) {
+    const value = changes?.[key];
+    if (value === undefined) continue;
+    if (typeof value !== "boolean") throw einval(`tcsetattr ${key}`);
+    known[key] = value;
+  }
+  tty.setAttr(known);
+}
+
+export function tcgetpgrp(ctx: KernelContext, pid: Pid, fd: number): Pid | null {
+  return ttyOf(ctx, pid, fd).foreground ?? null;
+}
+
+/** The new foreground group must be in the caller's session, like tcsetpgrp(3). */
+export function tcsetpgrp(
+  ctx: KernelContext,
+  pid: Pid,
+  fd: number,
+  pgid: Pid,
+): void {
+  const tty = ttyOf(ctx, pid, fd);
+  const caller = requireAlive(ctx, pid);
+  const inSession = ctx.processes
+    .inGroup(pgid)
+    .some((member) => member.sid === caller.sid);
+  if (!inSession) throw eperm(pid, "tcsetpgrp");
+  tty.foreground = pgid;
+}
+
+export function getWinsize(ctx: KernelContext, pid: Pid, fd: number): Winsize {
+  return { ...ttyOf(ctx, pid, fd).winsize };
+}
+
+export function setWinsize(
+  ctx: KernelContext,
+  pid: Pid,
+  fd: number,
+  size: Winsize,
+): void {
+  const tty = ttyOf(ctx, pid, fd);
+  const ok = (n: unknown) => Number.isSafeInteger(n) && (n as number) > 0;
+  if (!ok(size?.rows) || !ok(size?.cols)) throw einval("winsize");
+  tty.setWinsize({ rows: size.rows, cols: size.cols });
 }

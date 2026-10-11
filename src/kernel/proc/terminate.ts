@@ -17,6 +17,7 @@ export async function terminateProcess(
   }
 
   ctx.processes.setStatus(pid, "exiting");
+  proc.stopped = undefined;
   try {
     proc.abortController.abort(signal ?? reason);
   } catch (error) {

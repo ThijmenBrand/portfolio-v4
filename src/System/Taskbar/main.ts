@@ -82,7 +82,8 @@ class Taskbar {
 
   private require<T extends HTMLElement>(selector: string): T {
     const element = this.root.querySelector<T>(selector);
-    if (!element) throw kernelError("ENODEV", `Taskbar element ${selector} not found`);
+    if (!element)
+      throw kernelError("ENODEV", `Taskbar element ${selector} not found`);
     return element;
   }
 
@@ -93,7 +94,9 @@ class Taskbar {
 
     // Cosmetic, like the desktop: exec of an admin app fails anyway (EACCES).
     const { gid } = await this.os.process.ids();
-    this.startAppMenu(registry.filter((app) => !app.admin || gid === ADMIN_GID));
+    this.startAppMenu(
+      registry.filter((app) => !app.admin || gid === ADMIN_GID),
+    );
     await this.loadPins();
 
     await this.seed();
@@ -151,8 +154,12 @@ class Taskbar {
       menu?.hidePopover();
       void this.os.process.spawn(SETTINGS, args).catch(logError);
     };
-    this.root.querySelector("#session-account")?.addEventListener("click", () => openSettings(["account"]));
-    this.root.querySelector("#session-settings")?.addEventListener("click", () => openSettings([]));
+    this.root
+      .querySelector("#session-account")
+      ?.addEventListener("click", () => openSettings(["account"]));
+    this.root
+      .querySelector("#session-settings")
+      ?.addEventListener("click", () => openSettings([]));
 
     logout.addEventListener("click", () => {
       void this.signalDesktop("SIGTERM").catch(logError);
@@ -175,9 +182,13 @@ class Taskbar {
 
     const tiles = apps.map((entry) => {
       const tile = htmlStringToTemplate(appTileHtml);
-      const icon = selectElementFromTemplate<HTMLImageElement>(tile, "#app-tile-icon");
+      const icon = selectElementFromTemplate<HTMLImageElement>(
+        tile,
+        "#app-tile-icon",
+      );
       icon.src = entry.icon;
-      selectElementFromTemplate(tile, "#app-tile-label").textContent = entry.name;
+      selectElementFromTemplate(tile, "#app-tile-label").textContent =
+        entry.name;
 
       tile.addEventListener("click", () => {
         menu.hidePopover();
@@ -191,7 +202,9 @@ class Taskbar {
       });
       return { entry, tile };
     });
-    this.require("#app-menu-grid").replaceChildren(...tiles.map(({ tile }) => tile));
+    this.require("#app-menu-grid").replaceChildren(
+      ...tiles.map(({ tile }) => tile),
+    );
 
     search.addEventListener("input", () => {
       const query = search.value.trim().toLowerCase();
@@ -232,17 +245,24 @@ class Taskbar {
       [
         shortcuts.length ? "Remove from desktop" : "Add to desktop",
         async () => {
-          // The desktop shows ~/Desktop; SIGHUP makes it look now instead of on its next scan.
-          if (shortcuts.length) for (const path of shortcuts) await this.os.fs.unlink(path);
-          else await this.os.fs.writeTextFile(`${folder}/${name}.app`, `${exec}\n`);
-          await this.signalDesktop("SIGHUP");
+          if (shortcuts.length)
+            for (const path of shortcuts) await this.os.fs.unlink(path);
+          else
+            await this.os.fs.writeTextFile(
+              `${folder}/${name}.app`,
+              `${exec}\n`,
+            );
         },
       ],
     ];
   }
 
   /** A popover menu at the pointer, opening upward from it. */
-  private showMenu(menu: HTMLElement, event: MouseEvent, items: MenuItems): void {
+  private showMenu(
+    menu: HTMLElement,
+    event: MouseEvent,
+    items: MenuItems,
+  ): void {
     menu.replaceChildren(
       ...items.map(([label, action]) => {
         const button = document.createElement("button");
@@ -283,14 +303,20 @@ class Taskbar {
 
         const button = htmlStringToTemplate(taskbarButtonHtml);
         button.classList.add("is-pinned");
-        selectElementFromTemplate<HTMLImageElement>(button, "#task-button-icon").src = entry.icon;
-        selectElementFromTemplate(button, "#task-button-label").textContent = entry.name;
+        selectElementFromTemplate<HTMLImageElement>(
+          button,
+          "#task-button-icon",
+        ).src = entry.icon;
+        selectElementFromTemplate(button, "#task-button-label").textContent =
+          entry.name;
         button.addEventListener("click", () => {
           void this.os.process.spawn(exec).catch(logError);
         });
         button.addEventListener("contextmenu", (event) => {
           event.preventDefault();
-          this.showMenu(this.require("#task-menu"), event, [this.pinItem(exec)]);
+          this.showMenu(this.require("#task-menu"), event, [
+            this.pinItem(exec),
+          ]);
         });
         this.pinButtons.set(exec, button);
         return [button];
@@ -304,7 +330,10 @@ class Taskbar {
   /** A pin hides while its app runs: the running button takes its slot. */
   private refreshPin(exec: string): void {
     const pin = this.pinButtons.get(exec);
-    if (pin) pin.hidden = [...this.groups.values()].some((group) => group.path === exec);
+    if (pin)
+      pin.hidden = [...this.groups.values()].some(
+        (group) => group.path === exec,
+      );
   }
 
   private async seed(): Promise<void> {
@@ -482,8 +511,10 @@ class Taskbar {
 
     // Pinned apps run in their pin's slot; the rest line up after the pins.
     const pin = this.pinButtons.get(group.path);
-    if (pin && group.button.parentElement !== this.pinList) pin.after(group.button);
-    if (!pin && group.button.parentElement !== this.taskList) this.taskList.append(group.button);
+    if (pin && group.button.parentElement !== this.pinList)
+      pin.after(group.button);
+    if (!pin && group.button.parentElement !== this.taskList)
+      this.taskList.append(group.button);
     this.refreshPin(group.path);
   }
 

@@ -3,7 +3,13 @@
 // user, but asks for their password unless whoever ran it is root already.
 import type { AppInterface } from "../../kernel/syscalls/api";
 import { askPassword, print } from "../lib/input";
-import { readShadow, readUsers, sessionEnv, userByName, verifyPassword } from "../lib/users";
+import {
+  readShadow,
+  readUsers,
+  sessionEnv,
+  userByName,
+  verifyPassword,
+} from "../lib/users";
 
 export async function main(os: AppInterface, args: string[]): Promise<void> {
   const name = args[0] ?? "root";
@@ -28,8 +34,6 @@ export async function main(os: AppInterface, args: string[]): Promise<void> {
     gid: user.gid,
     env: sessionEnv(user),
   });
-  // Ctrl-C reaches us (the outer shell's foreground job): pass it on.
-  await os.process.onSignal("SIGINT", () => void os.process.kill(shell, "SIGINT").catch(() => {}));
   const termination = await os.process.wait(shell);
   await os.process.exit(termination.code);
 }

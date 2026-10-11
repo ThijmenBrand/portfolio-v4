@@ -64,7 +64,7 @@ export function buildAppInterface(client: WireClient, pid: Pid): AppInterface {
       },
       onSignal: (signal, handler) =>
         client.callWithDisposer("process.onSignal", [signal, handler]),
-      wait: (child) => call("process.wait", child),
+      wait: (child, options) => call("process.wait", child, options),
       spawn: (path, args, options) =>
         call("process.spawn", path, args, options),
       exit: (code) => call("process.exit", code ?? 0),
@@ -76,6 +76,7 @@ export function buildAppInterface(client: WireClient, pid: Pid): AppInterface {
       env: () => call("process.env"),
       setenv: (name, value) => call("process.setenv", name, value),
       ids: () => call("process.ids"),
+      setsid: () => call("process.setsid"),
     },
 
     timers: {
@@ -119,6 +120,7 @@ export function buildAppInterface(client: WireClient, pid: Pid): AppInterface {
       stat: (path) => call("fs.stat", path),
       mkdir: (path) => call("fs.mkdir", path),
       unlink: (path) => call("fs.unlink", path),
+      rename: (from, to) => call("fs.rename", from, to),
       rmdir: (path) => call("fs.rmdir", path),
       chmod: (path, mode) => call("fs.chmod", path, mode),
       chown: (path, uid, gid) => call("fs.chown", path, uid, gid),
@@ -136,6 +138,12 @@ export function buildAppInterface(client: WireClient, pid: Pid): AppInterface {
       listFds: () => call("io.listFds"),
       pipe: () => call("io.pipe"),
       openpty: () => call("io.openpty"),
+      tcgetattr: (fd) => call("io.tcgetattr", fd),
+      tcsetattr: (fd, changes) => call("io.tcsetattr", fd, changes),
+      tcgetpgrp: (fd) => call("io.tcgetpgrp", fd),
+      tcsetpgrp: (fd, pgid) => call("io.tcsetpgrp", fd, pgid),
+      getWinsize: (fd) => call("io.getWinsize", fd),
+      setWinsize: (fd, size) => call("io.setWinsize", fd, size),
     },
   };
 }

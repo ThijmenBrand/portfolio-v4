@@ -8,7 +8,7 @@ import terminalHTML from "./terminal.html?raw";
 import "./terminal.css";
 import { followAccent } from "../../utils/settings";
 import "../../ui/theme.css";
-import type { Pid, Termination } from "../../kernel/types";
+import type { Pid, WaitStatus } from "../../kernel/types";
 import { AnsiParser } from "./ansi";
 import { complete } from "./complete";
 
@@ -50,7 +50,11 @@ export class Terminal {
   private readonly onExit?: () => void;
 
   /** `onExit` replaces the "shell exited" notice, e.g. to close an embedding panel. */
-  public constructor(os: AppInterface, parent: HTMLElement, onExit?: () => void) {
+  public constructor(
+    os: AppInterface,
+    parent: HTMLElement,
+    onExit?: () => void,
+  ) {
     this.os = os;
     this.onExit = onExit;
 
@@ -83,7 +87,30 @@ export class Terminal {
 
     void this.pump();
     void this.reap(this.shell);
+    this.reportSize();
     this.input.focus();
+  }
+
+  private reportSize(): void {
+    const style = getComputedStyle(this.out);
+    const context = document.createElement("canvas").getContext("2d")!;
+    context.font = style.font;
+    const charWidth = context.measureText("0".repeat(100)).width / 100;
+    const lineHeight = parseFloat(style.lineHeight);
+    const padX = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+    const padY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+
+    new ResizeObserver(() => {
+      const cols = Math.max(
+        1,
+        Math.floor((this.out.clientWidth - padX) / charWidth),
+      );
+      const rows = Math.max(
+        1,
+        Math.floor((this.out.clientHeight - padY) / lineHeight),
+      );
+      void this.os.io.setWinsize(this.master, { rows, cols }).catch(() => {});
+    }).observe(this.out);
   }
 
   public dispose(): void {
@@ -97,14 +124,11 @@ export class Terminal {
   /** Runs `line` as if typed, once the shell has shown its first prompt. */
   public async run(line: string): Promise<void> {
     await this.prompted;
-    // Raw mode: no kernel line discipline, so the terminal echoes — except
-    // a password, which also stays out of the history.
-    if (this.concealed) {
-      this.append("\n");
-    } else {
+    // The pty's line discipline echoes it (unless a password prompt turned
+    // echo off). A password also stays out of the history.
+    if (!this.concealed) {
       this.history.push(line);
       this.historyIndex = this.history.length;
-      this.append(`${line}\n`);
     }
     await this.send(`${line}\n`);
   }
@@ -125,14 +149,14 @@ export class Terminal {
   }
 
   private async reap(shell: Pid): Promise<void> {
-    let termination: Termination;
+    let termination: WaitStatus;
     try {
       termination = await this.os.process.wait(shell);
     } catch (error) {
-      // EINTR: WE are exiting (e.g. the window's ✕) and the kernel cancelled
-      // our pending wait — expected, not a fault. Same rule as pump().
       if (errorCode(error) === "EINTR" || this.disposed) return;
-      this.append(`\n[terminal: wait failed: ${errorCode(error) ?? "error"}]\n`);
+      this.append(
+        `\n[terminal: wait failed: ${errorCode(error) ?? "error"}]\n`,
+      );
       return;
     }
     if (this.disposed) return;
@@ -173,12 +197,18 @@ export class Terminal {
         return;
       }
 
-      if (event.key === "c" && event.ctrlKey) {
+      // Control characters go through the pty: its line discipline turns
+      // ^C into SIGINT and ^Z into SIGTSTP for the foreground job, and ^D on
+      // an empty line into end-of-file. What's typed goes first, so ^C
+      // echoes it and throws it away, like a real terminal.
+      const control =
+        event.ctrlKey && { c: "\x03", z: "\x1a", d: "\x04" }[event.key];
+      if (control) {
+        if (event.key === "d" && this.input.value !== "") return;
         event.preventDefault();
-        this.append("^C\n");
+        const typed = this.input.value;
         this.input.value = "";
-        // ESRCH — the shell is already gone; reap() has said so.
-        void this.os.process.kill(this.shell, "SIGINT").catch(() => {});
+        void this.send(typed + control);
         return;
       }
     });
@@ -188,8 +218,9 @@ export class Terminal {
     const line = this.input.value;
     const cursor = this.input.selectionStart ?? line.length;
 
-    const [cwd, path] = await Promise.all([this.shellCwd(), this.shellPath()]);
-    const result = await complete(this.os, cwd, path, line, cursor);
+    const [cwd, env] = await Promise.all([this.shellCwd(), this.shellEnv()]);
+    const path = (env.PATH ?? "").split(":").filter(Boolean);
+    const result = await complete(this.os, cwd, path, env.HOME, line, cursor);
 
     // The user kept typing while we were asking the kernel: drop the result.
     if (this.input.value !== line) return;
@@ -202,23 +233,32 @@ export class Terminal {
   /** The shell's cwd, not ours — `cd` changes the shell, never the terminal. */
   private async shellCwd(): Promise<string> {
     try {
-      const cwd = (await this.os.fs.readTextFile(`/proc/${this.shell}/cwd`)).trim();
+      const cwd = (
+        await this.os.fs.readTextFile(`/proc/${this.shell}/cwd`)
+      ).trim();
       return cwd || "/";
     } catch {
       return "/"; // shell gone or not started yet
     }
   }
 
-  /** The shell's PATH, so `export PATH=...` changes what completes. */
-  private async shellPath(): Promise<string[]> {
+  /** The shell's env, so `export PATH=...` / HOME changes what completes. */
+  private async shellEnv(): Promise<Record<string, string>> {
     try {
       const environ = await this.os.fs.readTextFile(
         `/proc/${this.shell}/environ`,
       );
-      const line = environ.split("\n").find((l) => l.startsWith("PATH="));
-      return (line?.slice(5) ?? "").split(":").filter(Boolean);
+      return Object.fromEntries(
+        environ
+          .split("\n")
+          .filter((l) => l.includes("="))
+          .map((l) => {
+            const eq = l.indexOf("=");
+            return [l.slice(0, eq), l.slice(eq + 1)];
+          }),
+      );
     } catch {
-      return []; // shell gone or not started yet
+      return {}; // shell gone or not started yet
     }
   }
 
@@ -307,7 +347,10 @@ export class Terminal {
 }
 
 /** `terminal [command...]` runs the command in the new shell, as if typed. */
-export async function main(os: AppInterface, args: string[] = []): Promise<void> {
+export async function main(
+  os: AppInterface,
+  args: string[] = [],
+): Promise<void> {
   await followAccent(os);
   const handle = await os.windows.create({
     title: "Terminal",

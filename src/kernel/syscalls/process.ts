@@ -1,9 +1,9 @@
-import { einval, enoexec, eperm } from "../errors";
+import { einval, enoexec, eperm, esrch } from "../errors";
 import { resolveFrom } from "../fs/path";
 import { X } from "../fs/perm";
 import { resolve } from "../binfmt";
 import { execute } from "../proc/exec";
-import { sendSignal } from "../proc/signals";
+import { sendSignal, type Signal } from "../proc/signals";
 import { terminateProcess } from "../proc/terminate";
 import { waitFor } from "../proc/wait";
 import type { KernelContext, Pid, Process } from "../types";
@@ -15,16 +15,17 @@ import { FdTable } from "../proc/fdTable";
 export interface SpawnOptions {
   fds?: Record<number, number>; // child fd -> parent fd
   env?: Record<string, string>;
-  /** Run the child as this user (uid = euid = `uid`). Root only, like setuid(2). */
   uid?: number;
   gid?: number;
+  pgid?: number;
 }
 
-/** A process's ids, as `id` prints them. */
 export interface Ids {
   uid: number;
   euid: number;
   gid: number;
+  pgid: Pid;
+  sid: Pid;
 }
 
 const decoder = new TextDecoder();
@@ -72,6 +73,7 @@ async function startProcess(
   // Program files carry their mode too (core.ts mountPrograms).
   await ctx.fs.access(path, parent, X);
   const ids = childIds(parent, options, file.setuid === true);
+  const pgid = childGroup(ctx, parent, options?.pgid);
 
   const inherited = options?.fds
     ? FdTable.resolveMapping(parent.files, options.fds)
@@ -85,6 +87,8 @@ async function startProcess(
     cwd: parent?.cwd ?? "/",
     env: { ...parent.env, ...options?.env },
     ...ids,
+    pgid,
+    sid: parentPid === 0 ? undefined : parent.sid,
   });
 
   if (inherited) process.files.adopt(inherited);
@@ -107,11 +111,27 @@ async function startProcess(
  * program is setuid (it runs as root, but keeps the caller as its real uid so
  * su/passwd know who called them).
  */
+/** undefined: a new group led by the child. */
+function childGroup(
+  ctx: KernelContext,
+  parent: Process,
+  pgid: number | undefined,
+): Pid | undefined {
+  if (pgid === undefined) return parent.pid === 0 ? undefined : parent.pgid;
+  if (pgid === 0) return undefined;
+  const sameSession = ctx.processes
+    .inGroup(pgid as Pid)
+    .some((member) => member.sid === parent.sid);
+  if (!sameSession)
+    throw eperm(parent.pid, "spawn into another session's group");
+  return pgid as Pid;
+}
+
 function childIds(
   parent: Process,
   options: SpawnOptions,
   setuid: boolean,
-): Ids {
+): Pick<Ids, "uid" | "euid" | "gid"> {
   if (options?.uid !== undefined) {
     if (parent.euid !== 0) throw eperm(parent.pid, "spawn as another user");
     const gid = options.gid ?? options.uid;
@@ -138,22 +158,41 @@ export function processSyscalls(
   | "getenv"
   | "setenv"
   | "ids"
+  | "setsid"
 > {
+  const signalOne = async (callerPid: Pid, targetPid: Pid, signal: Signal) => {
+    const caller = requireAlive(ctx, callerPid);
+    const target = ctx.processes.get(targetPid);
+    const sameUser =
+      target !== undefined &&
+      (caller.uid === target.uid || caller.euid === target.uid);
+    if (!sameUser) requireControl(ctx, callerPid, targetPid);
+    await sendSignal(ctx, targetPid, signal);
+  };
+
   return {
     spawn: alive(ctx, (parentPid, path, args, options) =>
       startProcess(ctx, path, args, options, parentPid),
     ),
     exit: (pid, code) => terminateProcess(ctx, pid, code, "exit"),
     kill: alive(ctx, async (callerPid, targetPid, signal) => {
-      const caller = requireAlive(ctx, callerPid);
-      const target = ctx.processes.get(targetPid);
-      const sameUser =
-        target !== undefined &&
-        (caller.uid === target.uid || caller.euid === target.uid);
-      if (!sameUser) requireControl(ctx, callerPid, targetPid);
-      await sendSignal(ctx, targetPid, signal);
+      if (targetPid >= 0) return signalOne(callerPid, targetPid, signal);
+      const members = ctx.processes.inGroup(-targetPid as Pid);
+      if (members.length === 0) throw esrch(targetPid);
+      let denied: unknown;
+      let sent = 0;
+      for (const member of members) {
+        try {
+          await signalOne(callerPid, member.pid, signal);
+          sent += 1;
+        } catch (error) {
+          denied = error;
+        }
+      }
+      if (sent === 0) throw denied;
     }),
-    wait: (callerPid, targetPid) => waitFor(ctx, callerPid, targetPid),
+    wait: (callerPid, targetPid, options) =>
+      waitFor(ctx, callerPid, targetPid, options),
     onSignal: (callerPid, signal, handler) => {
       requireAlive(ctx, callerPid);
       if (signal === "SIGKILL") {
@@ -168,9 +207,17 @@ export function processSyscalls(
     chdir: (callerPid, path) => changeDirectory(ctx, callerPid, path),
     cwd: async (callerPid) => getCwd(ctx, callerPid),
     ids: async (callerPid) => {
-      const { uid, euid, gid } = requireAlive(ctx, callerPid);
-      return { uid, euid, gid };
+      const { uid, euid, gid, pgid, sid } = requireAlive(ctx, callerPid);
+      return { uid, euid, gid, pgid, sid };
     },
+    // A new session and group, led by the caller. A group leader can't:
+    // its group would be split across two sessions.
+    setsid: alive(ctx, (callerPid) => {
+      const proc = requireAlive(ctx, callerPid);
+      if (proc.pgid === proc.pid) throw eperm(callerPid, "setsid");
+      proc.pgid = proc.sid = proc.pid;
+      return proc.pid;
+    }),
     getenv: async (callerPid) => ({ ...requireAlive(ctx, callerPid).env }),
     setenv: async (callerPid, name, value) => {
       if (name === "" || name.includes("=")) throw einval(name);

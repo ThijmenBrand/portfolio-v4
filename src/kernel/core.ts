@@ -60,6 +60,8 @@ export function createKernel(screen: HTMLElement): {
     { get: () => display.workArea() },
   );
 
+  fs.onChange = (path) => events.emit({ type: "fs.changed", path });
+
   display.onWorkAreaChange(() => {
     windows.reflowMaximized();
     events.emit({ type: "display.workAreaChanged", area: display.workArea() });

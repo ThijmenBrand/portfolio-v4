@@ -13,5 +13,16 @@ export interface FileSystemDriver {
   create(parent: Node, name: string, kind: NodeKind): Promise<Node>;
   rmdir(parent: Node, name: string): Promise<void>;
   unlink(parent: Node, name: string): Promise<void>;
+  /**
+   * Move an entry within this driver, replacing `toName` if it exists (the
+   * VFS has checked it's the same kind, and empty if a directory). Throws
+   * EXDEV, before touching anything, when it can't: callers copy instead.
+   */
+  rename?(
+    fromParent: Node,
+    fromName: string,
+    toParent: Node,
+    toName: string,
+  ): Promise<void>;
   open?(node: Node, path: string): Promise<OpenFile>;
 }

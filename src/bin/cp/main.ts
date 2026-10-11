@@ -1,12 +1,13 @@
 // cp — copy a file. A directory destination keeps the source's name.
-import { basename } from "../../kernel/fs/path";
 import type { AppInterface } from "../../kernel/syscalls/api";
 
 /** "dir" -> "dir/name" when dst is an existing directory, else dst as given. */
 export async function target(os: AppInterface, src: string, dst: string): Promise<string> {
   try {
     if ((await os.fs.stat(dst)).kind === "directory") {
-      return `${dst.replace(/\/+$/, "")}/${basename(src)}`;
+      // Not path.basename: it wants an absolute path, and src may be relative.
+      const name = src.replace(/\/+$/, "").split("/").pop();
+      return `${dst.replace(/\/+$/, "")}/${name}`;
     }
   } catch {
     // ENOENT: a new file, written as given

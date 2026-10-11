@@ -18,6 +18,7 @@ export class PipeBuffer {
 
   private readerCount = 1;
   private writerCount = 1;
+  private eofs = 0;
 
   private readonly readWaiters: Waker[] = [];
   private readonly writeWaiters: Waker[] = [];
@@ -25,6 +26,10 @@ export class PipeBuffer {
   public async read(length: number, signal?: AbortSignal): Promise<Bytes> {
     while (this.buffered === 0) {
       if (this.writerCount === 0) return new Uint8Array(0); // EOF
+      if (this.eofs > 0) {
+        this.eofs -= 1;
+        return new Uint8Array(0);
+      }
       await this.park(this.readWaiters, signal);
     }
 
@@ -77,6 +82,11 @@ export class PipeBuffer {
       createdAt: this.createdAt,
       modifiedAt: Date.now(),
     };
+  }
+
+  public pushEof(): void {
+    this.eofs += 1;
+    this.wake(this.readWaiters);
   }
 
   public closeRead(): void {

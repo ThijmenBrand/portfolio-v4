@@ -1,6 +1,8 @@
+import { eintr } from "../errors";
 import type { EventHandler, EventType } from "../events/types";
 import type { DirEntry, Stat, StatResult } from "../fs/types";
 import type { FdInfo, OpenFlags, PipeFds, Whence } from "../io/openfile";
+import type { Termios, Winsize } from "../io/pty";
 import type { Signal } from "../proc/signals";
 import type {
   Bytes,
@@ -8,11 +10,13 @@ import type {
   KernelContext,
   LocationInfo,
   Pid,
+  Process,
   ProcessInfo,
   ProcessSignal,
   Rect,
   StrutEdge,
-  Termination,
+  WaitOptions,
+  WaitStatus,
   WindowId,
 } from "../types";
 import type {
@@ -76,7 +80,11 @@ export interface SyscallTable {
     signal: Signal,
     handler: () => void,
   ): Promise<() => void>;
-  wait(callerPid: Pid, targetPid: Pid): Promise<Termination>;
+  wait(
+    callerPid: Pid,
+    targetPid: Pid,
+    options?: WaitOptions,
+  ): Promise<WaitStatus>;
   setInterval(
     callerPid: Pid,
     callback: () => void,
@@ -99,6 +107,7 @@ export interface SyscallTable {
   mkdir(callerPid: Pid, path: string): Promise<void>;
   rmdir(callerPid: Pid, path: string): Promise<void>;
   unlink(callerPid: Pid, path: string): Promise<void>;
+  rename(callerPid: Pid, from: string, to: string): Promise<void>;
   open(callerPid: Pid, path: string, flags: OpenFlags): Promise<number>;
   close(callerPid: Pid, fd: number): Promise<void>;
   read(callerPid: Pid, fd: number, length: number): Promise<Bytes>;
@@ -121,6 +130,13 @@ export interface SyscallTable {
   chown(callerPid: Pid, path: string, uid: number, gid: number): Promise<void>;
   pipe(callerPid: Pid): Promise<PipeFds>;
   openpty(callerPid: Pid): Promise<{ master: number; slave: number }>;
+  tcgetattr(callerPid: Pid, fd: number): Promise<Termios>;
+  tcsetattr(callerPid: Pid, fd: number, changes: Partial<Termios>): Promise<void>;
+  tcgetpgrp(callerPid: Pid, fd: number): Promise<Pid | null>;
+  tcsetpgrp(callerPid: Pid, fd: number, pgid: Pid): Promise<void>;
+  getWinsize(callerPid: Pid, fd: number): Promise<Winsize>;
+  setWinsize(callerPid: Pid, fd: number, size: Winsize): Promise<void>;
+  setsid(callerPid: Pid): Promise<Pid>;
   openExternal(callerPid: Pid, url: string): Promise<void>;
   getLocation(callerPid: Pid): Promise<LocationInfo>;
   apiFetch(callerPid: Pid, path: string, request?: ApiRequest): Promise<ApiResponse>;
@@ -128,7 +144,7 @@ export interface SyscallTable {
 }
 
 export function createSyscallTable(ctx: KernelContext): SyscallTable {
-  return {
+  return gateStopped(ctx, {
     ...processSyscalls(ctx),
     ...windowSyscalls(ctx),
     ...timersSyscalls(ctx),
@@ -139,5 +155,39 @@ export function createSyscallTable(ctx: KernelContext): SyscallTable {
     ...shellSyscalls(ctx),
     ...apiSyscalls(ctx),
     ...dialogSyscalls(ctx),
-  };
+  });
+}
+
+/**
+ * A stopped process's syscalls park here until SIGCONT (EINTR if it dies
+ * first). One place every caller routes through: in-page apps and the wire.
+ * ponytail: a call already in flight finishes; JS can't be preempted.
+ */
+function gateStopped(ctx: KernelContext, table: SyscallTable): SyscallTable {
+  type Call = (pid: Pid, ...args: unknown[]) => unknown;
+  const gated: Record<string, Call> = {};
+  for (const [name, call] of Object.entries(table) as [string, Call][]) {
+    gated[name] =
+      name === "getSignal" // synchronous, and only reads
+        ? call
+        : (pid, ...args) => {
+            const proc = ctx.processes.get(pid);
+            if (!proc?.stopped) return call(pid, ...args);
+            return untilContinued(proc).then(() => call(pid, ...args));
+          };
+  }
+  return gated as unknown as SyscallTable;
+}
+
+function untilContinued(proc: Process): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const signal = proc.abortController.signal;
+    const onAbort = () => reject(eintr(proc.pid));
+    if (signal.aborted) return onAbort();
+    signal.addEventListener("abort", onAbort, { once: true });
+    proc.continueWaiters.push(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    });
+  });
 }

@@ -16,7 +16,10 @@ async function programs(os: AppInterface, path: string[]): Promise<string[]> {
   const listings = await Promise.all(
     path.map((dir) => os.fs.readdir(dir).catch(() => [])),
   );
-  return listings.flat().filter((e) => e.kind === "file").map((e) => e.name);
+  return listings
+    .flat()
+    .filter((e) => e.kind === "file")
+    .map((e) => e.name);
 }
 
 export interface Completion {
@@ -60,17 +63,22 @@ function commonPrefix(names: string[]): string {
 async function pathCandidates(
   os: AppInterface,
   cwd: string,
+  home: string | undefined,
   text: string,
 ): Promise<{ base: string; prefix: string; items: Candidate[] }> {
+  if (text === "~" && home) text = "~/"; // bash: Tab on a bare ~ gives ~/
   const slash = text.lastIndexOf("/");
   const base = text.slice(0, slash + 1); // "src/" in "src/ma", "" in "ma"
   const prefix = text.slice(slash + 1);
 
-  const dir = base.startsWith("/")
-    ? base
-    : base
-      ? `${cwd === "/" ? "" : cwd}/${base}`
-      : cwd;
+  const dir =
+    home && base.startsWith("~/")
+      ? home + base.slice(1)
+      : base.startsWith("/")
+        ? base
+        : base
+          ? `${cwd === "/" ? "" : cwd}/${base}`
+          : cwd;
 
   try {
     const entries = await os.fs.readdir(dir);
@@ -90,6 +98,7 @@ export async function complete(
   os: AppInterface,
   cwd: string,
   path: string[],
+  home: string | undefined,
   line: string,
   cursor: number,
 ): Promise<Completion> {
@@ -104,7 +113,7 @@ export async function complete(
             .filter((name) => name.startsWith(word.text))
             .map((name) => ({ name, directory: false })),
         }
-      : await pathCandidates(os, cwd, word.text);
+      : await pathCandidates(os, cwd, home, word.text);
 
   const unchanged = { value: line, cursor, candidates: [] };
   if (items.length === 0) return unchanged;
@@ -119,8 +128,7 @@ export async function complete(
     // Directories end in "/" so the next Tab descends; everything else gets a space.
     // No extra space if the cursor already sits before one (completing mid-line).
     const spaced = /\s/.test(line[cursor] ?? "");
-    replacement =
-      base + only.name + (only.directory ? "/" : spaced ? "" : " ");
+    replacement = base + only.name + (only.directory ? "/" : spaced ? "" : " ");
   } else {
     const shared = commonPrefix(items.map((i) => i.name));
     replacement = base + shared;

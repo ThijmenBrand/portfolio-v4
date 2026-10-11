@@ -9,7 +9,15 @@ import { registry } from "../registry";
 import { followAccent, loadSettings } from "../../utils/settings";
 import { formatSize, freeName } from "./names";
 import { PLACES } from "../../utils/places";
-import { defaultAppFor, extOf, FILE_SVG, FOLDER_SVG, IMAGE_TYPES, readShortcut } from "../../utils/filetypes";
+import { copyTree, moveTree, removeTree } from "../../utils/tree";
+import {
+  defaultAppFor,
+  extOf,
+  FILE_SVG,
+  FOLDER_SVG,
+  IMAGE_TYPES,
+  readShortcut,
+} from "../../utils/filetypes";
 import filesHTML from "./files.html?raw";
 import "../../ui/theme.css";
 import "./files.css";
@@ -57,13 +65,18 @@ const PROGRAM_SVG =
 // ---------------------------------------------------------------- helpers --
 
 const basename = (p: string): string => p.slice(p.lastIndexOf("/") + 1) || "/";
-const dirname = (p: string): string => p.slice(0, Math.max(p.lastIndexOf("/"), 1));
-const join = (dir: string, name: string): string => (dir === "/" ? `/${name}` : `${dir}/${name}`);
-const isInside = (path: string, dir: string): boolean => path === dir || path.startsWith(dir === "/" ? "/" : `${dir}/`);
+const dirname = (p: string): string =>
+  p.slice(0, Math.max(p.lastIndexOf("/"), 1));
+const join = (dir: string, name: string): string =>
+  dir === "/" ? `/${name}` : `${dir}/${name}`;
+const isInside = (path: string, dir: string): boolean =>
+  path === dir || path.startsWith(dir === "/" ? "/" : `${dir}/`);
 
 function resolve(cwd: string, path: string): string {
   const parts: string[] = [];
-  for (const seg of (path.startsWith("/") ? path : `${cwd}/${path}`).split("/")) {
+  for (const seg of (path.startsWith("/") ? path : `${cwd}/${path}`).split(
+    "/",
+  )) {
     if (!seg || seg === ".") continue;
     if (seg === "..") parts.pop();
     else parts.push(seg);
@@ -71,7 +84,11 @@ function resolve(cwd: string, path: string): string {
   return `/${parts.join("/")}`;
 }
 
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, className = "", text = ""): HTMLElementTagNameMap[K] {
+function el<K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  className = "",
+  text = "",
+): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);
   node.className = className;
   node.textContent = text;
@@ -113,7 +130,10 @@ const thumbs = new Map<string, string>();
 
 // ------------------------------------------------------------------- main --
 
-export async function main(appOs: AppInterface, args: string[] = []): Promise<void> {
+export async function main(
+  appOs: AppInterface,
+  args: string[] = [],
+): Promise<void> {
   os = appOs;
   win = await os.windows.create({ title: "Files" });
   void win.onCloseRequest(() => void os.process.exit(0));
@@ -121,7 +141,11 @@ export async function main(appOs: AppInterface, args: string[] = []): Promise<vo
   document.body.innerHTML = filesHTML;
   await followAccent(os);
 
-  const [env, ids, settings] = await Promise.all([os.process.env(), os.process.ids(), loadSettings(os)]);
+  const [env, ids, settings] = await Promise.all([
+    os.process.env(),
+    os.process.ids(),
+    loadSettings(os),
+  ]);
   home = env.HOME ?? "/";
   cred = { euid: ids.euid, gid: ids.gid };
   hour12 = !settings.clock24h;
@@ -131,21 +155,29 @@ export async function main(appOs: AppInterface, args: string[] = []): Promise<vo
   bindContent();
   bindKeys();
 
-  // Another app (Terminal, Code) may have changed the folder: re-read on focus.
-  void os.events.subscribe(["window.focused"], (event) => {
-    if (event.windowId === win.id && !busy) void reload();
+  void os.events.subscribe(["fs.changed"], (event) => {
+    if (!busy && (dirname(event.path) === cwd || isInside(cwd, event.path)))
+      scheduleReload();
   });
 
-  const start = args[0] === undefined ? home : resolve(await os.process.cwd(), args[0]);
+  const start =
+    args[0] === undefined ? home : resolve(await os.process.cwd(), args[0]);
   await navigate(start, false);
   field("content").focus();
 }
 
 // ------------------------------------------------------------- navigation --
 
-async function navigate(path: string, record = true, select: string[] = []): Promise<void> {
+async function navigate(
+  path: string,
+  record = true,
+  select: string[] = [],
+): Promise<void> {
   try {
-    const [entries, stat] = await Promise.all([os.fs.readdir(path), os.fs.stat(path)]);
+    const [entries, stat] = await Promise.all([
+      os.fs.readdir(path),
+      os.fs.stat(path),
+    ]);
     if (record && path !== cwd) {
       back.push(cwd);
       forward.length = 0;
@@ -153,12 +185,17 @@ async function navigate(path: string, record = true, select: string[] = []): Pro
     const left = cwd;
     cwd = path;
     canWrite = !stat.readonly && permits(stat, cred, W);
-    items = entries.map((entry) => ({ ...entry, path: join(path, entry.name) }));
+    items = entries.map((entry) => ({
+      ...entry,
+      path: join(path, entry.name),
+    }));
     selected.clear();
     for (const name of select) selected.add(name);
     // Going up: land on the folder we came from, like Finder.
     if (!select.length && isInside(left, path) && left !== path) {
-      selected.add(left.slice(path === "/" ? 1 : path.length + 1).split("/")[0]);
+      selected.add(
+        left.slice(path === "/" ? 1 : path.length + 1).split("/")[0],
+      );
     }
     if (left !== path) {
       for (const url of thumbs.values()) URL.revokeObjectURL(url);
@@ -168,10 +205,26 @@ async function navigate(path: string, record = true, select: string[] = []): Pro
     }
     render();
   } catch (error) {
-    if (errorCode(error) === "ENOTDIR") return navigate(dirname(path), record, [basename(path)]);
-    toast(`Couldn't open “${basename(path)}”. ${ERRORS[errorCode(error)] ?? ""}`, true);
+    if (errorCode(error) === "ENOTDIR")
+      return navigate(dirname(path), record, [basename(path)]);
+    toast(
+      `Couldn't open “${basename(path)}”. ${ERRORS[errorCode(error)] ?? ""}`,
+      true,
+    );
     if (!items.length && path !== "/") await navigate(dirname(path), false);
   }
+}
+
+let reloadPending = false;
+
+/** A copy fires an event per file: re-read at most once per frame. */
+function scheduleReload(): void {
+  if (reloadPending) return;
+  reloadPending = true;
+  requestAnimationFrame(() => {
+    reloadPending = false;
+    void reload();
+  });
 }
 
 /** Re-read the current folder, keeping the selection (or selecting `names`). */
@@ -183,7 +236,14 @@ async function reload(names?: string[]): Promise<void> {
   } catch {
     // The folder itself went away: climb to the nearest one that's left.
     let dir = dirname(cwd);
-    while (dir !== "/" && !(await os.fs.stat(dir).then(() => true, () => false))) dir = dirname(dir);
+    while (
+      dir !== "/" &&
+      !(await os.fs.stat(dir).then(
+        () => true,
+        () => false,
+      ))
+    )
+      dir = dirname(dir);
     await navigate(dir, false);
   }
 }
@@ -220,20 +280,26 @@ function kindOf(item: Item): string {
 }
 
 const appFor = (item: Item) => registry.find((app) => app.exec === item.path);
-const isProgram = (item: Item): boolean => item.kind === "file" && /^\/(ProgramFiles|System)\//.test(item.path);
+const isProgram = (item: Item): boolean =>
+  item.kind === "file" && /^\/(ProgramFiles|System)\//.test(item.path);
 
 function sortItems(list: Item[]): Item[] {
-  const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+  const collator = new Intl.Collator(undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
   return list.sort((a, b) => {
     // Folders, then apps (so Applications leads with them, not the CLI tools), then the rest.
-    const rank = (item: Item): number => (item.kind === "directory" ? 0 : appFor(item) ? 1 : 2);
+    const rank = (item: Item): number =>
+      item.kind === "directory" ? 0 : appFor(item) ? 1 : 2;
     if (rank(a) !== rank(b)) return rank(a) - rank(b);
     const { key, dir } = sort;
     const by =
       key === "name"
         ? collator.compare(a.name, b.name)
         : key === "kind"
-          ? collator.compare(kindOf(a), kindOf(b)) || collator.compare(a.name, b.name)
+          ? collator.compare(kindOf(a), kindOf(b)) ||
+            collator.compare(a.name, b.name)
           : a[key] - b[key] || collator.compare(a.name, b.name);
     return by * dir;
   });
@@ -263,20 +329,35 @@ function iconFor(item: Item): HTMLElement {
     icon.innerHTML = FOLDER_SVG;
     icon.classList.add("is-folder");
   } else if (app) {
-    icon.append(Object.assign(el("img"), { src: app.icon, alt: "", draggable: false }));
+    icon.append(
+      Object.assign(el("img"), { src: app.icon, alt: "", draggable: false }),
+    );
   } else if (isProgram(item)) {
     icon.innerHTML = PROGRAM_SVG;
   } else if (ext === "app") {
     icon.innerHTML = PROGRAM_SVG;
     void readShortcut(os, item.path).then((exec) => {
       const target = registry.find((entry) => entry.exec === exec);
-      if (target) icon.replaceChildren(Object.assign(el("img"), { src: target.icon, alt: "", draggable: false }));
+      if (target)
+        icon.replaceChildren(
+          Object.assign(el("img"), {
+            src: target.icon,
+            alt: "",
+            draggable: false,
+          }),
+        );
     });
   } else if (IMAGE_TYPES[ext] && item.size <= MAX_THUMB) {
     icon.innerHTML = FILE_SVG;
     void thumbnail(item).then((url) => {
       if (!url) return;
-      icon.replaceChildren(Object.assign(el("img", "thumb"), { src: url, alt: "", draggable: false }));
+      icon.replaceChildren(
+        Object.assign(el("img", "thumb"), {
+          src: url,
+          alt: "",
+          draggable: false,
+        }),
+      );
     });
   } else {
     icon.innerHTML = FILE_SVG;
@@ -295,7 +376,9 @@ async function thumbnail(item: Item): Promise<string | null> {
   if (cached) return cached;
   try {
     const bytes = await os.fs.readFile(item.path);
-    const url = URL.createObjectURL(new Blob([bytes], { type: IMAGE_TYPES[extOf(item.name)] }));
+    const url = URL.createObjectURL(
+      new Blob([bytes], { type: IMAGE_TYPES[extOf(item.name)] }),
+    );
     thumbs.set(key, url);
     return url;
   } catch {
@@ -308,10 +391,12 @@ function render(): void {
   visible = sortItems(
     items.filter(
       (item) =>
-        (showHidden || !item.name.startsWith(".") || query) && (!needle || item.name.toLowerCase().includes(needle)),
+        (showHidden || !item.name.startsWith(".") || query) &&
+        (!needle || item.name.toLowerCase().includes(needle)),
     ),
   );
-  for (const name of selected) if (!visible.some((item) => item.name === name)) selected.delete(name);
+  for (const name of selected)
+    if (!visible.some((item) => item.name === name)) selected.delete(name);
   const firstSelected = visible.findIndex((item) => selected.has(item.name));
   cursor = firstSelected;
   anchor = firstSelected;
@@ -326,13 +411,20 @@ function render(): void {
       row.dataset.index = String(index);
       row.draggable = true;
       row.title = item.name;
-      row.classList.toggle("is-cut", !!clipboard?.cut && clipboard.paths.includes(item.path));
+      row.classList.toggle(
+        "is-cut",
+        !!clipboard?.cut && clipboard.paths.includes(item.path),
+      );
       row.classList.toggle("is-hidden-file", item.name.startsWith("."));
       row.append(
         iconFor(item),
         el("span", "item-name", item.name),
         el("span", "item-cell", formatDate(item.modifiedAt)),
-        el("span", "item-cell item-size", item.kind === "directory" ? "--" : formatSize(item.size)),
+        el(
+          "span",
+          "item-cell item-size",
+          item.kind === "directory" ? "--" : formatSize(item.size),
+        ),
         el("span", "item-cell", kindOf(item)),
       );
       return row;
@@ -344,13 +436,18 @@ function render(): void {
     const active = button.dataset.sort === sort.key;
     button.classList.toggle("is-sorted", active);
     button.classList.toggle("is-desc", active && sort.dir === -1);
-    button.setAttribute("aria-sort", active ? (sort.dir === 1 ? "ascending" : "descending") : "none");
+    button.setAttribute(
+      "aria-sort",
+      active ? (sort.dir === 1 ? "ascending" : "descending") : "none",
+    );
   }
 
   const empty = field("empty");
   empty.hidden = visible.length > 0;
   if (!visible.length) {
-    field("empty-title").textContent = query ? `Nothing named “${query}” here` : "This folder is empty";
+    field("empty-title").textContent = query
+      ? `Nothing named “${query}” here`
+      : "This folder is empty";
     field("empty-hint").textContent = query
       ? "Clear the filter to see everything in this folder."
       : canWrite
@@ -362,13 +459,18 @@ function render(): void {
   renderPlacesActive();
   field("readonly").hidden = canWrite;
   for (const action of ["new-folder", "upload"]) {
-    const control = document.querySelector<HTMLElement>(`[data-action="${action}"]`)!;
+    const control = document.querySelector<HTMLElement>(
+      `[data-action="${action}"]`,
+    )!;
     control.classList.toggle("is-disabled", !canWrite);
     control.setAttribute("aria-disabled", String(!canWrite));
   }
   field<HTMLInputElement>("upload").disabled = !canWrite;
-  document.querySelector<HTMLButtonElement>('[data-action="back"]')!.disabled = !back.length;
-  document.querySelector<HTMLButtonElement>('[data-action="forward"]')!.disabled = !forward.length;
+  document.querySelector<HTMLButtonElement>('[data-action="back"]')!.disabled =
+    !back.length;
+  document.querySelector<HTMLButtonElement>(
+    '[data-action="forward"]',
+  )!.disabled = !forward.length;
 
   syncSelection();
   scrollToCursor();
@@ -384,13 +486,15 @@ function renderCrumbs(): void {
   const crumbs = field("crumbs");
   const root = isInside(cwd, home) ? home : "/";
   const segments = [root];
-  for (let path = cwd; path !== root; path = dirname(path)) segments.splice(1, 0, path);
+  for (let path = cwd; path !== root; path = dirname(path))
+    segments.splice(1, 0, path);
 
   crumbs.replaceChildren(
     ...segments.flatMap((path, i) => {
       const crumb = el("button", "crumb", displayName(path));
       crumb.type = "button";
-      if (i === segments.length - 1) crumb.setAttribute("aria-current", "location");
+      if (i === segments.length - 1)
+        crumb.setAttribute("aria-current", "location");
       crumb.addEventListener("click", () => void navigate(path));
       makeDropTarget(crumb, () => path);
       return i ? [el("span", "crumb-sep", "›"), crumb] : [crumb];
@@ -398,14 +502,19 @@ function renderCrumbs(): void {
   );
   // Deep paths clip from the left: the current folder always stays in view.
   crumbs.scrollLeft = crumbs.scrollWidth;
-  crumbs.classList.toggle("is-clipped", crumbs.scrollWidth > crumbs.clientWidth);
+  crumbs.classList.toggle(
+    "is-clipped",
+    crumbs.scrollWidth > crumbs.clientWidth,
+  );
   void win.setTitle(displayName(cwd));
 }
 
 function renderPlaces(): void {
   field("places").replaceChildren(
     ...PLACES.map((place) => {
-      const path = place.path.startsWith("~") ? home + place.path.slice(1) : place.path;
+      const path = place.path.startsWith("~")
+        ? home + place.path.slice(1)
+        : place.path;
       const button = el("button", "place");
       button.type = "button";
       button.dataset.path = path;
@@ -435,10 +544,14 @@ function syncSelection(): void {
   const content = field("content");
   for (const row of content.children as HTMLCollectionOf<HTMLElement>) {
     const index = Number(row.dataset.index);
-    row.setAttribute("aria-selected", String(selected.has(visible[index].name)));
+    row.setAttribute(
+      "aria-selected",
+      String(selected.has(visible[index].name)),
+    );
     row.classList.toggle("is-cursor", index === cursor);
   }
-  if (cursor >= 0) content.setAttribute("aria-activedescendant", `item-${cursor}`);
+  if (cursor >= 0)
+    content.setAttribute("aria-activedescendant", `item-${cursor}`);
   else content.removeAttribute("aria-activedescendant");
   renderSummary();
 }
@@ -446,19 +559,25 @@ function syncSelection(): void {
 function renderSummary(): void {
   const count = (n: number): string => `${n} item${n === 1 ? "" : "s"}`;
   const chosen = selectedItems();
-  const bytes = chosen.reduce((sum, item) => sum + (item.kind === "file" ? item.size : 0), 0);
+  const bytes = chosen.reduce(
+    (sum, item) => sum + (item.kind === "file" ? item.size : 0),
+    0,
+  );
   field("summary").textContent = chosen.length
     ? `${chosen.length} of ${count(visible.length)} selected${bytes ? ` · ${formatSize(bytes)}` : ""}`
     : count(visible.length);
 }
 
 function scrollToCursor(): void {
-  document.getElementById(`item-${cursor}`)?.scrollIntoView({ block: "nearest" });
+  document
+    .getElementById(`item-${cursor}`)
+    ?.scrollIntoView({ block: "nearest" });
 }
 
 // -------------------------------------------------------------- selection --
 
-const selectedItems = (): Item[] => visible.filter((item) => selected.has(item.name));
+const selectedItems = (): Item[] =>
+  visible.filter((item) => selected.has(item.name));
 
 function selectOnly(index: number): void {
   selected.clear();
@@ -470,7 +589,8 @@ function selectOnly(index: number): void {
 function selectRange(to: number): void {
   selected.clear();
   const from = Math.max(anchor, 0);
-  for (let i = Math.min(from, to); i <= Math.max(from, to); i++) selected.add(visible[i].name);
+  for (let i = Math.min(from, to); i <= Math.max(from, to); i++)
+    selected.add(visible[i].name);
   cursor = to;
   syncSelection();
 }
@@ -506,24 +626,49 @@ async function open(item: Item): Promise<void> {
   if (item.kind === "directory") return navigate(item.path);
   const app = appFor(item);
   if (app) {
-    await os.process.spawn(app.exec).catch((error) => toast(`Couldn't start ${app.name}. ${ERRORS[errorCode(error)] ?? ""}`, true));
+    await os.process
+      .spawn(app.exec)
+      .catch((error) =>
+        toast(
+          `Couldn't start ${app.name}. ${ERRORS[errorCode(error)] ?? ""}`,
+          true,
+        ),
+      );
     return;
   }
-  if (isProgram(item)) return openTerminalHere(dirname(item.path) === "/ProgramFiles" ? item.name : item.path);
+  if (isProgram(item))
+    return openTerminalHere(
+      dirname(item.path) === "/ProgramFiles" ? item.name : item.path,
+    );
   const exec = await readShortcut(os, item.path);
   if (exec) {
-    await os.process.spawn(exec).catch((error) => toast(`Couldn't start ${item.name}. ${ERRORS[errorCode(error)] ?? ""}`, true));
+    await os.process
+      .spawn(exec)
+      .catch((error) =>
+        toast(
+          `Couldn't start ${item.name}. ${ERRORS[errorCode(error)] ?? ""}`,
+          true,
+        ),
+      );
     return;
   }
   const { openWith } = await loadSettings(os);
-  await os.process.spawn(defaultAppFor(item.path, openWith), [item.path]).catch((error) => toast(`Couldn't open ${item.name} (${errorCode(error)}).`, true));
+  await os.process
+    .spawn(defaultAppFor(item.path, openWith), [item.path])
+    .catch((error) =>
+      toast(`Couldn't open ${item.name} (${errorCode(error)}).`, true),
+    );
 }
 
 /** Terminal in the current folder, optionally running `command` there. */
 async function openTerminalHere(command?: string): Promise<void> {
   // The terminal's shell starts in its parent's cwd: ours.
   await os.process.chdir(cwd);
-  await os.process.spawn("/ProgramFiles/terminal", command ? [command] : []).catch((error) => toast(`Couldn't open Terminal (${errorCode(error)}).`, true));
+  await os.process
+    .spawn("/ProgramFiles/terminal", command ? [command] : [])
+    .catch((error) =>
+      toast(`Couldn't open Terminal (${errorCode(error)}).`, true),
+    );
 }
 
 // ------------------------------------------------------------- operations --
@@ -537,7 +682,10 @@ async function mutate(task: () => Promise<string[] | void>): Promise<void> {
   try {
     names = await task();
   } catch (error) {
-    toast(ERRORS[errorCode(error)] ?? `Something went wrong (${errorCode(error)}).`, true);
+    toast(
+      ERRORS[errorCode(error)] ?? `Something went wrong (${errorCode(error)}).`,
+      true,
+    );
   } finally {
     busy = false;
     document.body.classList.remove("is-busy");
@@ -545,41 +693,25 @@ async function mutate(task: () => Promise<string[] | void>): Promise<void> {
   }
 }
 
-// ponytail: no rename syscall, so moves and renames are copy + delete, like mv.
-async function copyTree(src: string, dst: string): Promise<void> {
-  const stat = await os.fs.stat(src);
-  if (stat.kind === "directory") {
-    await os.fs.mkdir(dst);
-    for (const entry of await os.fs.readdir(src)) await copyTree(join(src, entry.name), join(dst, entry.name));
-  } else if (stat.kind === "file") {
-    await os.fs.writeFile(dst, await os.fs.readFile(src));
-  }
-}
-
-async function removeTree(path: string): Promise<void> {
-  const stat = await os.fs.stat(path);
-  if (stat.kind === "directory") {
-    for (const entry of await os.fs.readdir(path)) await removeTree(join(path, entry.name));
-    await os.fs.rmdir(path);
-  } else {
-    await os.fs.unlink(path);
-  }
-}
-
 /** Copy or move `paths` into `dir`. Returns the names they landed under. */
-async function transfer(paths: string[], dir: string, move: boolean): Promise<string[]> {
+async function transfer(
+  paths: string[],
+  dir: string,
+  moving: boolean,
+): Promise<string[]> {
   const taken = new Set((await os.fs.readdir(dir)).map((entry) => entry.name));
   const landed: string[] = [];
   for (const src of paths) {
-    if (isInside(dir, src)) throw Object.assign(new Error(), { code: "EINVAL_INTO_SELF" });
-    if (move && dirname(src) === dir) {
+    if (isInside(dir, src))
+      throw Object.assign(new Error(), { code: "EINVAL_INTO_SELF" });
+    if (moving && dirname(src) === dir) {
       landed.push(basename(src));
       continue;
     }
     const name = freeName(basename(src), taken);
     taken.add(name);
-    await copyTree(src, join(dir, name));
-    if (move) await removeTree(src);
+    if (moving) await moveTree(os, src, join(dir, name));
+    else await copyTree(os, src, join(dir, name));
     landed.push(name);
   }
   return landed;
@@ -591,7 +723,9 @@ function copy(cut: boolean): void {
   if (!chosen.length) return;
   clipboard = { paths: chosen.map((item) => item.path), cut };
   render();
-  toast(`${cut ? "Cut" : "Copied"} ${chosen.length === 1 ? `“${chosen[0].name}”` : `${chosen.length} items`}. Paste in any folder.`);
+  toast(
+    `${cut ? "Cut" : "Copied"} ${chosen.length === 1 ? `“${chosen[0].name}”` : `${chosen.length} items`}. Paste in any folder.`,
+  );
 }
 
 function paste(): void {
@@ -607,18 +741,24 @@ function paste(): void {
 function moveInto(paths: string[], dir: string, copyOnly: boolean): void {
   void mutate(async () => {
     await transfer(paths, dir, !copyOnly);
-    toast(`${copyOnly ? "Copied" : "Moved"} ${paths.length === 1 ? `“${basename(paths[0])}”` : `${paths.length} items`} to ${displayName(dir)}.`);
+    toast(
+      `${copyOnly ? "Copied" : "Moved"} ${paths.length === 1 ? `“${basename(paths[0])}”` : `${paths.length} items`} to ${displayName(dir)}.`,
+    );
   });
 }
 
 async function remove(): Promise<void> {
   const chosen = selectedItems();
   if (!chosen.length || !canWrite) return;
-  const what = chosen.length === 1 ? `“${chosen[0].name}”` : `${chosen.length} items`;
+  const what =
+    chosen.length === 1 ? `“${chosen[0].name}”` : `${chosen.length} items`;
   if (!(await confirmDelete(`Delete ${what}?`))) return;
   void mutate(async () => {
-    for (const item of chosen) await removeTree(item.path);
-    if (clipboard) clipboard.paths = clipboard.paths.filter((p) => !chosen.some((item) => isInside(p, item.path)));
+    for (const item of chosen) await removeTree(os, item.path);
+    if (clipboard)
+      clipboard.paths = clipboard.paths.filter(
+        (p) => !chosen.some((item) => isInside(p, item.path)),
+      );
     return [];
   });
 }
@@ -626,7 +766,11 @@ async function remove(): Promise<void> {
 function create(kind: "directory" | "file"): void {
   if (!canWrite) return;
   void mutate(async () => {
-    const name = freeName(kind === "directory" ? "untitled folder" : "untitled.txt", new Set(items.map((i) => i.name)), "");
+    const name = freeName(
+      kind === "directory" ? "untitled folder" : "untitled.txt",
+      new Set(items.map((i) => i.name)),
+      "",
+    );
     if (kind === "directory") await os.fs.mkdir(join(cwd, name));
     else await os.fs.writeFile(join(cwd, name), new Uint8Array());
     return [name];
@@ -638,18 +782,25 @@ function create(kind: "directory" | "file"): void {
 
 function upload(files: File[], dir = cwd): void {
   const fit = files.filter((file) => file.size <= MAX_UPLOAD);
-  if (fit.length < files.length) toast(`Skipped ${files.length - fit.length} file(s) over 20 MB.`, true);
+  if (fit.length < files.length)
+    toast(`Skipped ${files.length - fit.length} file(s) over 20 MB.`, true);
   if (!fit.length) return;
   void mutate(async () => {
-    const taken = new Set((await os.fs.readdir(dir)).map((entry) => entry.name));
+    const taken = new Set(
+      (await os.fs.readdir(dir)).map((entry) => entry.name),
+    );
     const names: string[] = [];
     for (const file of fit) {
       const name = freeName(file.name, taken);
       taken.add(name);
-      await os.fs.writeFile(join(dir, name), new Uint8Array(await file.arrayBuffer()));
+      await os.fs.writeFile(
+        join(dir, name),
+        new Uint8Array(await file.arrayBuffer()),
+      );
       names.push(name);
     }
-    if (dir !== cwd) toast(`Uploaded ${names.length} file(s) to ${displayName(dir)}.`);
+    if (dir !== cwd)
+      toast(`Uploaded ${names.length} file(s) to ${displayName(dir)}.`);
     return dir === cwd ? names : undefined;
   });
 }
@@ -661,7 +812,10 @@ function rename(index: number): void {
   if (!item || !row || !canWrite) return;
   selectOnly(index);
   const label = row.querySelector<HTMLElement>(".item-name")!;
-  const input = Object.assign(el("input", "rename"), { value: item.name, spellcheck: false });
+  const input = Object.assign(el("input", "rename"), {
+    value: item.name,
+    spellcheck: false,
+  });
   input.setAttribute("aria-label", `Rename ${item.name}`);
   label.replaceChildren(input);
   row.draggable = false;
@@ -675,7 +829,8 @@ function rename(index: number): void {
     done = true;
     const name = input.value.trim();
     field("content").focus();
-    if (!commit || name === item.name || !name) return void (label.textContent = item.name);
+    if (!commit || name === item.name || !name)
+      return void (label.textContent = item.name);
     if (name.includes("/") || name === "." || name === "..") {
       label.textContent = item.name;
       return toast("Names can't contain “/” or be “.” or “..”.", true);
@@ -686,8 +841,7 @@ function rename(index: number): void {
     }
     label.textContent = name;
     void mutate(async () => {
-      await copyTree(item.path, join(cwd, name));
-      await removeTree(item.path);
+      await moveTree(os, item.path, join(cwd, name));
       return [name];
     });
   };
@@ -697,7 +851,8 @@ function rename(index: number): void {
     else if (event.key === "Escape") finish(false);
   });
   input.addEventListener("blur", () => finish(true));
-  for (const type of ["pointerdown", "click", "dblclick"]) input.addEventListener(type, (event) => event.stopPropagation());
+  for (const type of ["pointerdown", "click", "dblclick"])
+    input.addEventListener(type, (event) => event.stopPropagation());
 }
 
 // ---------------------------------------------------------------- dialogs --
@@ -752,7 +907,9 @@ async function peek(item = visible[cursor]): Promise<void> {
     const url = await thumbnail(item);
     if (url) {
       body.classList.add("is-image");
-      body.replaceChildren(Object.assign(el("img"), { src: url, alt: item.name }));
+      body.replaceChildren(
+        Object.assign(el("img"), { src: url, alt: item.name }),
+      );
     } else fallback();
   } else if (item.kind === "file" && !isProgram(item) && item.size > 0) {
     try {
@@ -784,12 +941,19 @@ function openMenu(x: number, y: number, entries: (MenuEntry | null)[]): void {
   const menu = field("menu");
   menu.replaceChildren(
     ...entries.map((entry) => {
-      if (!entry) return Object.assign(el("div", "menu-sep"), { role: "separator" });
-      const button = el("button", `menu-item${entry.danger ? " is-danger" : ""}`);
+      if (!entry)
+        return Object.assign(el("div", "menu-sep"), { role: "separator" });
+      const button = el(
+        "button",
+        `menu-item${entry.danger ? " is-danger" : ""}`,
+      );
       button.type = "button";
       button.setAttribute("role", "menuitem");
       button.disabled = !!entry.disabled;
-      button.append(el("span", "", entry.label), el("span", "menu-hint", entry.hint ?? ""));
+      button.append(
+        el("span", "", entry.label),
+        el("span", "menu-hint", entry.hint ?? ""),
+      );
       button.addEventListener("click", () => {
         closeMenu();
         entry.action();
@@ -815,36 +979,83 @@ function itemMenu(): (MenuEntry | null)[] {
   const chosen = selectedItems();
   const one = chosen.length === 1 ? chosen[0] : null;
   return [
-    { label: "Open", hint: "Enter", action: () => void (one && open(one)), disabled: !one },
+    {
+      label: "Open",
+      hint: "Enter",
+      action: () => void (one && open(one)),
+      disabled: !one,
+    },
     {
       label: "Open in Code",
-      action: () => void (one && os.process.spawn("/ProgramFiles/code", [one.path])),
+      action: () =>
+        void (one && os.process.spawn("/ProgramFiles/code", [one.path])),
       disabled: !one || one.kind !== "file" || isProgram(one),
     },
-    { label: "Quick Look", hint: "Space", action: () => void peek(one ?? undefined), disabled: !one },
+    {
+      label: "Quick Look",
+      hint: "Space",
+      action: () => void peek(one ?? undefined),
+      disabled: !one,
+    },
     null,
-    { label: "Rename", hint: "F2", action: () => rename(cursor), disabled: !one || !canWrite },
+    {
+      label: "Rename",
+      hint: "F2",
+      action: () => rename(cursor),
+      disabled: !one || !canWrite,
+    },
     { label: "Copy", hint: `${MOD}C`, action: () => copy(false) },
-    { label: "Cut", hint: `${MOD}X`, action: () => copy(true), disabled: !canWrite },
+    {
+      label: "Cut",
+      hint: `${MOD}X`,
+      action: () => copy(true),
+      disabled: !canWrite,
+    },
     null,
-    { label: "Delete", hint: "Del", action: () => void remove(), disabled: !canWrite, danger: true },
+    {
+      label: "Delete",
+      hint: "Del",
+      action: () => void remove(),
+      disabled: !canWrite,
+      danger: true,
+    },
   ];
 }
 
 function folderMenu(): (MenuEntry | null)[] {
   return [
-    { label: "New folder", hint: "Alt+N", action: () => create("directory"), disabled: !canWrite },
-    { label: "New text file", action: () => create("file"), disabled: !canWrite },
-    { label: "Upload files…", action: () => field("upload").click(), disabled: !canWrite },
+    {
+      label: "New folder",
+      hint: "Alt+N",
+      action: () => create("directory"),
+      disabled: !canWrite,
+    },
+    {
+      label: "New text file",
+      action: () => create("file"),
+      disabled: !canWrite,
+    },
+    {
+      label: "Upload files…",
+      action: () => field("upload").click(),
+      disabled: !canWrite,
+    },
     null,
     {
-      label: clipboard && clipboard.paths.length > 1 ? `Paste ${clipboard.paths.length} items` : "Paste",
+      label:
+        clipboard && clipboard.paths.length > 1
+          ? `Paste ${clipboard.paths.length} items`
+          : "Paste",
       hint: `${MOD}V`,
       action: paste,
       disabled: !clipboard || !canWrite,
     },
     null,
-    { label: showHidden ? "Hide hidden files" : "Show hidden files", hint: `${MOD}⇧.`, action: toggleHidden },
+    {
+      label: showHidden ? "Hide hidden files" : "Show hidden files",
+      hint: `${MOD}⇧.`,
+      action: toggleHidden,
+    },
     { label: "Open in Terminal", action: () => void openTerminalHere() },
   ];
 }
@@ -864,14 +1075,19 @@ function toast(text: string, isError = false): void {
   node.classList.toggle("is-error", isError);
   node.classList.add("is-shown");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => node.classList.remove("is-shown"), isError ? 5000 : 2600);
+  toastTimer = setTimeout(
+    () => node.classList.remove("is-shown"),
+    isError ? 5000 : 2600,
+  );
 }
 
 // --------------------------------------------------------------- bindings --
 
 function bindChrome(): void {
   const action = (name: string, run: () => void): void =>
-    document.querySelector(`[data-action="${name}"]`)!.addEventListener("click", run);
+    document
+      .querySelector(`[data-action="${name}"]`)!
+      .addEventListener("click", run);
   action("back", goBack);
   action("forward", goForward);
   action("new-folder", () => create("directory"));
@@ -889,7 +1105,9 @@ function bindChrome(): void {
     upload(files);
   });
 
-  for (const radio of document.querySelectorAll<HTMLInputElement>('input[name="view"]')) {
+  for (const radio of document.querySelectorAll<HTMLInputElement>(
+    'input[name="view"]',
+  )) {
     radio.addEventListener("change", () => {
       view = radio.value as typeof view;
       render();
@@ -925,7 +1143,12 @@ function bindChrome(): void {
   // Peek dialog: Space/Escape close, arrows step through the folder.
   const peekDialog = field<HTMLDialogElement>("peek");
   peekDialog.addEventListener("keydown", (event) => {
-    const step = { ArrowDown: columns(), ArrowRight: 1, ArrowUp: -columns(), ArrowLeft: -1 }[event.key];
+    const step = {
+      ArrowDown: columns(),
+      ArrowRight: 1,
+      ArrowUp: -columns(),
+      ArrowLeft: -1,
+    }[event.key];
     if (event.key === " ") {
       event.preventDefault();
       peekDialog.close();
@@ -942,9 +1165,16 @@ function bindChrome(): void {
 
   const menu = field("menu");
   menu.addEventListener("keydown", (event) => {
-    const buttons = [...menu.querySelectorAll<HTMLButtonElement>("button:not(:disabled)")];
+    const buttons = [
+      ...menu.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"),
+    ];
     const at = buttons.indexOf(document.activeElement as HTMLButtonElement);
-    const next = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: buttons.length - 1 }[event.key];
+    const next = {
+      ArrowDown: at + 1,
+      ArrowUp: at - 1,
+      Home: 0,
+      End: buttons.length - 1,
+    }[event.key];
     if (event.key === "Escape" || event.key === "Tab") {
       event.preventDefault();
       closeMenu();
@@ -964,17 +1194,25 @@ function makeDropTarget(node: HTMLElement, target: () => string | null): void {
   const accepts = (event: DragEvent): string | null => {
     const dir = target();
     if (!dir) return null;
-    if (dragging) return dragging.some((path) => isInside(dir, path) || dirname(path) === dir) ? null : dir;
+    if (dragging)
+      return dragging.some(
+        (path) => isInside(dir, path) || dirname(path) === dir,
+      )
+        ? null
+        : dir;
     return event.dataTransfer?.types.includes("Files") ? dir : null;
   };
   node.addEventListener("dragover", (event) => {
     if (!accepts(event)) return;
     event.preventDefault();
     event.stopPropagation();
-    event.dataTransfer!.dropEffect = dragging && !event.altKey ? "move" : "copy";
+    event.dataTransfer!.dropEffect =
+      dragging && !event.altKey ? "move" : "copy";
     node.classList.add("is-drop-target");
   });
-  node.addEventListener("dragleave", () => node.classList.remove("is-drop-target"));
+  node.addEventListener("dragleave", () =>
+    node.classList.remove("is-drop-target"),
+  );
   node.addEventListener("drop", (event) => {
     node.classList.remove("is-drop-target");
     const dir = accepts(event);
@@ -1002,7 +1240,12 @@ function bindContent(): void {
     if (event.button === 1) return;
     const index = indexOf(event);
     if (index < 0) {
-      if (event.button === 0 && !event.shiftKey && !(IS_MAC ? event.metaKey : event.ctrlKey)) selectOnly(-1);
+      if (
+        event.button === 0 &&
+        !event.shiftKey &&
+        !(IS_MAC ? event.metaKey : event.ctrlKey)
+      )
+        selectOnly(-1);
       return;
     }
     if (event.shiftKey) selectRange(index);
@@ -1016,7 +1259,14 @@ function bindContent(): void {
   content.addEventListener("click", (event) => {
     const index = indexOf(event);
     // A plain click on one of several selected items narrows to it (drag keeps all).
-    if (index >= 0 && !event.shiftKey && !event.metaKey && !event.ctrlKey && selected.size > 1) selectOnly(index);
+    if (
+      index >= 0 &&
+      !event.shiftKey &&
+      !event.metaKey &&
+      !event.ctrlKey &&
+      selected.size > 1
+    )
+      selectOnly(index);
   });
   content.addEventListener("dblclick", (event) => {
     const index = indexOf(event);
@@ -1027,7 +1277,11 @@ function bindContent(): void {
     const index = indexOf(event);
     if (index >= 0 && !selected.has(visible[index].name)) selectOnly(index);
     if (index < 0) selectOnly(-1);
-    openMenu(event.clientX, event.clientY, index >= 0 ? itemMenu() : folderMenu());
+    openMenu(
+      event.clientX,
+      event.clientY,
+      index >= 0 ? itemMenu() : folderMenu(),
+    );
   });
 
   // Dragging items out of the view.
@@ -1048,10 +1302,15 @@ function bindContent(): void {
     const index = indexOf(event);
     const item = visible[index];
     const folder = item?.kind === "directory" ? item.path : null;
-    for (const row of content.querySelectorAll(".is-drop-target")) row.classList.remove("is-drop-target");
-    if (folder && (!dragging || !dragging.some((path) => isInside(folder, path)))) {
+    for (const row of content.querySelectorAll(".is-drop-target"))
+      row.classList.remove("is-drop-target");
+    if (
+      folder &&
+      (!dragging || !dragging.some((path) => isInside(folder, path)))
+    ) {
       event.preventDefault();
-      event.dataTransfer!.dropEffect = dragging && !event.altKey ? "move" : "copy";
+      event.dataTransfer!.dropEffect =
+        dragging && !event.altKey ? "move" : "copy";
       document.getElementById(`item-${index}`)!.classList.add("is-drop-target");
       hideDropHint();
       return;
@@ -1068,13 +1327,15 @@ function bindContent(): void {
   content.addEventListener("dragleave", (event) => {
     if (!content.contains(event.relatedTarget as Node)) {
       hideDropHint();
-      for (const row of content.querySelectorAll(".is-drop-target")) row.classList.remove("is-drop-target");
+      for (const row of content.querySelectorAll(".is-drop-target"))
+        row.classList.remove("is-drop-target");
     }
   });
   content.addEventListener("drop", (event) => {
     event.preventDefault();
     hideDropHint();
-    for (const row of content.querySelectorAll(".is-drop-target")) row.classList.remove("is-drop-target");
+    for (const row of content.querySelectorAll(".is-drop-target"))
+      row.classList.remove("is-drop-target");
     const item = visible[indexOf(event)];
     const dir = item?.kind === "directory" ? item.path : null;
     if (dragging) {
@@ -1091,7 +1352,8 @@ let typedTimer: ReturnType<typeof setTimeout> | undefined;
 function bindKeys(): void {
   window.addEventListener("keydown", (event) => {
     const target = event.target as HTMLElement;
-    if (target.closest("dialog, .menu") || target instanceof HTMLInputElement) return;
+    if (target.closest("dialog, .menu") || target instanceof HTMLInputElement)
+      return;
     const mod = IS_MAC ? event.metaKey : event.ctrlKey;
     const item = visible[cursor];
     const cols = columns();
@@ -1111,12 +1373,17 @@ function bindKeys(): void {
     else if (mod && event.code === "KeyV") paste();
     else if (mod && event.shiftKey && event.code === "Period") toggleHidden();
     else if (mod) handled = false;
-    else if (event.key === "ArrowDown") moveCursor(cursor < 0 ? 0 : cursor + cols, event.shiftKey);
-    else if (event.key === "ArrowUp") moveCursor(cursor < 0 ? 0 : cursor - cols, event.shiftKey);
-    else if (event.key === "ArrowRight" && view === "grid") moveCursor(cursor + 1, event.shiftKey);
-    else if (event.key === "ArrowLeft" && view === "grid") moveCursor(cursor - 1, event.shiftKey);
+    else if (event.key === "ArrowDown")
+      moveCursor(cursor < 0 ? 0 : cursor + cols, event.shiftKey);
+    else if (event.key === "ArrowUp")
+      moveCursor(cursor < 0 ? 0 : cursor - cols, event.shiftKey);
+    else if (event.key === "ArrowRight" && view === "grid")
+      moveCursor(cursor + 1, event.shiftKey);
+    else if (event.key === "ArrowLeft" && view === "grid")
+      moveCursor(cursor - 1, event.shiftKey);
     else if (event.key === "Home") moveCursor(0, event.shiftKey);
-    else if (event.key === "End") moveCursor(visible.length - 1, event.shiftKey);
+    else if (event.key === "End")
+      moveCursor(visible.length - 1, event.shiftKey);
     else if (event.key === "Enter") void (item && open(item));
     else if (event.key === "Backspace") goUp();
     else if (event.key === " ") void peek();
@@ -1133,7 +1400,9 @@ function bindKeys(): void {
       clearTimeout(typedTimer);
       typed += event.key.toLowerCase();
       typedTimer = setTimeout(() => (typed = ""), 700);
-      const match = visible.findIndex((i) => i.name.toLowerCase().startsWith(typed));
+      const match = visible.findIndex((i) =>
+        i.name.toLowerCase().startsWith(typed),
+      );
       if (match >= 0) moveCursor(match, false);
     } else handled = false;
 

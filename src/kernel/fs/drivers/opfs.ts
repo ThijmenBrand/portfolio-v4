@@ -9,6 +9,7 @@ import {
   enospc,
   enotdir,
   enotempty,
+  exdev,
   KernelError,
 } from "../../errors";
 import type { Bytes } from "../../types";
@@ -51,6 +52,8 @@ function translate(error: unknown, subject: string): unknown {
       return ebusy(subject); // concurrent writable
     case "QuotaExceededError":
       return enospc(subject);
+    case "NotSupportedError":
+      return exdev(subject); // e.g. no directory move: the caller copies
     default:
       return eio(`${subject}: ${error.name}`);
   }
@@ -246,6 +249,32 @@ export class OpfsFS implements FileSystemDriver {
     if (target.kind !== "directory") throw enotdir(name);
 
     await this.guard(name, () => dir.handle.removeEntry(name));
+  }
+
+  /**
+   * FileSystemHandle.move, where the browser has it (Chromium: files only);
+   * EXDEV otherwise, checked before the target is removed.
+   */
+  public async rename(
+    fromParent: Node,
+    fromName: string,
+    toParent: Node,
+    toName: string,
+  ): Promise<void> {
+    const from = this.assertDirectory(fromParent);
+    const to = this.assertDirectory(toParent);
+    if (!isValidName(toName)) throw einval(toName);
+    const node = await this.lookup(from, fromName);
+    if (!node) throw enoent(fromName);
+
+    const movable = node.handle as FileSystemHandle & {
+      move?(destination: FileSystemDirectoryHandle, name: string): Promise<void>;
+    };
+    if (!movable.move) throw exdev(fromName);
+    // ponytail: remove-then-move, so a crash in between loses the old target.
+    if (await this.lookup(to, toName))
+      await this.guard(toName, () => to.handle.removeEntry(toName));
+    await this.guard(fromName, () => movable.move!(to.handle, toName));
   }
 
   private subject(node: OpfsNode): string {

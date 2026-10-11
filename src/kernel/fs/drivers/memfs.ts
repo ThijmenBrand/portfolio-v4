@@ -175,8 +175,25 @@ export class MemFS implements FileSystemDriver {
     directory.modifiedAt = Date.now();
   }
 
+  public async rename(
+    fromParent: Node,
+    fromName: string,
+    toParent: Node,
+    toName: string,
+  ): Promise<void> {
+    const from = this.assertDirectory(fromParent);
+    const to = this.assertDirectory(toParent);
+    const node = from.children.get(fromName);
+    if (!node) throw enoent(fromName);
+    if (!isValidName(toName)) throw einval(toName);
+
+    // One map write replaces the target: atomic, unlike unlink-then-move.
+    from.children.delete(fromName);
+    to.children.set(toName, node);
+    from.modifiedAt = to.modifiedAt = Date.now();
+  }
+
   private assertOwn(node: Node): MemNode {
-    // assert if node is memfs node
     if (!(BRAND in node)) throw ebadf("node does not belong to memfs");
     return node as MemNode;
   }

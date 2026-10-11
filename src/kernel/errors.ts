@@ -165,3 +165,11 @@ export function enosys(call: string): KernelError {
     call,
   });
 }
+
+export function exdev(path: string): KernelError {
+  return new KernelError("EXDEV", `Cross-device link: ${path}`, { path });
+}
+
+export function enotty(subject: string | number): KernelError {
+  return new KernelError("ENOTTY", `Not a terminal: ${subject}`, { subject });
+}

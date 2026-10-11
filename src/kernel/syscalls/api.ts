@@ -2,6 +2,7 @@ import type { DialogOptions } from "../dialog/list";
 import type { EventHandler, EventType } from "../events/types";
 import type { DirEntry, Stat, StatResult } from "../fs/types";
 import type { FdInfo, OpenFlags, PipeFds, Whence } from "../io/openfile";
+import type { Termios, Winsize } from "../io/pty";
 import type { Signal } from "../proc/signals";
 import type {
   Bytes,
@@ -12,7 +13,8 @@ import type {
   ProcessSignal,
   Rect,
   StrutEdge,
-  Termination,
+  WaitOptions,
+  WaitStatus,
   WindowId,
 } from "../types";
 import type {
@@ -44,7 +46,8 @@ export interface AppInterface {
     readonly signal: ProcessSignal;
     readonly pid: Pid;
     onSignal(signal: Signal, handler: () => void): Promise<() => void>;
-    wait(pid: Pid): Promise<Termination>;
+    /** `untraced`: also return when the child stops (reason "stopped"). */
+    wait(pid: Pid, options?: WaitOptions): Promise<WaitStatus>;
     spawn(path: string, args?: string[], options?: SpawnOptions): Promise<Pid>;
     exit(code?: number): Promise<void>;
     list(): Promise<ProcessInfo[]>;
@@ -55,6 +58,8 @@ export interface AppInterface {
     env(): Promise<Record<string, string>>;
     setenv(name: string, value?: string): Promise<void>;
     ids(): Promise<Ids>;
+    /** New session and process group, led by this process. EPERM for a group leader. */
+    setsid(): Promise<Pid>;
   };
   timers: {
     setInterval(callback: () => void, ms: number): Promise<number>;
@@ -87,6 +92,8 @@ export interface AppInterface {
     stat(path: string): Promise<StatResult>;
     mkdir(path: string): Promise<void>;
     unlink(path: string): Promise<void>;
+    /** Move within one mount; EXDEV across mounts (copy instead). */
+    rename(from: string, to: string): Promise<void>;
     rmdir(path: string): Promise<void>;
     chmod(path: string, mode: number): Promise<void>;
     chown(path: string, uid: number, gid: number): Promise<void>;
@@ -102,6 +109,15 @@ export interface AppInterface {
     listFds(): Promise<FdInfo[]>;
     pipe(): Promise<PipeFds>;
     openpty(): Promise<{ master: number; slave: number }>;
+    /** Terminal control, on either end of a pty. ENOTTY on anything else. */
+    tcgetattr(fd: number): Promise<Termios>;
+    tcsetattr(fd: number, changes: Partial<Termios>): Promise<void>;
+    /** The group ^C, ^Z and resizes go to; null until someone sets it. */
+    tcgetpgrp(fd: number): Promise<Pid | null>;
+    tcsetpgrp(fd: number, pgid: Pid): Promise<void>;
+    getWinsize(fd: number): Promise<Winsize>;
+    /** Sends SIGWINCH to the foreground group when the size changes. */
+    setWinsize(fd: number, size: Winsize): Promise<void>;
   };
 }
 
@@ -146,7 +162,7 @@ export function bindSyscalls(target: SyscallTable, pid: Pid): SystemInterface {
         return pid;
       },
       spawn: (path, args, options) => target.spawn(pid, path, args, options),
-      wait: (childPid) => target.wait(pid, childPid),
+      wait: (childPid, options) => target.wait(pid, childPid, options),
       exit: (code?) => target.exit(pid, code ?? 0),
       list: () => target.list(pid),
       onSignal: (signal, handler) => target.onSignal(pid, signal, handler),
@@ -157,6 +173,7 @@ export function bindSyscalls(target: SyscallTable, pid: Pid): SystemInterface {
       env: () => target.getenv(pid),
       setenv: (name, value) => target.setenv(pid, name, value),
       ids: () => target.ids(pid),
+      setsid: () => target.setsid(pid),
     },
     timers: {
       setInterval: (callback, ms) => target.setInterval(pid, callback, ms),
@@ -186,6 +203,7 @@ export function bindSyscalls(target: SyscallTable, pid: Pid): SystemInterface {
       stat: (path) => target.stat(pid, path),
       mkdir: (path) => target.mkdir(pid, path),
       unlink: (path) => target.unlink(pid, path),
+      rename: (from, to) => target.rename(pid, from, to),
       rmdir: (path) => target.rmdir(pid, path),
       chmod: (path, mode) => target.chmod(pid, path, mode),
       chown: (path, uid, gid) => target.chown(pid, path, uid, gid),
@@ -202,6 +220,12 @@ export function bindSyscalls(target: SyscallTable, pid: Pid): SystemInterface {
       listFds: () => target.listFds(pid),
       pipe: () => target.pipe(pid),
       openpty: () => target.openpty(pid),
+      tcgetattr: (fd) => target.tcgetattr(pid, fd),
+      tcsetattr: (fd, changes) => target.tcsetattr(pid, fd, changes),
+      tcgetpgrp: (fd) => target.tcgetpgrp(pid, fd),
+      tcsetpgrp: (fd, pgid) => target.tcsetpgrp(pid, fd, pgid),
+      getWinsize: (fd) => target.getWinsize(pid, fd),
+      setWinsize: (fd, size) => target.setWinsize(pid, fd, size),
     },
   };
 }

@@ -19,6 +19,7 @@ export interface ProcessManagerInterface {
   setStatus(pid: Pid, status: Process["status"]): void;
   childrenOf(pid: Pid): Process[];
   reparentChildren(from: Pid, to: Pid): void;
+  inGroup(pgid: Pid): Process[];
   registerResource(pid: Pid, kind: string, dispose: () => void): number;
   unregisterResource(pid: Pid, resourceId: number): void;
   disposeResources(pid: Pid): void;
@@ -69,6 +70,10 @@ export class ProcessManager implements ProcessManagerInterface {
         at: 0,
       },
       waiters: [],
+      pgid: init.pgid ?? pid,
+      sid: init.sid ?? pid,
+      stopWaiters: [],
+      continueWaiters: [],
       abortController: new AbortController(),
       signalHandlers: new Map(),
       faults: 0,
@@ -94,11 +99,13 @@ export class ProcessManager implements ProcessManagerInterface {
       privileged: p.privileged,
       args: [...(p.args ?? [])],
       path: p.path,
-      status: p.status,
+      status: p.stopped ? "stopped" : p.status,
       startedAt: p.startedAt,
       cwd: p.cwd,
       uid: p.uid,
       euid: p.euid,
+      pgid: p.pgid,
+      sid: p.sid,
       termination: p.termination,
       faults: p.faults,
       lastFault: p.lastFault,
@@ -124,6 +131,12 @@ export class ProcessManager implements ProcessManagerInterface {
         proc.parentPid = to;
       }
     }
+  }
+
+  public inGroup(pgid: Pid): Process[] {
+    return Array.from(this.processes.values()).filter(
+      (proc) => proc.pgid === pgid,
+    );
   }
 
   public registerResource(pid: Pid, kind: string, dispose: () => void): number {

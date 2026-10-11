@@ -1,6 +1,6 @@
 import { KernelError } from "../../kernel/errors";
 import type { AppInterface } from "../../kernel/syscalls/api";
-import type { Pid } from "../../kernel/types";
+import type { Pid, WaitStatus } from "../../kernel/types";
 
 interface Redirect {
   path: string;
@@ -11,6 +11,21 @@ interface Command {
   argv: string[];
   stdin?: string;
   stdout?: Redirect;
+}
+
+/** A pipeline in its own process group, so the terminal can signal all of it. */
+interface Job {
+  id: number;
+  pgid: Pid;
+  pids: Pid[];
+  last: Pid;
+  command: string;
+  status: number;
+  state: "running" | "stopped" | "done";
+  background: boolean;
+  notify: boolean;
+  monitor?: Promise<void>;
+  waits: Map<Pid, Promise<{ pid: Pid; status: WaitStatus }>>;
 }
 
 function errorCode(error: unknown): string | undefined {
@@ -26,7 +41,6 @@ function message(error: unknown): string {
 
 const LITERAL_DOLLAR = "\0";
 
-/** `$?`, `${NAME}` or `$NAME`. */
 const VARIABLE = /\$(\?|\{\w+\}|[A-Za-z_]\w*)/g;
 
 /**
@@ -73,6 +87,13 @@ function tokenize(line: string): string[] {
       continue;
     }
 
+    // A lone `&` runs what comes before it in the background.
+    if (ch === "&" && line[i + 1] !== "&") {
+      flush();
+      tokens.push("&");
+      continue;
+    }
+
     if (ch === "|" || ch === "<" || ch === ">" || ch === ";") {
       flush();
       if (ch === ">" && line[i + 1] === ">") {
@@ -81,6 +102,16 @@ function tokenize(line: string): string[] {
       } else {
         tokens.push(ch);
       }
+      continue;
+    }
+
+    if (
+      ch === "~" &&
+      current === "" &&
+      !quoted &&
+      /^$|^[\/\s;|<>&]/.test(line[i + 1] ?? "")
+    ) {
+      current += "$HOME";
       continue;
     }
 
@@ -165,9 +196,14 @@ class Shell {
   private readonly encoder = new TextEncoder();
   private status = 0;
   private running = true;
-  private foreground: Pid[] = [];
   private env: Record<string, string> = {};
   private root = false;
+
+  private readonly jobs: Job[] = [];
+  private foregroundJob?: Job;
+  /** stdin is a terminal we control: hand it to each foreground job. */
+  private tty = false;
+  private pgid = 0 as Pid;
 
   private readonly os: AppInterface;
 
@@ -182,6 +218,9 @@ class Shell {
     if (script !== undefined) return this.source(script);
 
     await this.os.process.onSignal("SIGINT", () => void this.interrupt());
+    // ^Z at the prompt reaches us too: the shell itself never stops.
+    await this.os.process.onSignal("SIGTSTP", () => {});
+    await this.takeTerminal();
     await this.write(1, "portfolio sh — try `help`\n");
     if (this.env.HOME) {
       await this.source(`${this.env.HOME}/.profile`).catch((error) => {
@@ -189,7 +228,34 @@ class Shell {
         if (code !== "ENOENT" && code !== "EACCES") throw error;
       });
     }
-    return this.runLines(new LineReader(this.os, 0), true);
+    const status = await this.runLines(new LineReader(this.os, 0), true);
+    await this.hangUpStopped();
+    return status;
+  }
+
+  /**
+   * Our own session and group, then make it the terminal's foreground, so
+   * ^C at the prompt reaches us and not whoever started us. Not a terminal
+   * (stdin is a pipe): no job control, jobs still get their own groups.
+   */
+  private async takeTerminal(): Promise<void> {
+    await this.os.process.setsid().catch(() => {}); // EPERM: already a group leader
+    this.pgid = (await this.os.process.ids()).pgid;
+    try {
+      await this.os.io.tcsetpgrp(0, this.pgid);
+      this.tty = true;
+    } catch {
+      this.tty = false;
+    }
+  }
+
+  /** Stopped jobs would wait forever once we're gone: hang up and wake them. */
+  private async hangUpStopped(): Promise<void> {
+    for (const job of this.jobs) {
+      if (job.state !== "stopped") continue;
+      await this.os.process.kill(-job.pgid as Pid, "SIGHUP").catch(() => {});
+      await this.os.process.kill(-job.pgid as Pid, "SIGCONT").catch(() => {});
+    }
   }
 
   /** Runs a file's lines in this shell, so its `export`s stick (`source`). */
@@ -207,7 +273,10 @@ class Shell {
     interactive: boolean,
   ): Promise<number> {
     while (this.running) {
-      if (interactive) await this.prompt();
+      if (interactive) {
+        await this.reportJobs();
+        await this.prompt();
+      }
 
       const line = await lines.readLine();
       if (line === null) break; // EOF: end of script, or the terminal went away
@@ -236,18 +305,20 @@ class Shell {
 
   private async interrupt(): Promise<void> {
     // Idle at the prompt: bash redraws it. Nothing to kill.
-    if (this.foreground.length === 0) {
+    if (!this.foregroundJob) {
       await this.prompt();
       return;
     }
 
-    for (const pid of this.foreground) {
-      // ESRCH — it exited between the signal and here.
-      await this.os.process.kill(pid, "SIGINT").catch(() => {});
-    }
+    // Without a terminal, nobody else signals the job: pass it on.
+    // (With one, ^C went straight to the job's group, not to us.)
+    // ESRCH — it exited between the signal and here.
+    await this.os.process
+      .kill(-this.foregroundJob.pgid as Pid, "SIGINT")
+      .catch(() => {});
   }
 
-  /** `a && b` runs b only if a succeeded; `a ; b` always runs b. */
+  /** `a && b` runs b only if a succeeded; `a ; b` always runs b; `a & b` doesn't wait for a. */
   private async execute(line: string): Promise<number> {
     const tokens = tokenize(line);
     let status = 0;
@@ -256,14 +327,17 @@ class Shell {
 
     for (let i = 0; i <= tokens.length; i += 1) {
       const token = tokens[i];
-      if (token !== undefined && token !== "&&" && token !== ";") continue;
+      if (token !== undefined && !["&&", ";", "&"].includes(token)) continue;
 
       const group = tokens.slice(start, i);
       if (group.length === 0 && token !== undefined) {
         throw new Error(`syntax error near \`${token}\``);
       }
       if (group.length > 0 && !skip) {
-        status = await this.executeGroup(group.map((t) => this.expand(t)));
+        status = await this.executeGroup(
+          group.map((t) => this.expand(t)),
+          token === "&",
+        );
         this.status = status; // so `$?` in the next command sees it
       }
       skip = token === "&&" && status !== 0;
@@ -282,7 +356,10 @@ class Shell {
       .replaceAll(LITERAL_DOLLAR, "$");
   }
 
-  private async executeGroup(tokens: string[]): Promise<number> {
+  private async executeGroup(
+    tokens: string[],
+    background: boolean,
+  ): Promise<number> {
     const commands = parse(tokens);
 
     if (commands.length === 1 && this.isBuiltin(commands[0]!.argv[0]!)) {
@@ -291,7 +368,7 @@ class Shell {
     if (commands.some((c) => this.isBuiltin(c.argv[0]!))) {
       throw new Error("builtins cannot appear in a pipeline");
     }
-    return this.runPipeline(commands);
+    return this.runPipeline(commands, tokens.join(" "), background);
   }
 
   // ------------------------------------------------------------- builtins
@@ -306,6 +383,9 @@ class Shell {
       "unset",
       "source",
       ".",
+      "jobs",
+      "fg",
+      "bg",
     ].includes(name);
   }
 
@@ -339,6 +419,27 @@ class Shell {
       return this.source(args[0]);
     }
 
+    if (name === "jobs") {
+      for (const job of this.jobs) await this.write(1, this.jobLine(job));
+      return 0;
+    }
+
+    if (name === "fg" || name === "bg") {
+      const job = this.findJob(args[0]);
+      if (!job)
+        throw new Error(`${name}: ${args[0] ?? "current"}: no such job`);
+      if (name === "fg") {
+        await this.write(1, `${job.command}\n`);
+        await this.os.process.kill(-job.pgid as Pid, "SIGCONT");
+        return this.runForeground(job);
+      }
+      job.background = true;
+      await this.os.process.kill(-job.pgid as Pid, "SIGCONT");
+      await this.write(1, `[${job.id}]+ ${job.command} &\n`);
+      this.watchBackground(job);
+      return 0;
+    }
+
     if (name === "exit") {
       this.running = false;
       return args[0] === undefined ? this.status : Number(args[0]) || 0;
@@ -352,7 +453,9 @@ class Shell {
         "files:     ls  cat  touch  mkdir [-p]  rmdir  rm [-r]  cp  mv",
         "text:      head  tail  wc  grep  sort  uniq  tee",
         "find:      tree  find [-name glob]  stat",
-        "procs:     ps   kill [-SIGNAL] pid   sleep N",
+        "procs:     ps   kill [-SIGNAL] pid|-pgid   sleep N",
+        "jobs:      cmd &   jobs   fg [%n]   bg [%n]   Ctrl-Z stops, Ctrl-C interrupts",
+        "terminal:  stty [size | -a | [-]echo | [-]icanon | [-]isig]",
         "misc:      date  whoami  uname  open <url>",
         "programs:  anything on $PATH (export PATH=/home/bin:$PATH)",
         "scripts:   first line #!/ProgramFiles/sh, run by path or via $PATH",
@@ -375,17 +478,21 @@ class Shell {
   private async spawn(
     command: Command,
     fds: Record<number, number>,
+    pgid: number,
   ): Promise<Pid> {
     const [name, ...args] = command.argv;
 
     // An explicit path is run as given, and keeps its real error.
     if (name.includes("/")) {
-      return await this.os.process.spawn(name, args, { fds });
+      return await this.os.process.spawn(name, args, { fds, pgid });
     }
 
     for (const dir of (this.env.PATH ?? "").split(":").filter(Boolean)) {
       try {
-        return await this.os.process.spawn(`${dir}/${name}`, args, { fds });
+        return await this.os.process.spawn(`${dir}/${name}`, args, {
+          fds,
+          pgid,
+        });
       } catch (error) {
         // Not here, or a PATH entry that isn't a directory: try the next.
         if (!["ENOENT", "ENOTDIR"].includes(errorCode(error) ?? ""))
@@ -396,7 +503,11 @@ class Shell {
     throw new KernelError("ENOENT", `${name}: command not found`);
   }
 
-  private async runPipeline(commands: Command[]): Promise<number> {
+  private async runPipeline(
+    commands: Command[],
+    text: string,
+    background: boolean,
+  ): Promise<number> {
     const opened: number[] = [];
     const pids: Pid[] = [];
 
@@ -432,7 +543,8 @@ class Shell {
           fds[1] = fd;
         }
 
-        pids.push(await this.spawn(command, fds));
+        // The first command leads a new group; the rest join it.
+        pids.push(await this.spawn(command, fds, pids[0] ?? 0));
       }
     } finally {
       // THE step that makes a pipeline terminate. Every pipe end the shell
@@ -441,14 +553,125 @@ class Shell {
       for (const fd of opened) await this.os.io.close(fd).catch(() => {});
     }
 
-    this.foreground = pids;
+    const job: Job = {
+      id: Math.max(0, ...this.jobs.map((j) => j.id)) + 1, // like bash: [1] again once [1] is gone
+      pgid: pids[0]!,
+      pids,
+      last: pids[pids.length - 1]!,
+      command: text,
+      status: 0,
+      state: "running",
+      background,
+      notify: false,
+      waits: new Map(),
+    };
+    this.jobs.push(job);
+
+    if (!background) return this.runForeground(job);
+    await this.write(1, `[${job.id}] ${job.pgid}\n`);
+    this.watchBackground(job);
+    return 0;
+  }
+
+  // ------------------------------------------------------------- jobs
+
+  /** Give the job the terminal until it exits or stops, then take it back. */
+  private async runForeground(job: Job): Promise<number> {
+    job.background = false;
+    this.foregroundJob = job;
+    if (this.tty) await this.os.io.tcsetpgrp(0, job.pgid).catch(() => {});
     try {
-      let status = 0;
-      for (const pid of pids) status = (await this.os.process.wait(pid)).code;
-      return status;
+      await this.monitor(job);
     } finally {
-      this.foreground = [];
+      this.foregroundJob = undefined;
+      if (this.tty) await this.os.io.tcsetpgrp(0, this.pgid).catch(() => {});
     }
+
+    if (job.state === "stopped") await this.write(1, this.jobLine(job));
+    else this.forget(job);
+    return job.status;
+  }
+
+  private watchBackground(job: Job): void {
+    void this.monitor(job).then(
+      () => {
+        if (job.background) job.notify = true;
+      },
+      () => {},
+    );
+  }
+
+  /** Bash prints these just before the prompt, not in the middle of output. */
+  private async reportJobs(): Promise<void> {
+    for (const job of [...this.jobs]) {
+      if (!job.notify) continue;
+      job.notify = false;
+      await this.write(1, this.jobLine(job));
+      if (job.state === "done") this.forget(job);
+    }
+  }
+
+  private monitor(job: Job): Promise<void> {
+    job.monitor ??= this.waitJob(job).finally(() => {
+      job.monitor = undefined;
+    });
+    return job.monitor;
+  }
+
+  /** Until every process is gone, or one stops (^Z stops the whole group). */
+  private async waitJob(job: Job): Promise<void> {
+    job.state = "running";
+    while (job.pids.length > 0) {
+      const { pid, status } = await Promise.race(
+        job.pids.map((pid) => this.waitPid(job, pid)),
+      );
+      if (status.reason === "stopped") {
+        job.state = "stopped";
+        job.status = status.code;
+        return;
+      }
+      job.pids = job.pids.filter((p) => p !== pid);
+      if (pid === job.last) job.status = status.code;
+    }
+    job.state = "done";
+  }
+
+  private waitPid(
+    job: Job,
+    pid: Pid,
+  ): Promise<{ pid: Pid; status: WaitStatus }> {
+    let pending = job.waits.get(pid);
+    if (!pending) {
+      pending = this.os.process
+        .wait(pid, { untraced: true })
+        // ESRCH: already reaped. Count it as gone.
+        .catch((): WaitStatus => ({ code: 1, reason: "crash", at: Date.now() }))
+        .then((status) => {
+          job.waits.delete(pid);
+          return { pid, status };
+        });
+      job.waits.set(pid, pending);
+    }
+    return pending;
+  }
+
+  /** `%2`, `2`, or nothing for the most recent. */
+  private findJob(spec?: string): Job | undefined {
+    if (spec === undefined) return this.jobs[this.jobs.length - 1];
+    const id = Number(spec.replace(/^%/, ""));
+    return this.jobs.find((job) => job.id === id);
+  }
+
+  private forget(job: Job): void {
+    const index = this.jobs.indexOf(job);
+    if (index >= 0) this.jobs.splice(index, 1);
+  }
+
+  private jobLine(job: Job): string {
+    const state = { running: "Running", stopped: "Stopped", done: "Done" }[
+      job.state
+    ];
+    return `[${job.id}]  ${state.padEnd(22)}${job.command}\n`;
   }
 
   private async write(fd: number, text: string): Promise<void> {

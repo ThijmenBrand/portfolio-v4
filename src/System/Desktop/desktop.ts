@@ -1,4 +1,5 @@
 import { registry } from "../../apps/registry";
+import { dirname } from "../../kernel/fs/path";
 import { kernelError, logError } from "../../kernel/errors";
 import type { SystemInterface } from "../../kernel/syscalls/api";
 import type { Rect } from "../../kernel/types";
@@ -60,9 +61,6 @@ import "./desktop.css";
  * is logging out: login then ends whatever the session left running.
  */
 const USER_DIRS = ["Documents", "Downloads", "Pictures", "Music", "Videos"];
-
-/** Polling stands in for fs change events, which the kernel doesn't have. */
-const RESCAN_MS = 2000;
 
 export async function main(os: SystemInterface): Promise<void> {
   const home = (await os.process.env()).HOME ?? "/";
@@ -164,6 +162,7 @@ class Desktop implements DesktopCommands {
   private focused: DesktopIcon | null = null;
   private layout: IconLayout = {};
   private syncing: Promise<void> = Promise.resolve();
+  private syncPending = false;
 
   constructor(os: SystemInterface, folder: string, root: HTMLElement) {
     this.os = os;
@@ -197,11 +196,11 @@ class Desktop implements DesktopCommands {
         () => void this.onWorkAreaChanged(),
       ),
     );
-    const rescan = await this.os.timers.setInterval(
-      () => void this.syncIcons().catch(logError),
-      RESCAN_MS,
+    this.disposers.push(
+      await this.os.events.subscribe(["fs.changed"], (event) => {
+        if (dirname(event.path) === this.folder) this.scheduleSync();
+      }),
     );
-    this.disposers.push(() => void this.os.timers.clearInterval(rescan));
 
     this.surface.focus();
   }
@@ -314,10 +313,20 @@ class Desktop implements DesktopCommands {
     if (this.focused === icon) this.focused = null;
   }
 
+  /** Copying a folder in fires an event per file: one scan per frame is plenty. */
+  private scheduleSync(): void {
+    if (this.syncPending) return;
+    this.syncPending = true;
+    requestAnimationFrame(() => {
+      this.syncPending = false;
+      void this.syncIcons().catch(logError);
+    });
+  }
+
   /**
    * Match the icons to the files in ~/Desktop. Anyone may change that folder
-   * (Files, the terminal, the taskbar's app menu); we rescan on a timer and
-   * on SIGHUP. Queued, so two scans never add the same file twice.
+   * (Files, the terminal, the taskbar's app menu); fs.changed tells us when.
+   * Queued, so two scans never add the same file twice.
    */
   public syncIcons(): Promise<void> {
     this.syncing = this.syncing.then(() => this.scan(), () => this.scan());

@@ -8,7 +8,13 @@
 /** Who is asking: a process's effective uid and its group. */
 export type Cred = { euid: number; gid: number };
 
-export type Attr = { uid: number; gid: number; mode: number };
+export type Attr = {
+  uid: number;
+  gid: number;
+  mode: number;
+  createdAt?: number;
+  modifiedAt?: number;
+};
 
 export const R = 4;
 export const W = 2;
@@ -16,18 +22,15 @@ export const X = 1;
 
 export const ROOT: Cred = { euid: 0, gid: 0 };
 
-/** The owner's group, in /etc/group as `admin`. Its members see private apps. */
 export const ADMIN_GID = 10;
 
 export function defaultAttr(kind: string): Attr {
   return { uid: 0, gid: 0, mode: kind === "file" ? 0o644 : 0o755 };
 }
 
-/** Root may do anything; otherwise owner, group or other bits, in that order. */
 export function permits(attr: Attr, cred: Cred, want: number): boolean {
   if (cred.euid === 0) return true;
-  const shift =
-    cred.euid === attr.uid ? 6 : cred.gid === attr.gid ? 3 : 0;
+  const shift = cred.euid === attr.uid ? 6 : cred.gid === attr.gid ? 3 : 0;
   return ((attr.mode >> shift) & want) === want;
 }
 

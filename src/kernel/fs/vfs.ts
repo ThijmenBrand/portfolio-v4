@@ -5,9 +5,12 @@ import {
   eintr,
   einval,
   eisdir,
+  enoent,
   enotdir,
+  enotempty,
   epermPath,
   erofs,
+  exdev,
   KernelError,
 } from "../errors";
 import type { OpenFile, OpenFlags } from "../io/openfile.ts";
@@ -40,6 +43,12 @@ export class VFS {
 
   /** Called after any change to `attrs`, so the kernel can persist them. */
   public onAttrsChange: () => void = () => {};
+
+  /**
+   * Called after an entry is created, removed, re-moded, or closed after
+   * being opened for writing (one call per write session, like IN_CLOSE_WRITE).
+   */
+  public onChange: (path: string) => void = () => {};
 
   private static readonly CHUNK_SIZE = 64 * 1024; // 64KB
   private static readonly MAX_SIZE = 64 * 1024 * 1024; // 64MB
@@ -129,7 +138,12 @@ export class VFS {
 
     return (
       (await mount.driver.open?.(node, normalized)) ??
-      new VfsFile(mount, node, normalized)
+      new VfsFile(
+        mount,
+        node,
+        normalized,
+        flags.write ? () => this.onChange(normalized) : undefined,
+      )
     );
   }
 
@@ -171,7 +185,16 @@ export class VFS {
     this.assertCanModifyParent(normalized, cred);
 
     await mount.driver.create(parent, name, "directory");
-    this.setAttr(normalized, { uid: cred.euid, gid: cred.gid, mode: 0o755 });
+    const now = Date.now();
+    this.setAttr(normalized, {
+      uid: cred.euid,
+      gid: cred.gid,
+      mode: 0o755,
+      createdAt: now,
+      modifiedAt: now,
+    });
+    this.touchDir(dirname(normalized));
+    this.onChange(normalized);
   }
 
   public async unlink(path: string, cred: Cred = ROOT): Promise<void> {
@@ -182,6 +205,8 @@ export class VFS {
 
     await mount.driver.unlink(parent, name);
     this.dropAttr(normalized);
+    this.touchDir(dirname(normalized));
+    this.onChange(normalized);
   }
 
   public async rmdir(path: string, cred: Cred = ROOT): Promise<void> {
@@ -192,6 +217,53 @@ export class VFS {
 
     await mount.driver.rmdir(parent, name);
     this.dropAttr(normalized);
+    this.touchDir(dirname(normalized));
+    this.onChange(normalized);
+  }
+
+  /**
+   * Move `from` to `to` within one mount, replacing a file with a file or an
+   * empty directory with a directory. Across mounts, or on a driver that
+   * can't move (OPFS without FileSystemHandle.move), EXDEV: copy instead.
+   */
+  public async rename(from: string, to: string, cred: Cred = ROOT): Promise<void> {
+    const src = normalize(from);
+    const dst = normalize(to);
+    // A mount point (or what holds one) stays put. Checked before EXDEV, so
+    // nobody falls back to copying a whole mount.
+    if (this.mounts.some((m) => m.path === src || m.path.startsWith(`${src}/`)))
+      throw ebusy(src);
+    const mount = findMount(this.mounts, src);
+    this.assertWritable(mount, src);
+    if (findMount(this.mounts, dst) !== mount) throw exdev(dst);
+    this.assertCanModifyParent(src, cred);
+    this.assertCanModifyParent(dst, cred);
+
+    const a = await this.resolveParent(src);
+    const b = await this.resolveParent(dst);
+    const node = await mount.driver.lookup(a.parent, a.name);
+    if (!node) throw enoent(src);
+    if (src === dst) return;
+    if (dst.startsWith(`${src}/`)) throw einval(`${src} into itself`);
+    if (!mount.driver.rename) throw exdev(dst);
+
+    const existing = await mount.driver.lookup(b.parent, b.name);
+    if (existing) {
+      if (node.kind === "directory" && existing.kind !== "directory") throw enotdir(dst);
+      if (node.kind !== "directory" && existing.kind === "directory") throw eisdir(dst);
+      // The driver replaces it, once it knows it can move (else EXDEV, untouched).
+      if (existing.kind === "directory" && (await mount.driver.readdir(existing)).length > 0)
+        throw enotempty(dst);
+    }
+
+    await mount.driver.rename(a.parent, a.name, b.parent, b.name);
+    // An inherited owner would change with the new parent: pin it first.
+    this.attrs.set(src, this.attr(src, node.kind));
+    this.moveAttrs(src, dst);
+    this.touchDir(dirname(src));
+    this.touchDir(dirname(dst));
+    this.onChange(src);
+    this.onChange(dst);
   }
 
   /** Only the owner (or root) may change a mode. */
@@ -202,6 +274,7 @@ export class VFS {
     const current = this.attr(normalized, node.kind);
     if (cred.euid !== 0 && cred.euid !== current.uid) throw epermPath(normalized);
     this.setAttr(normalized, { ...current, mode: mode & 0o777 });
+    this.onChange(normalized);
   }
 
   /** Only root may give a file away. */
@@ -216,6 +289,19 @@ export class VFS {
     this.assertWritable(mount, normalized);
     if (cred.euid !== 0) throw epermPath(normalized);
     this.setAttr(normalized, { ...this.attr(normalized, node.kind), uid, gid });
+    this.onChange(normalized);
+  }
+
+  /** Whether `cred` may list `dir`. Attribute lookups only, no I/O: cheap per event. */
+  public mayList(dir: string, cred: Cred): boolean {
+    const normalized = normalize(dir);
+    try {
+      this.assertSearch(normalized, cred);
+      this.assertAccess(normalized, "directory", cred, R);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -287,7 +373,13 @@ export class VFS {
 
     this.assertCanModifyParent(path, cred);
     const node = await mount.driver.create(parent, name, "file");
-    this.setAttr(path, { uid: cred.euid, gid: cred.gid, mode: 0o644 });
+    this.setAttr(path, {
+      uid: cred.euid,
+      gid: cred.gid,
+      mode: 0o644,
+      createdAt: Date.now(),
+    });
+    this.touchDir(dirname(path));
     return { node, created: true };
   }
 
@@ -318,6 +410,26 @@ export class VFS {
 
   private dropAttr(path: string): void {
     if (this.attrs.delete(path)) this.onAttrsChange();
+  }
+
+  /** An entry in `dir` came or went: its mtime, which OPFS doesn't keep. */
+  private touchDir(dir: string): void {
+    this.setAttr(dir, { ...this.attr(dir, "directory"), modifiedAt: Date.now() });
+  }
+
+  /** Re-key `from` and everything under it to `to`, dropping what was at `to`. */
+  private moveAttrs(from: string, to: string): void {
+    const under = (path: string, root: string) =>
+      path === root || path.startsWith(`${root}/`);
+    for (const path of [...this.attrs.keys()]) {
+      if (under(path, to)) this.attrs.delete(path);
+    }
+    for (const [path, attr] of [...this.attrs]) {
+      if (!under(path, from)) continue;
+      this.attrs.delete(path);
+      this.attrs.set(to + path.slice(from.length), attr);
+    }
+    this.onAttrsChange();
   }
 
   private assertAccess(

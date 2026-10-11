@@ -14,6 +14,7 @@ export function fsSyscalls(
   | "writeFile"
   | "mkdir"
   | "unlink"
+  | "rename"
   | "rmdir"
   | "chdir"
   | "cwd"
@@ -57,6 +58,14 @@ export function fsSyscalls(
     unlink: async (callerPid, path) => {
       const proc = requireAlive(ctx, callerPid);
       return await ctx.fs.unlink(resolveFrom(proc.cwd, path), proc);
+    },
+    rename: async (callerPid, from, to) => {
+      const proc = requireAlive(ctx, callerPid);
+      return await ctx.fs.rename(
+        resolveFrom(proc.cwd, from),
+        resolveFrom(proc.cwd, to),
+        proc,
+      );
     },
     chmod: async (callerPid, path, mode) => {
       const proc = requireAlive(ctx, callerPid);

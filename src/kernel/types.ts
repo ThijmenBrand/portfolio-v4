@@ -55,9 +55,23 @@ export interface Termination {
   at: number; // timestamp of termination
 }
 
+export interface Stopped {
+  code: number; // 128 + signal number, like a shell's $?
+  reason: "stopped";
+  signal: Signal;
+  at: number;
+}
+
+export type WaitStatus = Termination | Stopped;
+
+export interface WaitOptions {
+  untraced?: boolean;
+}
+
 export const ProcessStatus = {
   Loading: "loading",
   Running: "running",
+  Stopped: "stopped",
   Exiting: "exiting",
   Zombie: "zombie",
 } as const;
@@ -83,6 +97,12 @@ export interface Process {
   files: FdTable;
   nextResourceId: number;
   waiters: Array<(termination: Termination) => void>;
+  pgid: Pid;
+  sid: Pid;
+  stopped?: Signal;
+  pendingStop?: Stopped;
+  stopWaiters: Array<(stopped: Stopped) => void>;
+  continueWaiters: Array<() => void>;
   abortController: AbortController;
   signalHandlers: Map<Signal, () => void>;
   faults: number;
@@ -114,6 +134,8 @@ export interface ProcessInfo {
   cwd: string;
   uid: number;
   euid: number;
+  pgid: Pid;
+  sid: Pid;
   lastFault?: FaultInfo;
   readonly args: string[];
 }
@@ -128,6 +150,8 @@ export interface ProcessInit {
   uid: number;
   euid: number;
   gid: number;
+  pgid?: Pid;
+  sid?: Pid;
 }
 
 export type AppModule = {

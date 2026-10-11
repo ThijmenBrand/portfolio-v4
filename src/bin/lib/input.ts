@@ -84,12 +84,23 @@ export async function readLine(os: AppInterface, fd: number): Promise<string | n
   }
 }
 
-/** Prompts on stdout and reads stdin with echo hidden (ESC[8m, see the terminal). */
+/**
+ * Prompts on stdout and reads stdin without echo: the pty stops echoing,
+ * and ESC[8m tells the terminal to mask its input box. Not a terminal
+ * (a piped password): just read the line.
+ */
 export async function askPassword(os: AppInterface, prompt: string): Promise<string> {
+  const echoed = await os.io
+    .tcgetattr(0)
+    .then((termios) => termios.echo)
+    .catch(() => false);
+  if (echoed) await os.io.tcsetattr(0, { echo: false });
   await print(os, 1, `${prompt}\x1b[8m`);
   try {
     return (await readLine(os, 0)) ?? "";
   } finally {
-    await print(os, 1, "\x1b[28m");
+    if (echoed) await os.io.tcsetattr(0, { echo: true }).catch(() => {});
+    // The newline the user typed wasn't echoed either.
+    await print(os, 1, "\x1b[28m\n");
   }
 }
