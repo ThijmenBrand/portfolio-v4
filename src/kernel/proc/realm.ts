@@ -56,6 +56,8 @@ const WORKER_HOST = `${import.meta.env.BASE_URL}worker-host.html`;
 function sandboxedFrame(src: string, title: string): HTMLIFrameElement {
   const iframe = document.createElement("iframe");
   iframe.setAttribute("sandbox", "allow-scripts");
+  // Write-only, and the browser still requires a click (Aliases copies with it).
+  iframe.allow = "clipboard-write";
   iframe.title = title;
   iframe.src = src; // before appending: no extra about:blank load
   return iframe;

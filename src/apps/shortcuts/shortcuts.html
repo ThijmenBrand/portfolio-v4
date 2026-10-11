@@ -1,0 +1,44 @@
+<main class="shortcuts">
+  <section class="empty" data-field="empty" hidden>
+    <h1>Your sites, one key away</h1>
+    <p>Add a site and it gets a number. Press that number to open it in a new tab.</p>
+    <div class="suggestions" role="group" aria-label="Suggested sites" data-field="suggestions"></div>
+  </section>
+
+  <ol class="dial" aria-label="Shortcuts" data-field="dial"></ol>
+
+  <footer class="bar">
+    <p class="keys">
+      <span><kbd>1</kbd>–<kbd>9</kbd> open</span>
+      <span><kbd>E</kbd> edit</span>
+      <span><kbd>Alt</kbd> <kbd>←</kbd><kbd>→</kbd> reorder</span>
+    </p>
+    <output class="status" aria-live="polite" data-field="status">
+      <span data-field="status-text"></span>
+      <button type="button" class="link" data-action="undo" hidden>Undo</button>
+    </output>
+  </footer>
+</main>
+
+<template id="editor">
+  <li class="editor">
+    <span class="mono mono-preview" aria-hidden="true"><span class="mono-letter">+</span></span>
+    <div class="editor-fields">
+      <label class="field">
+        <span>Address</span>
+        <input name="url" type="text" inputmode="url" placeholder="github.com" spellcheck="false" autocomplete="off" />
+      </label>
+      <label class="field">
+        <span>Name</span>
+        <input name="name" type="text" placeholder="Name" maxlength="40" autocomplete="off" />
+      </label>
+      <p class="editor-error" role="alert"></p>
+    </div>
+    <div class="editor-actions">
+      <button type="button" class="button button-danger" data-action="remove">Remove</button>
+      <span class="spacer"></span>
+      <button type="button" class="button" data-action="cancel">Cancel</button>
+      <button type="button" class="button button-primary" data-action="save">Add</button>
+    </div>
+  </li>
+</template>

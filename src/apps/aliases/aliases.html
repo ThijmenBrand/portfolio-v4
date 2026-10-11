@@ -1,0 +1,64 @@
+<div class="app" data-field="app" data-view="list">
+  <header class="toolbar">
+    <label class="search">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5" /><path d="M10.5 10.5 14 14" /></svg>
+      <input type="search" placeholder="Search aliases" aria-label="Search aliases" autocomplete="off" spellcheck="false" data-field="search" />
+      <kbd>/</kbd>
+    </label>
+    <div class="segmented" role="radiogroup" aria-label="Show">
+      <label><input type="radio" name="filter" value="" checked /><span>All</span></label>
+      <label><input type="radio" name="filter" value="enabled" /><span>Active</span></label>
+      <label><input type="radio" name="filter" value="disabled" /><span>Off</span></label>
+      <label><input type="radio" name="filter" value="pinned" /><span>Pinned</span></label>
+    </div>
+    <span class="count" data-field="count" aria-live="polite"></span>
+  </header>
+
+  <div class="panes">
+    <section class="list-pane" aria-label="Aliases">
+      <ul class="alias-list" data-field="list"></ul>
+      <div class="state" data-field="list-state" hidden>
+        <p data-field="list-message"></p>
+        <button type="button" class="button" data-field="list-retry" hidden>Try again</button>
+      </div>
+      <button type="button" class="button more" data-field="more" hidden>Load more</button>
+    </section>
+
+    <section class="detail" aria-label="Alias details">
+      <p class="detail-empty" data-field="detail-empty">Select an alias to see who emails it.</p>
+
+      <div class="detail-body" data-field="detail-body" hidden>
+        <button type="button" class="back" data-field="back">‹ Aliases</button>
+
+        <header class="detail-head">
+          <div class="detail-title">
+            <h1 class="addr" data-field="d-email"></h1>
+            <p class="note" data-field="d-note"></p>
+          </div>
+          <label class="detail-switch">
+            <span data-field="d-state"></span>
+            <input type="checkbox" role="switch" data-field="d-toggle" />
+          </label>
+        </header>
+
+        <p class="facts">
+          <span><b data-field="d-fwd"></b> forwarded</span>
+          <span><b data-field="d-blk"></b> blocked</span>
+          <span><b data-field="d-rep"></b> replied</span>
+          <span>created <time data-field="d-created"></time></span>
+          <span>to <span class="mono" data-field="d-mailbox"></span></span>
+        </p>
+
+        <h2 class="section-title">Contacts</h2>
+        <ul class="contacts" data-field="contacts"></ul>
+        <div class="state" data-field="contacts-state" hidden>
+          <p data-field="contacts-message"></p>
+          <button type="button" class="button" data-field="contacts-retry" hidden>Try again</button>
+        </div>
+        <button type="button" class="button more" data-field="contacts-more" hidden>Load more</button>
+      </div>
+    </section>
+  </div>
+
+  <div class="toast" role="status" data-field="toast"></div>
+</div>

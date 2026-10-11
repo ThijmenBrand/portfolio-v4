@@ -12,6 +12,7 @@ import {
   signSession,
   verifyPassword,
 } from "./auth.ts";
+import { callSimpleLogin, slRoute } from "./simplelogin.ts";
 
 const PORT = Number(process.env.PORT ?? 8787);
 const SECURE = process.env.NODE_ENV === "production" ? "; Secure" : "";
@@ -75,7 +76,7 @@ async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> 
 // --- routes -------------------------------------------------------------------
 async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const { method } = req;
-  const { pathname } = new URL(req.url ?? "/", "http://localhost");
+  const { pathname, searchParams } = new URL(req.url ?? "/", "http://localhost");
   if (method === "POST") checkPost(req);
 
   if (method === "GET" && pathname === "/api/healthz") {
@@ -112,6 +113,15 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
   if (method === "GET" && pathname === "/api/private/ping") {
     const user = requireSession(req);
     json(res, 200, { ok: true, user });
+    return;
+  }
+
+  if (pathname.startsWith("/api/private/sl/")) {
+    requireSession(req);
+    const route = slRoute(method, pathname, searchParams);
+    if (!route) throw new HttpError(404, "not found");
+    const { status, body } = await callSimpleLogin(route);
+    json(res, status, body);
     return;
   }
 

@@ -205,7 +205,7 @@ export async function saveIconLayout(os: AppInterface, layout: IconLayout): Prom
   await os.fs.writeTextFile(`${dir}/desktop-layout.json`, JSON.stringify(layout, null, 2) + "\n");
 }
 
-async function ensureConfigDir(os: AppInterface): Promise<string> {
+export async function ensureConfigDir(os: AppInterface): Promise<string> {
   const dir = await configDir(os);
   await os.fs.mkdir(dir).catch((error) => {
     if ((error as { code?: string }).code !== "EEXIST") throw error;

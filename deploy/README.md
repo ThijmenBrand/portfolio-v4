@@ -70,6 +70,7 @@ OWNER_USERNAME=thijmen
 OWNER_PASSWORD_HASH=$(node server/hash.ts '<password>')
 SESSION_SECRET=$(openssl rand -hex 32)
 PUBLIC_ORIGIN=https://thijmenbrand.nl
+SIMPLELOGIN_API_KEY=<key from SimpleLogin → Settings → API Keys>
 EOF
 ```
 

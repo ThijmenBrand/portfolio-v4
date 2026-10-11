@@ -1,0 +1,335 @@
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  font: 13px/1.4 var(--app-sans);
+  color: var(--app-text);
+  background: var(--app-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+.shortcuts {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+:focus-visible { outline: 2px solid var(--app-accent); outline-offset: 2px; }
+
+/* ------------------------------------------------------------------ mono -- */
+
+/* The site's stand-in icon: its initial on a colour hashed from its address. */
+.mono {
+  --hue: 250;
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 13px;
+  background: linear-gradient(150deg, oklch(0.66 0.13 var(--hue)), oklch(0.5 0.14 var(--hue)));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 2px 6px rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-size: 22px;
+  font-weight: 650;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
+  transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1), background 200ms ease-out;
+}
+
+.mono.is-blank {
+  background: var(--app-well);
+  box-shadow: inset 0 0 0 1.5px var(--app-border-hi);
+  color: var(--app-text-dim);
+  font-weight: 400;
+  text-shadow: none;
+}
+
+.mono-sm { width: 22px; height: 22px; border-radius: 6px; font-size: 11px; }
+
+/* Keycap on the icon's corner: the number that opens it. */
+.key {
+  position: absolute;
+  right: -6px;
+  bottom: -5px;
+  display: grid;
+  place-items: center;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border: 1px solid var(--app-border-hi);
+  border-radius: 5px;
+  background: var(--app-surface-hi);
+  box-shadow: 0 1.5px 0 var(--app-border-hi), 0 0 0 2px var(--app-bg);
+  color: var(--app-text-dim);
+  font: 600 11px/1 var(--app-mono);
+  text-shadow: none;
+}
+
+/* ------------------------------------------------------------------ dial -- */
+
+.dial {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  align-content: start;
+  gap: 6px;
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 16px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.slot { position: relative; min-width: 0; }
+
+.tile {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  width: 100%;
+  padding: 14px 6px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: default;
+  transition: background-color 120ms ease-out;
+}
+.tile .mono { margin-bottom: 8px; }
+.tile:hover, .tile:focus-visible { background: var(--app-surface); }
+.tile:focus-visible { outline-offset: -2px; }
+.tile:hover .mono { transform: translateY(-1px); }
+.tile:active .mono { transform: scale(0.95); }
+
+.tile-name,
+.tile-host {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tile-name { font-weight: 500; }
+.tile-host { font-size: 11.5px; color: var(--app-text-dim); }
+
+.tile-add .tile-name { color: var(--app-text-dim); white-space: normal; }
+.tile-add:hover .tile-name { color: var(--app-text); }
+.tile-add:hover .mono { color: var(--app-text); box-shadow: inset 0 0 0 1.5px var(--app-accent); }
+
+/* Launch: the keycap goes down like the key you pressed, the icon follows. */
+.tile.is-pressed .mono { animation: press-icon 260ms cubic-bezier(0.16, 1, 0.3, 1); }
+.tile.is-pressed .key { animation: press-key 420ms cubic-bezier(0.16, 1, 0.3, 1); }
+
+@keyframes press-icon {
+  30% { transform: scale(0.92); }
+}
+@keyframes press-key {
+  0%, 35% {
+    transform: translateY(1.5px);
+    border-color: var(--app-accent);
+    background: var(--app-accent);
+    box-shadow: 0 0 0 var(--app-border-hi), 0 0 0 2px var(--app-bg);
+    color: #fff;
+  }
+}
+
+.tile-edit {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--app-radius);
+  background: transparent;
+  color: var(--app-text-dim);
+  opacity: 0;
+  cursor: default;
+  transition: opacity 120ms ease-out;
+}
+.tile-edit svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+}
+.slot:hover .tile-edit,
+.tile-edit:focus-visible { opacity: 1; }
+.tile-edit:hover { background: var(--app-surface-hi); color: var(--app-text); }
+
+/* Drag to reorder. */
+.slot.is-dragging { opacity: 0.35; }
+.slot.is-drop .tile { background: var(--app-accent-soft); }
+.slot.is-drop .mono { transform: scale(1.06); }
+
+/* ---------------------------------------------------------------- editor -- */
+
+/* Opens in place of its tile and takes the whole row. */
+.editor {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px 16px;
+  margin: 4px 0;
+  padding: 16px;
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow);
+  animation: open-editor 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes open-editor { from { opacity: 0; transform: translateY(-4px) scale(0.99); } }
+
+.editor-fields { display: grid; gap: 10px; }
+
+.field { display: grid; gap: 4px; }
+.field > span { font-size: 12px; font-weight: 600; color: var(--app-text-dim); }
+
+.field input {
+  height: 30px;
+  padding: 0 9px;
+  border: 1px solid var(--app-border-hi);
+  border-radius: var(--app-radius);
+  background: var(--app-well);
+  color: var(--app-text);
+  font: inherit;
+}
+.field input::placeholder { color: var(--app-text-dim); opacity: 0.7; }
+.field input:focus-visible { outline-offset: 0; border-color: transparent; }
+.field input[aria-invalid="true"] { border-color: var(--app-danger); outline-color: var(--app-danger); }
+
+.editor-error { margin: 0; font-size: 12px; color: var(--app-danger); }
+.editor-error:empty { display: none; }
+
+.editor-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 8px;
+}
+.spacer { flex: 1; }
+
+.button {
+  flex: none;
+  height: var(--app-control);
+  padding: 0 12px;
+  border: 1px solid var(--app-border-hi);
+  border-radius: var(--app-radius);
+  background: var(--app-surface-hi);
+  color: var(--app-text);
+  font: inherit;
+  cursor: default;
+}
+.button:hover { background: var(--app-border); }
+.button[hidden] { display: none; }
+
+.button-primary { border-color: transparent; background: var(--app-accent); color: #fff; font-weight: 500; }
+.button-primary:hover { background: color-mix(in srgb, var(--app-accent) 85%, #fff); }
+
+.button-danger { border-color: transparent; background: var(--app-danger-soft); color: var(--app-danger); }
+.button-danger:hover { background: color-mix(in srgb, var(--app-danger) 26%, transparent); }
+
+/* ----------------------------------------------------------------- empty -- */
+
+.empty { padding: 28px 24px 4px; }
+.empty[hidden] { display: none; }
+.empty h1 { margin: 0 0 4px; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+.empty p { margin: 0 0 14px; max-width: 46ch; color: var(--app-text-dim); }
+
+.suggestions { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 11px 0 4px;
+  border: 1px solid var(--app-border);
+  border-radius: 15px;
+  background: var(--app-surface);
+  color: var(--app-text);
+  font: inherit;
+  cursor: default;
+}
+.chip .mono { border-radius: 50%; box-shadow: none; }
+.chip:hover { border-color: var(--app-border-hi); background: var(--app-surface-hi); }
+
+/* ------------------------------------------------------------------- bar -- */
+
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 34px;
+  padding: 0 14px;
+  border-top: 1px solid var(--app-border);
+  background: var(--app-well);
+  font-size: 12px;
+  color: var(--app-text-dim);
+}
+
+.keys { display: flex; gap: 14px; margin: 0; white-space: nowrap; overflow: hidden; }
+
+.keys kbd {
+  display: inline-block;
+  min-width: 16px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border: 1px solid var(--app-border-hi);
+  border-radius: 4px;
+  background: var(--app-surface);
+  font: 500 10.5px/16px var(--app-sans);
+  text-align: center;
+  color: var(--app-text);
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  color: var(--app-text);
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 400ms ease-out;
+}
+.status.is-shown { opacity: 1; transition-duration: 80ms; }
+.status.is-error { color: var(--app-danger); }
+
+.link {
+  padding: 2px 4px;
+  border: 0;
+  border-radius: var(--app-radius-sm);
+  background: transparent;
+  color: var(--app-accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: default;
+}
+.link:hover { background: var(--app-accent-soft); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
+
+/* No hover on touch: the edit button stays visible, key hints go away. */
+@media (hover: none) {
+  .tile-edit { opacity: 1; }
+  .keys { display: none; }
+  .bar:not(:has(.is-shown)) { display: none; }
+}
+
+@media (max-width: 420px) {
+  .dial { grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); padding: 10px; }
+  .editor { grid-template-columns: minmax(0, 1fr); }
+  .editor .mono { display: none; }
+  .keys { display: none; }
+  .bar:not(:has(.is-shown)) { display: none; }
+}

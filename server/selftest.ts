@@ -26,4 +26,22 @@ assert.equal(verifySession(expired), null, "expired session");
 assert.equal(await verifyPassword("hunter2"), true, "right password");
 assert.equal(await verifyPassword("hunter3"), false, "wrong password");
 
+// SimpleLogin proxy: only the allowlisted calls map through.
+const { slRoute } = await import("./simplelogin.ts");
+const sl = (method: string, path: string) => {
+  const url = new URL(path, "http://x");
+  return slRoute(method, url.pathname, url.searchParams);
+};
+assert.deepEqual(sl("GET", "/api/private/sl/aliases?page=2&filter=pinned"), { method: "GET", path: "/api/v2/aliases?page_id=2&pinned" });
+assert.deepEqual(sl("GET", "/api/private/sl/aliases?q=shop"), { method: "POST", path: "/api/v2/aliases?page_id=0", body: { query: "shop" } });
+assert.deepEqual(sl("POST", "/api/private/sl/aliases/42/toggle"), { method: "POST", path: "/api/aliases/42/toggle" });
+assert.deepEqual(sl("GET", "/api/private/sl/aliases/42/contacts?page=1"), { method: "GET", path: "/api/aliases/42/contacts?page_id=1" });
+assert.deepEqual(sl("POST", "/api/private/sl/contacts/7/toggle"), { method: "POST", path: "/api/contacts/7/toggle" });
+assert.equal(sl("GET", "/api/private/sl/aliases/42/toggle"), null, "wrong method");
+assert.equal(sl("POST", "/api/private/sl/aliases/abc/toggle"), null, "non-numeric id");
+assert.equal(sl("GET", "/api/private/sl/aliases?filter=all%26x"), null, "unknown filter");
+assert.equal(sl("GET", "/api/private/sl/aliases?page=-1"), null, "bad page");
+assert.equal(sl("GET", "/api/private/sl/user_info"), null, "unlisted path");
+assert.equal(slRoute("POST", "/api/private/sl/aliases/1/../../user/delete", new URLSearchParams()), null, "traversal");
+
 console.log("selftest ok");
