@@ -73,6 +73,8 @@ export function buildAppInterface(client: WireClient, pid: Pid): AppInterface {
       history: () => call("process.history"),
       chdir: (path) => call("process.chdir", path),
       cwd: () => call("process.cwd"),
+      env: () => call("process.env"),
+      setenv: (name, value) => call("process.setenv", name, value),
     },
 
     timers: {

@@ -1,7 +1,6 @@
 import { KernelError } from "../../kernel/errors";
 import type { AppInterface } from "../../kernel/syscalls/api";
 import type { Pid } from "../../kernel/types";
-import { PATH } from "./path";
 
 interface Redirect {
   path: string;
@@ -25,9 +24,18 @@ function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+const LITERAL_DOLLAR = "\0";
+
+/** `$?`, `${NAME}` or `$NAME`. */
+const VARIABLE = /\$(\?|\{\w+\}|[A-Za-z_]\w*)/g;
+
 /**
  * Emits operators as their own tokens so `echo hi>f` splits the same way
  * as `echo hi > f`. Quotes suppress both splitting and operators.
+ *
+ * `$NAME` is left in place and expanded per command (see Shell.expand), so
+ * `export X=1; echo $X` sees the new value. Inside '...' a `$` is stored as
+ * NUL, which expand turns back into a literal `$`.
  */
 function tokenize(line: string): string[] {
   const tokens: string[] = [];
@@ -46,7 +54,8 @@ function tokenize(line: string): string[] {
     if (ch === '"' || ch === "'") {
       const end = line.indexOf(ch, i + 1);
       if (end < 0) throw new Error("unterminated quote");
-      current += line.slice(i + 1, end);
+      const text = line.slice(i + 1, end);
+      current += ch === "'" ? text.replaceAll("$", LITERAL_DOLLAR) : text;
       quoted = true;
       i = end;
       continue;
@@ -154,30 +163,52 @@ class LineReader {
 
 class Shell {
   private readonly encoder = new TextEncoder();
-  private readonly lines: LineReader;
   private status = 0;
   private running = true;
   private foreground: Pid[] = [];
+  /** Our own environment, mirrored so expansion doesn't need a syscall. */
+  private env: Record<string, string> = {};
 
   private readonly os: AppInterface;
 
   public constructor(os: AppInterface) {
     this.os = os;
-    this.lines = new LineReader(os, 0);
   }
 
-  public async run(): Promise<number> {
+  /** Interactive on stdin, or `sh script` runs the script and exits. */
+  public async run(script?: string): Promise<number> {
+    this.env = await this.os.process.env();
+    if (script !== undefined) return this.source(script);
+
     await this.os.process.onSignal("SIGINT", () => void this.interrupt());
     await this.write(1, "portfolio sh — try `help`\n");
+    if (this.env.HOME) {
+      await this.source(`${this.env.HOME}/.profile`).catch((error) => {
+        if (errorCode(error) !== "ENOENT") throw error;
+      });
+    }
+    return this.runLines(new LineReader(this.os, 0), true);
+  }
 
+  /** Runs a file's lines in this shell, so its `export`s stick (`source`). */
+  private async source(path: string): Promise<number> {
+    const fd = await this.os.io.open(path, { read: true });
+    try {
+      return await this.runLines(new LineReader(this.os, fd), false);
+    } finally {
+      await this.os.io.close(fd).catch(() => {});
+    }
+  }
+
+  private async runLines(lines: LineReader, interactive: boolean): Promise<number> {
     while (this.running) {
-      await this.prompt();
+      if (interactive) await this.prompt();
 
-      const line = await this.lines.readLine();
-      if (line === null) break; // stdin closed — the terminal went away
+      const line = await lines.readLine();
+      if (line === null) break; // EOF: end of script, or the terminal went away
 
       const trimmed = line.trim();
-      if (trimmed === "") continue;
+      if (trimmed === "" || trimmed.startsWith("#")) continue;
 
       try {
         this.status = await this.execute(trimmed);
@@ -223,11 +254,24 @@ class Shell {
       if (group.length === 0 && token !== undefined) {
         throw new Error(`syntax error near \`${token}\``);
       }
-      if (group.length > 0 && !skip) status = await this.executeGroup(group);
+      if (group.length > 0 && !skip) {
+        status = await this.executeGroup(group.map((t) => this.expand(t)));
+        this.status = status; // so `$?` in the next command sees it
+      }
       skip = token === "&&" && status !== 0;
       start = i + 1;
     }
     return status;
+  }
+
+  private expand(token: string): string {
+    return token
+      .replace(VARIABLE, (_, name: string) =>
+        name === "?"
+          ? String(this.status)
+          : (this.env[name.replace(/[{}]/g, "")] ?? ""),
+      )
+      .replaceAll(LITERAL_DOLLAR, "$");
   }
 
   private async executeGroup(tokens: string[]): Promise<number> {
@@ -245,7 +289,7 @@ class Shell {
   // ------------------------------------------------------------- builtins
 
   private isBuiltin(name: string): boolean {
-    return ["cd", "pwd", "exit", "help"].includes(name);
+    return ["cd", "pwd", "exit", "help", "export", "unset", "source", "."].includes(name);
   }
 
   private async runBuiltin(command: Command): Promise<number> {
@@ -261,6 +305,22 @@ class Shell {
       return 0;
     }
 
+    if (name === "export" || name === "unset") {
+      for (const arg of args) {
+        const eq = arg.indexOf("=");
+        if (name === "unset") await this.os.process.setenv(arg);
+        // `export NAME` alone: every variable is already exported here.
+        else if (eq > 0) await this.os.process.setenv(arg.slice(0, eq), arg.slice(eq + 1));
+      }
+      this.env = await this.os.process.env();
+      return 0;
+    }
+
+    if (name === "source" || name === ".") {
+      if (args[0] === undefined) throw new Error(`${name}: needs a filename`);
+      return this.source(args[0]);
+    }
+
     if (name === "exit") {
       this.running = false;
       return args[0] === undefined ? this.status : Number(args[0]) || 0;
@@ -269,13 +329,16 @@ class Shell {
     await this.write(
       1,
       [
-        "builtins:  cd <dir>   pwd   exit [code]   help",
+        "builtins:  cd <dir>   pwd   exit [code]   help   source <file>",
+        "vars:      export NAME=value   unset NAME   env   echo $NAME \"$NAME\" '$NAME'",
         "files:     ls  cat  touch  mkdir [-p]  rmdir  rm [-r]  cp  mv",
         "text:      head  tail  wc  grep  sort  uniq  tee",
         "find:      tree  find [-name glob]  stat",
         "procs:     ps   kill [-SIGNAL] pid   sleep N",
         "misc:      date  whoami  uname  open <url>",
-        "programs:  anything in /ProgramFiles",
+        "programs:  anything on $PATH (export PATH=/home/bin:$PATH)",
+        "scripts:   first line #!/ProgramFiles/sh, run by path or via $PATH",
+        "startup:   $HOME/.profile is sourced when sh starts",
         "redirect:  cmd > file   cmd >> file   cmd < file",
         "pipeline:  cmd | cmd | cmd",
         "chain:     cmd && cmd (if ok)   cmd ; cmd (always)",
@@ -302,11 +365,12 @@ class Shell {
       return await this.os.process.spawn(name, args, { fds });
     }
 
-    for (const dir of PATH) {
+    for (const dir of (this.env.PATH ?? "").split(":").filter(Boolean)) {
       try {
         return await this.os.process.spawn(`${dir}/${name}`, args, { fds });
       } catch (error) {
-        if (errorCode(error) !== "ENOENT") throw error;
+        // Not here, or a PATH entry that isn't a directory: try the next.
+        if (!["ENOENT", "ENOTDIR"].includes(errorCode(error) ?? "")) throw error;
       }
     }
 
@@ -378,7 +442,7 @@ class Shell {
   }
 }
 
-export async function main(os: AppInterface): Promise<void> {
+export async function main(os: AppInterface, args: string[]): Promise<void> {
   const shell = new Shell(os);
-  os.process.exit(await shell.run());
+  os.process.exit(await shell.run(args[0]));
 }

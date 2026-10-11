@@ -35,6 +35,7 @@ export function createKernel(screen: HTMLElement): {
     driver: new ProcFS({
       list: () => processes.list(),
       fds: (pid) => processes.get(pid)?.files.list() ?? [],
+      env: (pid) => processes.get(pid)?.env ?? {},
     }),
     readonly: true,
   });
@@ -87,6 +88,7 @@ export function createKernel(screen: HTMLElement): {
     path: "/kernel",
     args: [],
     cwd: "/",
+    env: { PATH: "/ProgramFiles", HOME: "/home" },
     privileged: true,
   });
   processes.setStatus(0 as Pid, "running");

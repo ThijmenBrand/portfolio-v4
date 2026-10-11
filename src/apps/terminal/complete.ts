@@ -1,5 +1,4 @@
 import type { AppInterface } from "../../kernel/syscalls/api";
-import { PATH } from "../../bin/sh/path";
 
 /**
  * Tab completion for the terminal's input line.
@@ -7,15 +6,15 @@ import { PATH } from "../../bin/sh/path";
  * It lives here, not in sh, because the terminal owns line editing (no
  * kernel line discipline — sh only ever sees finished lines). Paths are
  * resolved against the SHELL's cwd, read from /proc/<pid>/cwd, not the
- * terminal's own.
+ * terminal's own; command names come from the shell's PATH (/proc/<pid>/environ).
  */
 
-const BUILTINS = ["cd", "pwd", "exit", "help"];
+const BUILTINS = ["cd", "pwd", "exit", "help", "export", "unset", "source"];
 
 /** Every file in a PATH directory, like bash's command completion. */
-async function programs(os: AppInterface): Promise<string[]> {
+async function programs(os: AppInterface, path: string[]): Promise<string[]> {
   const listings = await Promise.all(
-    PATH.map((dir) => os.fs.readdir(dir).catch(() => [])),
+    path.map((dir) => os.fs.readdir(dir).catch(() => [])),
   );
   return listings.flat().filter((e) => e.kind === "file").map((e) => e.name);
 }
@@ -90,6 +89,7 @@ async function pathCandidates(
 export async function complete(
   os: AppInterface,
   cwd: string,
+  path: string[],
   line: string,
   cursor: number,
 ): Promise<Completion> {
@@ -100,7 +100,7 @@ export async function complete(
       ? {
           base: "",
           prefix: word.text,
-          items: [...new Set([...BUILTINS, ...(await programs(os))])]
+          items: [...new Set([...BUILTINS, ...(await programs(os, path))])]
             .filter((name) => name.startsWith(word.text))
             .map((name) => ({ name, directory: false })),
         }

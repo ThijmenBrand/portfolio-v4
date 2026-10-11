@@ -1,4 +1,5 @@
-import { einval, enoent } from "../errors";
+import { einval, enoexec } from "../errors";
+import { resolveFrom } from "../fs/path";
 import { resolve } from "../binfmt";
 import { execute } from "../proc/exec";
 import { sendSignal } from "../proc/signals";
@@ -12,6 +13,34 @@ import { FdTable } from "../proc/fdTable";
 
 export interface SpawnOptions {
   fds?: Record<number, number>; // child fd -> parent fd
+  env?: Record<string, string>;
+}
+
+const decoder = new TextDecoder();
+
+/**
+ * Not in binfmt: maybe a script in the VFS. `#!interpreter [arg]` runs as
+ * `interpreter [arg] script ...args`, like Linux's binfmt_script.
+ * ponytail: the interpreter must be in binfmt (no script-runs-script), which
+ * also rules out loops. No exec bit: any readable file with #! runs.
+ */
+async function startScript(
+  ctx: KernelContext,
+  path: string,
+  args: string[],
+  options: SpawnOptions,
+  parentPid: Pid,
+): Promise<Pid> {
+  const script = resolveFrom(requireAlive(ctx, parentPid).cwd, path);
+  const data = await ctx.fs.readFile(script); // ENOENT/EISDIR as-is
+  const firstLine = decoder.decode(data.slice(0, 256)).split("\n")[0]!;
+  if (!firstLine.startsWith("#!")) throw enoexec(path);
+
+  const [interpreter, arg] = firstLine.slice(2).trim().split(/\s+/, 2);
+  if (!interpreter || !resolve(interpreter)) throw enoexec(path);
+
+  const argv = [...(arg ? [arg] : []), script, ...args];
+  return startProcess(ctx, interpreter, argv, options, parentPid);
 }
 
 async function startProcess(
@@ -23,7 +52,7 @@ async function startProcess(
 ): Promise<Pid> {
   const file = resolve(path);
   if (!file) {
-    throw enoent(path);
+    return startScript(ctx, path, args, options, parentPid);
   }
 
   const parent = requireAlive(ctx, parentPid);
@@ -38,6 +67,7 @@ async function startProcess(
     path,
     privileged: file.privileged === true,
     cwd: parent?.cwd ?? "/",
+    env: { ...parent.env, ...options?.env },
   });
 
   if (inherited) process.files.adopt(inherited);
@@ -69,6 +99,8 @@ export function processSyscalls(
   | "history"
   | "chdir"
   | "cwd"
+  | "getenv"
+  | "setenv"
 > {
   return {
     spawn: alive(ctx, (parentPid, path, args, options) =>
@@ -93,5 +125,12 @@ export function processSyscalls(
     history: alive(ctx, (_pid) => ctx.processes.history()),
     chdir: (callerPid, path) => changeDirectory(ctx, callerPid, path),
     cwd: async (callerPid) => getCwd(ctx, callerPid),
+    getenv: async (callerPid) => ({ ...requireAlive(ctx, callerPid).env }),
+    setenv: async (callerPid, name, value) => {
+      if (name === "" || name.includes("=")) throw einval(name);
+      const { env } = requireAlive(ctx, callerPid);
+      if (value === undefined) delete env[name];
+      else env[name] = value;
+    },
   };
 }

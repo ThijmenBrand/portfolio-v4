@@ -166,7 +166,8 @@ class Terminal {
     const line = this.input.value;
     const cursor = this.input.selectionStart ?? line.length;
 
-    const result = await complete(this.os, await this.shellCwd(), line, cursor);
+    const [cwd, path] = await Promise.all([this.shellCwd(), this.shellPath()]);
+    const result = await complete(this.os, cwd, path, line, cursor);
 
     // The user kept typing while we were asking the kernel: drop the result.
     if (this.input.value !== line) return;
@@ -183,6 +184,17 @@ class Terminal {
       return cwd || "/";
     } catch {
       return "/"; // shell gone or not started yet
+    }
+  }
+
+  /** The shell's PATH, so `export PATH=...` changes what completes. */
+  private async shellPath(): Promise<string[]> {
+    try {
+      const environ = await this.os.fs.readTextFile(`/proc/${this.shell}/environ`);
+      const line = environ.split("\n").find((l) => l.startsWith("PATH="));
+      return (line?.slice(5) ?? "").split(":").filter(Boolean);
+    } catch {
+      return []; // shell gone or not started yet
     }
   }
 

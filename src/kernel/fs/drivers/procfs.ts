@@ -29,6 +29,7 @@ type ProcNode = ProcFile | ProcDirectory;
 type ProcSource = {
   list(): ProcessInfo[];
   fds(pid: Pid): FdInfo[];
+  env(pid: Pid): Record<string, string>;
 };
 
 export class ProcFS implements FileSystemDriver {
@@ -49,6 +50,10 @@ export class ProcFS implements FileSystemDriver {
     status: (pid) => this.formatStatus(pid),
     cmdline: (pid) => this.formatcmdline(pid),
     cwd: (pid) => this.formatcwd(pid),
+    environ: (pid) =>
+      Object.entries(this.source.env(pid))
+        .map(([name, value]) => `${name}=${value}\n`)
+        .join(""),
   };
 
   public constructor(source: ProcSource) {

@@ -88,10 +88,7 @@ export interface Process {
   faults: number;
   lastFault?: FaultInfo;
   cwd: string;
-  /**
-   * Iframe processes only: the window the kernel created at exec, whose body
-   * holds the app's iframe. `windows.create` over the wire claims it.
-   */
+  env: Record<string, string>;
   surface?: { windowId: WindowId; claimed: boolean };
 }
 
@@ -121,6 +118,7 @@ export interface ProcessInit {
   path: string;
   args: string[];
   cwd: string;
+  env: Record<string, string>;
   privileged: boolean;
 }
 

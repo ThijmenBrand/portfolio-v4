@@ -111,6 +111,8 @@ export interface SyscallTable {
   listFds(callerPid: Pid): Promise<FdInfo[]>;
   chdir(callerPid: Pid, path: string): Promise<void>;
   cwd(callerPid: Pid): Promise<string>;
+  getenv(callerPid: Pid): Promise<Record<string, string>>;
+  setenv(callerPid: Pid, name: string, value?: string): Promise<void>;
   pipe(callerPid: Pid): Promise<PipeFds>;
   openpty(callerPid: Pid): Promise<{ master: number; slave: number }>;
   openExternal(callerPid: Pid, url: string): Promise<void>;

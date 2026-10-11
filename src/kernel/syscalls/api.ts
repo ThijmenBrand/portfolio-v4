@@ -51,6 +51,8 @@ export interface AppInterface {
     history(): Promise<readonly ExitRecord[]>;
     chdir(path: string): Promise<void>;
     cwd(): Promise<string>;
+    env(): Promise<Record<string, string>>;
+    setenv(name: string, value?: string): Promise<void>;
   };
   timers: {
     setInterval(callback: () => void, ms: number): Promise<number>;
@@ -142,6 +144,8 @@ export function bindSyscalls(target: SyscallTable, pid: Pid): SystemInterface {
       history: () => target.history(pid),
       chdir: (path: string) => target.chdir(pid, path),
       cwd: () => target.cwd(pid),
+      env: () => target.getenv(pid),
+      setenv: (name, value) => target.setenv(pid, name, value),
     },
     timers: {
       setInterval: (callback, ms) => target.setInterval(pid, callback, ms),

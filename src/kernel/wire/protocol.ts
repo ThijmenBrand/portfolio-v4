@@ -111,6 +111,8 @@ export const WIRE_CALLS = {
   "process.history": "history",
   "process.chdir": "chdir",
   "process.cwd": "cwd",
+  "process.env": "getenv",
+  "process.setenv": "setenv",
 
   "events.subscribe": "subscribe",
 

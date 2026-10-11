@@ -73,6 +73,7 @@ export class ProcessManager implements ProcessManagerInterface {
       signalHandlers: new Map(),
       faults: 0,
       cwd: init.cwd,
+      env: { ...init.env },
     };
 
     this.processes.set(pid, process);
