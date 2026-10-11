@@ -1,6 +1,7 @@
 // ls — list directory contents. Runs as a worker: everything goes over the wire.
 import type { DirEntry, NodeKind } from "../../kernel/fs/types";
 import type { AppInterface } from "../../kernel/syscalls/api";
+import { modeString, nameOf, readGroups, readUsers, type Group, type User } from "../lib/users";
 
 const encoder = new TextEncoder();
 
@@ -11,25 +12,27 @@ function suffix(kind: NodeKind): string {
   return "";
 }
 
-function kindChar(kind: NodeKind): string {
-  if (kind === "directory") return "d";
-  if (kind === "fifo") return "p";
-  return "-";
-}
-
 function formatDate(ms: number): string {
   const d = new Date(ms);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-/** -l: kind + rw/ro, size, modified, name. Sizes right-aligned to the widest. */
-function longLines(entries: DirEntry[]): string[] {
-  const width = Math.max(1, ...entries.map((e) => String(e.size).length));
-  return entries.map((e) => {
-    const mode = `${kindChar(e.kind)}${e.readonly ? "r-" : "rw"}`;
-    const size = String(e.size).padStart(width);
-    return `${mode}  ${size}  ${formatDate(e.modifiedAt)}  ${e.name}${suffix(e.kind)}`;
+/** -l: mode, owner, group, size, modified, name. Columns padded to the widest. */
+function longLines(entries: DirEntry[], users: User[], groups: Group[]): string[] {
+  const rows = entries.map((e) => ({
+    e,
+    owner: nameOf(users, e.uid, "uid"),
+    group: nameOf(groups, e.gid, "gid"),
+  }));
+  const widest = (pick: (r: (typeof rows)[number]) => string) =>
+    Math.max(1, ...rows.map((r) => pick(r).length));
+  const ownerW = widest((r) => r.owner);
+  const groupW = widest((r) => r.group);
+  const sizeW = widest((r) => String(r.e.size));
+  return rows.map(({ e, owner, group }) => {
+    const size = String(e.size).padStart(sizeW);
+    return `${modeString(e.kind, e.mode)}  ${owner.padEnd(ownerW)}  ${group.padEnd(groupW)}  ${size}  ${formatDate(e.modifiedAt)}  ${e.name}${suffix(e.kind)}`;
   });
 }
 
@@ -44,6 +47,9 @@ export async function main(os: AppInterface, args: string[]): Promise<void> {
 
   const out: string[] = [];
   let status = 0;
+  // Names for -l; numbers if the database is unreadable.
+  const users = long ? await readUsers(os).catch(() => []) : [];
+  const groups = long ? await readGroups(os).catch(() => []) : [];
 
   for (const [i, path] of paths.entries()) {
     try {
@@ -62,7 +68,7 @@ export async function main(os: AppInterface, args: string[]): Promise<void> {
         if (i > 0) out.push("");
         out.push(`${path}:`);
       }
-      out.push(...(long ? longLines(entries) : shortLines(entries)));
+      out.push(...(long ? longLines(entries, users, groups) : shortLines(entries)));
     } catch (error) {
       const code = (error as { code?: string }).code ?? "EIO";
       await os.io.write(2, encoder.encode(`ls: ${path}: ${code}\n`));

@@ -89,6 +89,9 @@ export interface Process {
   lastFault?: FaultInfo;
   cwd: string;
   env: Record<string, string>;
+  uid: number;
+  euid: number;
+  gid: number;
   surface?: { windowId: WindowId; claimed: boolean };
 }
 
@@ -109,6 +112,8 @@ export interface ProcessInfo {
   termination?: Termination;
   faults: number;
   cwd: string;
+  uid: number;
+  euid: number;
   lastFault?: FaultInfo;
   readonly args: string[];
 }
@@ -120,6 +125,9 @@ export interface ProcessInit {
   cwd: string;
   env: Record<string, string>;
   privileged: boolean;
+  uid: number;
+  euid: number;
+  gid: number;
 }
 
 export type AppModule = {

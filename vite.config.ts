@@ -71,7 +71,8 @@ function realmCsp(): Plugin {
 
 export default defineConfig({
   plugins: [realmCsp()],
-  server: { cors },
+  // `pnpm dev:api` runs the API (server/main.ts); same-origin /api, like production.
+  server: { cors, proxy: { "/api": "http://localhost:8787" } },
   preview: { cors },
   // Workers use import.meta.glob (code-splitting), which IIFE output can't do.
   worker: { format: "es" },

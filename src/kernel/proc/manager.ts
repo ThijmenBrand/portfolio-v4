@@ -74,6 +74,9 @@ export class ProcessManager implements ProcessManagerInterface {
       faults: 0,
       cwd: init.cwd,
       env: { ...init.env },
+      uid: init.uid,
+      euid: init.euid,
+      gid: init.gid,
     };
 
     this.processes.set(pid, process);
@@ -94,6 +97,8 @@ export class ProcessManager implements ProcessManagerInterface {
       status: p.status,
       startedAt: p.startedAt,
       cwd: p.cwd,
+      uid: p.uid,
+      euid: p.euid,
       termination: p.termination,
       faults: p.faults,
       lastFault: p.lastFault,

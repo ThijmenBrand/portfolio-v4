@@ -2,7 +2,8 @@
  * Minimal escape-sequence handling for an append-only screen.
  *
  * The terminal renders plain text, so it only acts on "erase display"
- * (ESC[2J / ESC[3J) and full reset (ESC c). Every other CSI sequence
+ * (ESC[2J / ESC[3J), full reset (ESC c) and conceal (ESC[8m on, ESC[28m or
+ * ESC[0m off), which su/passwd use to hide a password. Every other CSI sequence
  * (cursor moves, colours) is consumed and dropped, so programs that emit
  * them don't print garbage.
  *
@@ -10,7 +11,10 @@
  * tail is held back and finished by the next chunk.
  */
 
-export type Segment = { kind: "text"; text: string } | { kind: "clear" };
+export type Segment =
+  | { kind: "text"; text: string }
+  | { kind: "clear" }
+  | { kind: "conceal"; on: boolean };
 
 const ESC = "\x1b";
 /** Longest incomplete sequence we hold back before giving up on it. */
@@ -68,6 +72,16 @@ export class AnsiParser {
         if (final === "J" && (params === "2" || params === "3")) {
           flush();
           out.push({ kind: "clear" });
+        }
+        if (final === "m") {
+          const codes = params.split(";");
+          if (codes.includes("8")) {
+            flush();
+            out.push({ kind: "conceal", on: true });
+          } else if (codes.some((c) => c === "28" || c === "0" || c === "")) {
+            flush();
+            out.push({ kind: "conceal", on: false });
+          }
         }
         i = j + 1;
         continue;

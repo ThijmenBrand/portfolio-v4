@@ -20,7 +20,8 @@ import type {
   WindowInfo,
   WindowOptions,
 } from "../windows/types";
-import type { SpawnOptions } from "./process";
+import type { ApiRequest, ApiResponse } from "./api-fetch";
+import type { Ids, SpawnOptions } from "./process";
 import type { SyscallTable } from "./table";
 import type { WindowHandleCommands } from "./window";
 
@@ -39,7 +40,6 @@ export interface AppInterface {
     onCloseRequest(windowId: WindowId, callback: () => void): Promise<void>;
   };
   process: {
-    /** Runtime-local state, never a wire call (exempt in ./wire.ts). */
     readonly signal: ProcessSignal;
     readonly pid: Pid;
     onSignal(signal: Signal, handler: () => void): Promise<() => void>;
@@ -53,6 +53,7 @@ export interface AppInterface {
     cwd(): Promise<string>;
     env(): Promise<Record<string, string>>;
     setenv(name: string, value?: string): Promise<void>;
+    ids(): Promise<Ids>;
   };
   timers: {
     setInterval(callback: () => void, ms: number): Promise<number>;
@@ -70,6 +71,9 @@ export interface AppInterface {
     /** Read-only copy of the page URL. Untrusted: the link's author chose it. */
     location(): Promise<LocationInfo>;
   };
+  api: {
+    fetch(path: string, request?: ApiRequest): Promise<ApiResponse>;
+  };
   fs: {
     readFile(path: string): Promise<Bytes>;
     writeFile(path: string, data: Bytes): Promise<void>;
@@ -80,6 +84,8 @@ export interface AppInterface {
     mkdir(path: string): Promise<void>;
     unlink(path: string): Promise<void>;
     rmdir(path: string): Promise<void>;
+    chmod(path: string, mode: number): Promise<void>;
+    chown(path: string, uid: number, gid: number): Promise<void>;
   };
   io: {
     open(path: string, flags: OpenFlags): Promise<number>;
@@ -146,6 +152,7 @@ export function bindSyscalls(target: SyscallTable, pid: Pid): SystemInterface {
       cwd: () => target.cwd(pid),
       env: () => target.getenv(pid),
       setenv: (name, value) => target.setenv(pid, name, value),
+      ids: () => target.ids(pid),
     },
     timers: {
       setInterval: (callback, ms) => target.setInterval(pid, callback, ms),
@@ -157,6 +164,9 @@ export function bindSyscalls(target: SyscallTable, pid: Pid): SystemInterface {
     shell: {
       openExternal: (url) => target.openExternal(pid, url),
       location: () => target.getLocation(pid),
+    },
+    api: {
+      fetch: (path, request) => target.apiFetch(pid, path, request),
     },
     fs: {
       readFile: (path) => target.readFile(pid, path),
@@ -170,6 +180,8 @@ export function bindSyscalls(target: SyscallTable, pid: Pid): SystemInterface {
       mkdir: (path) => target.mkdir(pid, path),
       unlink: (path) => target.unlink(pid, path),
       rmdir: (path) => target.rmdir(pid, path),
+      chmod: (path, mode) => target.chmod(pid, path, mode),
+      chown: (path, uid, gid) => target.chown(pid, path, uid, gid),
     },
     io: {
       open: (path, flags) => target.open(pid, path, flags),

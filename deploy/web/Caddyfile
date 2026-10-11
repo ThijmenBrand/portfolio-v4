@@ -1,4 +1,5 @@
-# Caddy INSIDE the portfolio container: serves the static Vite build on :8080.
+# Caddy INSIDE the portfolio container: serves the static Vite build on :8080
+# and proxies /api/* to the API container (server/main.ts).
 # TLS, HSTS and compression are the host's Caddy's job (deploy/caddy/portfolio.caddy);
 # this file owns everything that belongs to the site itself: CSP, CORS, caching.
 {
@@ -6,6 +7,12 @@
 	admin off
 	# Plain HTTP; the host's Caddy terminates TLS.
 	auto_https off
+	# Requests come from the host's Caddy via Docker's port mapping (a private
+	# address). Trust its X-Forwarded-For, so the API sees the real client IP
+	# (login rate limit) instead of the Docker gateway's.
+	servers {
+		trusted_proxies static private_ranges
+	}
 	log {
 		output stderr
 		format console
@@ -18,6 +25,13 @@
 	# Liveness for the Docker healthcheck; no file lookup involved.
 	handle /healthz {
 		respond "ok" 200
+	}
+
+	# The API. handle blocks are mutually exclusive, so file_server (in the
+	# catch-all handle below) never sees /api/*. The API sets its own
+	# Cache-Control: no-store.
+	handle /api/* {
+		reverse_proxy api:8787
 	}
 
 	# --- headers on every response -----------------------------------------
@@ -56,6 +70,7 @@
 
 	# Unhashed files from public/ (icons, wallpapers, favicon): short cache.
 	@unhashed {
+		not path /api/*
 		not path_regexp ^/assets/[^/]+-[A-Za-z0-9_-]{8}\.[a-z0-9]+$
 		not path / *.html
 	}
@@ -65,7 +80,9 @@
 	@html path / *.html
 	header @html Cache-Control "no-cache"
 
-	file_server
+	handle {
+		file_server
+	}
 
 	# Errors (404 etc.) skip the deferred header ops above; keep them plain.
 	handle_errors {

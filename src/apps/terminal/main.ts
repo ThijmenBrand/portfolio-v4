@@ -38,12 +38,14 @@ export class Terminal {
   private shell: Pid = 0 as Pid;
 
   private master = -1;
-  // ponytail: sniffs sh's `<cwd> $ ` prompt; a prompt change needs this too.
+  // ponytail: sniffs sh's `user:<cwd> $ ` (or `# `) prompt; a prompt change needs this too.
   private markPrompted!: () => void;
   private readonly prompted = new Promise<void>(
     (done) => (this.markPrompted = done),
   );
   private disposed = false;
+  /** A program asked to hide input (ESC[8m): a password prompt. */
+  private concealed = false;
   private readonly onExit?: () => void;
 
   /** `onExit` replaces the "shell exited" notice, e.g. to close an embedding panel. */
@@ -94,11 +96,15 @@ export class Terminal {
   /** Runs `line` as if typed, once the shell has shown its first prompt. */
   public async run(line: string): Promise<void> {
     await this.prompted;
-    this.history.push(line);
-    this.historyIndex = this.history.length;
-
-    // Raw mode: no kernel line discipline, so the terminal echoes.
-    this.append(`${line}\n`);
+    // Raw mode: no kernel line discipline, so the terminal echoes — except
+    // a password, which also stays out of the history.
+    if (this.concealed) {
+      this.append("\n");
+    } else {
+      this.history.push(line);
+      this.historyIndex = this.history.length;
+      this.append(`${line}\n`);
+    }
     await this.send(`${line}\n`);
   }
 
@@ -246,9 +252,15 @@ export class Terminal {
   private render(chunk: string): void {
     for (const segment of this.ansi.feed(chunk)) {
       if (segment.kind === "clear") this.clearScreen(false);
+      else if (segment.kind === "conceal") this.conceal(segment.on);
       else this.append(segment.text);
     }
-    if (chunk.endsWith("$ ")) this.markPrompted();
+    if (chunk.endsWith("$ ") || chunk.endsWith("# ")) this.markPrompted();
+  }
+
+  private conceal(on: boolean): void {
+    this.concealed = on;
+    this.input.type = on ? "password" : "text";
   }
 
   /**

@@ -70,7 +70,11 @@ export function requireControl(
   const target = ctx.processes.get(targetPid);
 
   if (!caller || !target) throw esrch(targetPid);
-  if (target.parentPid !== callerPid && !caller.privileged)
+  if (
+    target.parentPid !== callerPid &&
+    !caller.privileged &&
+    caller.euid !== 0
+  )
     throw eperm(callerPid, "requireControl");
 
   return target;

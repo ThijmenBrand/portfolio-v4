@@ -113,6 +113,7 @@ export const WIRE_CALLS = {
   "process.cwd": "cwd",
   "process.env": "getenv",
   "process.setenv": "setenv",
+  "process.ids": "ids",
 
   "events.subscribe": "subscribe",
 
@@ -123,6 +124,8 @@ export const WIRE_CALLS = {
   "fs.mkdir": "mkdir",
   "fs.unlink": "unlink",
   "fs.rmdir": "rmdir",
+  "fs.chmod": "chmod",
+  "fs.chown": "chown",
 
   "io.open": "open",
   "io.close": "close",
@@ -137,6 +140,8 @@ export const WIRE_CALLS = {
 
   "shell.openExternal": "openExternal",
   "shell.location": "getLocation",
+
+  "api.fetch": "apiFetch",
 } as const satisfies Record<WirePath, keyof SyscallTable | null>;
 
 /** The AppInterface member a wire path names, e.g. Member<"io.read">. */

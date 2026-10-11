@@ -75,6 +75,7 @@ export function buildAppInterface(client: WireClient, pid: Pid): AppInterface {
       cwd: () => call("process.cwd"),
       env: () => call("process.env"),
       setenv: (name, value) => call("process.setenv", name, value),
+      ids: () => call("process.ids"),
     },
 
     timers: {
@@ -99,6 +100,10 @@ export function buildAppInterface(client: WireClient, pid: Pid): AppInterface {
       location: () => call("shell.location"),
     },
 
+    api: {
+      fetch: (path, request) => call("api.fetch", path, request),
+    },
+
     fs: {
       readFile,
       writeFile,
@@ -111,6 +116,8 @@ export function buildAppInterface(client: WireClient, pid: Pid): AppInterface {
       mkdir: (path) => call("fs.mkdir", path),
       unlink: (path) => call("fs.unlink", path),
       rmdir: (path) => call("fs.rmdir", path),
+      chmod: (path, mode) => call("fs.chmod", path, mode),
+      chown: (path, uid, gid) => call("fs.chown", path, uid, gid),
     },
 
     io: {

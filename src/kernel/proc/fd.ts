@@ -41,7 +41,7 @@ export async function openFd(
 ): Promise<number> {
   const proc = requireAlive(ctx, pid);
 
-  const file = await ctx.fs.open(resolveFrom(proc.cwd, path), flags);
+  const file = await ctx.fs.open(resolveFrom(proc.cwd, path), flags, proc);
   try {
     return proc.files.allocate(file, flags);
   } catch (e) {

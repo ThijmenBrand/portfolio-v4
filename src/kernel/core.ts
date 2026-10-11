@@ -1,10 +1,12 @@
-import { paths } from "./binfmt";
+import { adminPaths, paths } from "./binfmt";
 import { Display } from "./display/display";
 import { EventBus } from "./events/bus";
 import { MemFS } from "./fs/drivers/memfs";
 import { opfsAvailable, OpfsFS } from "./fs/drivers/opfs";
 import { ProcFS } from "./fs/drivers/procfs";
+import { debounce, loadMeta, migrateLegacyHome, saveMeta } from "./fs/meta";
 import { basename, dirname } from "./fs/path";
+import { ADMIN_GID } from "./fs/perm";
 import { VFS } from "./fs/vfs";
 import { KernelError } from "./errors";
 import { faultProcess } from "./proc/faultproc";
@@ -40,8 +42,10 @@ export function createKernel(screen: HTMLElement): {
     readonly: true,
   });
 
-  if (opfsAvailable()) {
-    fs.mount({ path: "/home", driver: new OpfsFS(), readonly: false });
+  const persistent = opfsAvailable();
+  if (persistent) {
+    fs.mount({ path: "/home", driver: new OpfsFS("home"), readonly: false });
+    fs.mount({ path: "/etc", driver: new OpfsFS("etc"), readonly: false });
   }
 
   const windows = new WindowManager(
@@ -88,8 +92,11 @@ export function createKernel(screen: HTMLElement): {
     path: "/kernel",
     args: [],
     cwd: "/",
-    env: { PATH: "/ProgramFiles", HOME: "/home" },
+    env: { PATH: "/ProgramFiles", HOME: "/home/root", USER: "root" },
     privileged: true,
+    uid: 0,
+    euid: 0,
+    gid: 0,
   });
   processes.setStatus(0 as Pid, "running");
 
@@ -103,16 +110,26 @@ export function createKernel(screen: HTMLElement): {
     boot: async () => {
       await mountPrograms(fs);
       await fs.mkdir("/tmp");
-      if (!opfsAvailable()) await fs.mkdir("/home");
+      fs.setAttr("/tmp", { uid: 0, gid: 0, mode: 0o777 });
+      if (persistent) {
+        await migrateLegacyHome("guest");
+        fs.loadAttrs(await loadMeta());
+        fs.onAttrsChange = debounce(
+          () => saveMeta(fs.attrsUnder(["/home", "/etc"])),
+          300,
+        );
+      } else {
+        await fs.mkdir("/home");
+        await fs.mkdir("/etc");
+      }
       // System-wide startup programs, read by the desktop session (like
       // /etc/xdg/autostart or HKLM\...\Run). Per-user ones go in
       // ~/.config/autostart. One path per line, started in order.
-      await fs.mkdir("/etc");
       await fs.writeFile(
         "/etc/autostart",
         new TextEncoder().encode("/System/Taskbar\n/System/launcher\n"),
       );
-      await os.process.spawn("/System/desktop");
+      await os.process.spawn("/System/login");
     },
   };
 }
@@ -133,5 +150,9 @@ async function mountPrograms(fs: VFS): Promise<void> {
     const root = await driver.root();
     for (const name of names) await driver.create(root, name, "file");
     fs.mount({ path: dir, driver, readonly: true });
+  }
+  for (const path of paths) fs.setAttr(path, { uid: 0, gid: 0, mode: 0o755 });
+  for (const path of adminPaths) {
+    fs.setAttr(path, { uid: 0, gid: ADMIN_GID, mode: 0o750 });
   }
 }

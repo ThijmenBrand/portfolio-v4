@@ -69,3 +69,27 @@ export function countFlag(args: string[], fallback: number): { n: number; rest: 
   }
   return { n: Number.isFinite(n) && n >= 0 ? n : fallback, rest };
 }
+
+/** One line from `fd`, without the newline; null at EOF. */
+export async function readLine(os: AppInterface, fd: number): Promise<string | null> {
+  const decoder = new TextDecoder();
+  let text = "";
+  for (;;) {
+    const chunk = await os.io.read(fd, 1024);
+    if (chunk.length === 0) return text || null;
+    text += decoder.decode(chunk, { stream: true });
+    const newline = text.indexOf("\n");
+    // ponytail: anything typed after the newline is dropped; fine for a prompt.
+    if (newline >= 0) return text.slice(0, newline);
+  }
+}
+
+/** Prompts on stdout and reads stdin with echo hidden (ESC[8m, see the terminal). */
+export async function askPassword(os: AppInterface, prompt: string): Promise<string> {
+  await print(os, 1, `${prompt}\x1b[8m`);
+  try {
+    return (await readLine(os, 0)) ?? "";
+  } finally {
+    await print(os, 1, "\x1b[28m");
+  }
+}

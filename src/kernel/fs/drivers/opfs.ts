@@ -65,11 +65,20 @@ export class OpfsFS implements FileSystemDriver {
 
   private rootPromise?: Promise<OpfsDirNode>;
 
+  /** The directory under the OPFS root this mount serves, e.g. "home". */
+  private readonly subdirectory: string;
+
+  public constructor(subdirectory: string) {
+    this.subdirectory = subdirectory;
+  }
+
   public async root(): Promise<OpfsNode> {
     this.rootPromise ??= this.guard("/", async () => ({
       [BRAND]: true as const,
       kind: "directory" as const,
-      handle: await navigator.storage.getDirectory(),
+      handle: await (
+        await navigator.storage.getDirectory()
+      ).getDirectoryHandle(this.subdirectory, { create: true }),
     })).catch((error: unknown) => {
       this.rootPromise = undefined;
       throw error;

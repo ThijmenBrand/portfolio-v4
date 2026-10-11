@@ -24,8 +24,14 @@ export interface DirEntry {
   modifiedAt: number;
   size: number;
   readonly: boolean;
+  uid: number;
+  gid: number;
+  mode: number;
 }
 
 export interface StatResult extends Stat {
   readonly: boolean;
+  uid: number;
+  gid: number;
+  mode: number;
 }

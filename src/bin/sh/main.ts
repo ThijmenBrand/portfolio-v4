@@ -166,8 +166,8 @@ class Shell {
   private status = 0;
   private running = true;
   private foreground: Pid[] = [];
-  /** Our own environment, mirrored so expansion doesn't need a syscall. */
   private env: Record<string, string> = {};
+  private root = false;
 
   private readonly os: AppInterface;
 
@@ -178,13 +178,15 @@ class Shell {
   /** Interactive on stdin, or `sh script` runs the script and exits. */
   public async run(script?: string): Promise<number> {
     this.env = await this.os.process.env();
+    this.root = (await this.os.process.ids()).euid === 0;
     if (script !== undefined) return this.source(script);
 
     await this.os.process.onSignal("SIGINT", () => void this.interrupt());
     await this.write(1, "portfolio sh — try `help`\n");
     if (this.env.HOME) {
       await this.source(`${this.env.HOME}/.profile`).catch((error) => {
-        if (errorCode(error) !== "ENOENT") throw error;
+        const code = errorCode(error);
+        if (code !== "ENOENT" && code !== "EACCES") throw error;
       });
     }
     return this.runLines(new LineReader(this.os, 0), true);
@@ -200,7 +202,10 @@ class Shell {
     }
   }
 
-  private async runLines(lines: LineReader, interactive: boolean): Promise<number> {
+  private async runLines(
+    lines: LineReader,
+    interactive: boolean,
+  ): Promise<number> {
     while (this.running) {
       if (interactive) await this.prompt();
 
@@ -223,7 +228,10 @@ class Shell {
   }
 
   private async prompt(): Promise<void> {
-    await this.write(1, `${await this.os.process.cwd()} $ `);
+    // ponytail: the terminal sniffs the trailing "$ " / "# " to know sh is up.
+    const user = this.env.USER ? `${this.env.USER}:` : "";
+    const cwd = await this.os.process.cwd();
+    await this.write(1, `${user}${cwd} ${this.root ? "#" : "$"} `);
   }
 
   private async interrupt(): Promise<void> {
@@ -289,7 +297,16 @@ class Shell {
   // ------------------------------------------------------------- builtins
 
   private isBuiltin(name: string): boolean {
-    return ["cd", "pwd", "exit", "help", "export", "unset", "source", "."].includes(name);
+    return [
+      "cd",
+      "pwd",
+      "exit",
+      "help",
+      "export",
+      "unset",
+      "source",
+      ".",
+    ].includes(name);
   }
 
   private async runBuiltin(command: Command): Promise<number> {
@@ -301,7 +318,7 @@ class Shell {
     }
 
     if (name === "cd") {
-      await this.os.process.chdir(args[0] ?? "/home");
+      await this.os.process.chdir(args[0] ?? this.env.HOME ?? "/");
       return 0;
     }
 
@@ -310,7 +327,8 @@ class Shell {
         const eq = arg.indexOf("=");
         if (name === "unset") await this.os.process.setenv(arg);
         // `export NAME` alone: every variable is already exported here.
-        else if (eq > 0) await this.os.process.setenv(arg.slice(0, eq), arg.slice(eq + 1));
+        else if (eq > 0)
+          await this.os.process.setenv(arg.slice(0, eq), arg.slice(eq + 1));
       }
       this.env = await this.os.process.env();
       return 0;
@@ -370,7 +388,8 @@ class Shell {
         return await this.os.process.spawn(`${dir}/${name}`, args, { fds });
       } catch (error) {
         // Not here, or a PATH entry that isn't a directory: try the next.
-        if (!["ENOENT", "ENOTDIR"].includes(errorCode(error) ?? "")) throw error;
+        if (!["ENOENT", "ENOTDIR"].includes(errorCode(error) ?? ""))
+          throw error;
       }
     }
 

@@ -3,7 +3,7 @@
 Every push to `main` runs `.github/workflows/deploy.yml`:
 
 1. **check** — `pnpm build` (type check incl. the wire-safety checks + Vite build)
-2. **build** — Docker image (`Dockerfile`: Vite build → Caddy, non-root), pushed
+2. **build** — Docker image (`Dockerfile`: Vite build → Caddy + the Node API, non-root), pushed
    to `ghcr.io/thijmenbrand/portfolio-v4`, pinned by digest
 3. **deploy** — SSH to the server as `deploy`, with a key whose forced command
    only accepts `deploy <image@digest>`, `rollback` or `status`
@@ -12,8 +12,13 @@ The script starts the new image, waits for its healthcheck and keeps the last
 good one; an unhealthy image is rolled back automatically.
 
 ```
+server/                         the API (Node, stdlib only, run as .ts): owner login, /api/private/*
+├── main.ts                     routes, CSRF + body limit, login rate limit
+├── auth.ts                     password check, signed session cookie
+├── hash.ts                     `node server/hash.ts <password>` → OWNER_PASSWORD_HASH
+└── selftest.ts                 `node server/selftest.ts`
 deploy/
-├── web/Caddyfile               Caddy inside the container (CSP, CORS on /assets/, caching)
+├── web/Caddyfile               Caddy inside the container (CSP, CORS on /assets/, caching, /api/* → api)
 ├── docker-compose.yml          → /srv/portfolio/docker-compose.yml on the server
 ├── caddy/portfolio.caddy       site block for the host's Caddy (reference copy)
 └── server/
@@ -40,14 +45,37 @@ sudo install -o root -g root -m 644 deploy/docker-compose.yml /srv/portfolio/
 sudo install -o root -g root -m 755 deploy/server/portfolio-deploy /usr/local/sbin/portfolio-deploy
 sudo install -o root -g root -m 755 deploy/server/portfolio-deploy-ssh /usr/local/bin/portfolio-deploy-ssh
 
-# 3. Let deploy run (only) the root script
+# 3. The API's secrets (see "API secrets" below) — before the first deploy, or
+#    the api container can't start and the deploy rolls back
+sudo install -o root -g root -m 600 api.env /srv/portfolio/api.env
+
+# 4. Let deploy run (only) the root script
 echo 'deploy ALL=(root) NOPASSWD: /usr/local/sbin/portfolio-deploy' |
   sudo tee /etc/sudoers.d/portfolio-deploy >/dev/null
 sudo chmod 440 /etc/sudoers.d/portfolio-deploy && sudo visudo -c
 
-# 4. Allow the key — restricted to the wrapper (one line, in ~deploy/.ssh/authorized_keys)
+# 5. Allow the key — restricted to the wrapper (one line, in ~deploy/.ssh/authorized_keys)
 restrict,command="/usr/local/bin/portfolio-deploy-ssh" ssh-ed25519 AAAA…(portfolio-deploy.pub)… portfolio-deploy
 ```
+
+### API secrets
+
+`/srv/portfolio/api.env` (root:root, 600; compose reads it as root) holds the
+owner login. Write it in your checkout, install it as in step 3, then delete
+the local copy:
+
+```sh
+cat > api.env <<EOF
+OWNER_USERNAME=thijmen
+OWNER_PASSWORD_HASH=$(node server/hash.ts '<password>')
+SESSION_SECRET=$(openssl rand -hex 32)
+PUBLIC_ORIGIN=https://thijmenbrand.nl
+EOF
+```
+
+`NODE_ENV` and `PORT` come from `docker-compose.yml`. After changing the file
+(new password, or a new `SESSION_SECRET` to sign out every session), recreate
+the api with `sudo portfolio-deploy deploy "$(cat /srv/portfolio/current)"`.
 
 ### Reverse proxy + TLS
 
@@ -77,7 +105,7 @@ If the GitHub package is private, **root** needs to be logged in to ghcr.io
 (`sudo docker login ghcr.io` with a token that has `read:packages`), since the
 pull runs in the root script — or
 make the package public under the repo's *Packages* settings; it only contains
-the built static site.
+the built static site and the API's source (secrets live in `api.env`).
 
 ## GitHub settings (this repo)
 

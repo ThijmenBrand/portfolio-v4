@@ -1,5 +1,7 @@
 # syntax=docker/dockerfile:1
-# Portfolio OS: a static Vite build, served by Caddy as a non-root user.
+# Portfolio OS: a static Vite build, served by Caddy as a non-root user, plus the
+# API (server/) run by Node from the same image. One image, two services
+# (deploy/docker-compose.yml): web runs the CMD below, api runs `node /app/server/main.ts`.
 ARG NODE_VERSION=24
 
 # --- build ----------------------------------------------------------------------
@@ -11,7 +13,7 @@ COPY package.json pnpm-lock.yaml ./
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile
 COPY . .
-# `pnpm build` = tsc (type check, including the wire-safety checks) + vite build.
+# `pnpm build` = tsc (type check, including the wire-safety checks, and server/) + vite build.
 RUN pnpm build
 
 # --- caddy binary ---------------------------------------------------------------
@@ -25,14 +27,20 @@ RUN cp /usr/bin/caddy /caddy
 # --- runtime --------------------------------------------------------------------
 # Caddy as an unprivileged user, listening on 8080. Config and site files stay
 # root-owned: the server can read them but never modify them.
-FROM alpine:3 AS runner
+# Node base for the API: it runs the .ts sources directly (type stripping) and
+# uses only the stdlib, so no build output and no node_modules.
+FROM node:${NODE_VERSION}-alpine AS runner
 COPY --from=caddy /caddy /usr/bin/caddy
 COPY deploy/web/Caddyfile /etc/caddy/Caddyfile
 COPY --from=build /app/dist /srv
+# package.json for "type": "module"; hash.ts is also the CLI for OWNER_PASSWORD_HASH.
+COPY package.json /app/
+COPY server/main.ts server/auth.ts server/hash.ts /app/server/
 # The root filesystem is read-only at runtime; Caddy's (unused) state goes to /tmp.
 ENV XDG_CONFIG_HOME=/tmp/caddy-config XDG_DATA_HOME=/tmp/caddy-data
 USER 65532:65532
 EXPOSE 8080
+# Web's healthcheck; the api service overrides it in deploy/docker-compose.yml.
 HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
   CMD ["wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
 CMD ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]

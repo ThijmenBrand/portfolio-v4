@@ -1,4 +1,5 @@
 import { registry, type AppEntry } from "../../apps/registry";
+import { ADMIN_GID } from "../../kernel/fs/perm";
 import { kernelError, logError } from "../../kernel/errors";
 import type { SystemInterface } from "../../kernel/syscalls/api";
 import type { Rect } from "../../kernel/types";
@@ -32,12 +33,20 @@ import menuHTML from "./menu.html?raw";
 import menuItemHTML from "./menu-item.html?raw";
 import "./desktop.css";
 
+/**
+ * One user's session, started by /System/login with USER/HOME set. Exiting
+ * is logging out: login then ends whatever the session left running.
+ */
 export async function main(os: SystemInterface): Promise<void> {
-  const desktop = new Desktop(os, registry, await os.display.root());
+  const { gid } = await os.process.ids();
+  // Cosmetic: exec of an admin app fails anyway (EACCES), this just hides it.
+  const apps = registry.filter((app) => !app.admin || gid === ADMIN_GID);
+  const desktop = new Desktop(os, apps, await os.display.root());
   await desktop.start();
 
-  await os.process.chdir("/home");
-  await autostart(os);
+  const home = (await os.process.env()).HOME ?? "/";
+  await os.process.chdir(home).catch(() => os.process.chdir("/"));
+  await autostart(os, home);
 
   await os.process.onSignal("SIGTERM", () => {
     desktop.destroy();
@@ -47,7 +56,6 @@ export async function main(os: SystemInterface): Promise<void> {
   await os.process.onSignal("SIGCHLD", () => void reapZombies(os));
 }
 
-const AUTOSTART_FILES = ["/etc/autostart", "/home/.config/autostart"];
 
 /** One program path per line; blank lines and `#` comments are skipped. */
 export function autostartEntries(text: string): string[] {
@@ -62,8 +70,8 @@ export function autostartEntries(text: string): string[] {
  * taskbar must be up before the launcher opens windows). A missing file or a
  * bad entry must never take the desktop down.
  */
-async function autostart(os: SystemInterface): Promise<void> {
-  for (const file of AUTOSTART_FILES) {
+async function autostart(os: SystemInterface, home: string): Promise<void> {
+  for (const file of ["/etc/autostart", `${home}/.config/autostart`]) {
     const text = await os.fs.readTextFile(file).catch(() => "");
     for (const path of autostartEntries(text)) {
       await os.process.spawn(path).catch((error) =>
@@ -466,6 +474,13 @@ class Desktop implements DesktopCommands {
           {
             label: "Align to grid",
             action: () => this.reflow(this.visualOrder()),
+          },
+          {
+            label: "Log out",
+            action: () => {
+              this.destroy();
+              void this.os.process.exit(0);
+            },
           },
         ];
 

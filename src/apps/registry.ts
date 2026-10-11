@@ -6,6 +6,7 @@ export interface AppEntry {
   name: string;
   icon: string;
   exec: string;
+  admin?: boolean;
 }
 
 const manifests = import.meta.glob<AppManifest>("./*/app.ts", {
@@ -13,11 +14,12 @@ const manifests = import.meta.glob<AppManifest>("./*/app.ts", {
   import: "default",
 });
 
-/** Every GUI app whose app.ts declares `desktop`, plus the system ones. */
 export const registry: AppEntry[] = [
-  ...Object.entries(manifests).flatMap(([key, { desktop }]) => {
+  ...Object.entries(manifests).flatMap(([key, { desktop, admin }]) => {
     const id = key.split("/")[1]; // "./resume/app.ts" -> "resume"
-    return desktop ? [{ id, ...desktop, exec: `/ProgramFiles/${id}` }] : [];
+    return desktop
+      ? [{ id, ...desktop, exec: `/ProgramFiles/${id}`, admin }]
+      : [];
   }),
   {
     id: "task-manager",

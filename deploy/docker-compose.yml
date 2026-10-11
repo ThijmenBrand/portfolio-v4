@@ -1,5 +1,7 @@
-# The portfolio on the server: one static Caddy container behind the host's
-# reverse proxy (deploy/caddy/portfolio.caddy). Lives at /srv/portfolio/.
+# The portfolio on the server: the static Caddy container behind the host's
+# reverse proxy (deploy/caddy/portfolio.caddy), and the API next to it, which
+# only web's Caddy can reach (/api/*). Both run the same image. Lives at
+# /srv/portfolio/; the API's secrets are in /srv/portfolio/api.env (deploy/README.md).
 #
 # Started by the deploy script on a pinned image digest:
 #   IMAGE=ghcr.io/thijmenbrand/portfolio-v4@sha256:… docker compose up -d --wait
@@ -19,3 +21,30 @@ services:
     mem_limit: 64m
     cpus: 0.5
     restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+
+  api:
+    image: ${IMAGE}
+    command: ["node", "/app/server/main.ts"]
+    # No ports: only reachable on the compose network, as api:8787.
+    env_file: /srv/portfolio/api.env
+    environment:
+      NODE_ENV: production
+      PORT: "8787"
+    read_only: true
+    user: "65532:65532"
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 96m
+    cpus: 0.5
+    restart: unless-stopped
+    # Replaces the image's HEALTHCHECK, which probes web's Caddy.
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/api/healthz').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 3

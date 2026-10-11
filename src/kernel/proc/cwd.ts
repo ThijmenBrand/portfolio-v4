@@ -1,5 +1,6 @@
 import { enotdir } from "../errors";
 import { resolveFrom } from "../fs/path";
+import { X } from "../fs/perm";
 import { requireAlive } from "../syscalls/guards";
 import type { KernelContext, Pid } from "../types";
 
@@ -11,8 +12,9 @@ export async function changeDirectory(
   const proc = requireAlive(ctx, pid);
   const normalized = resolveFrom(proc.cwd, path);
 
-  const stat = await ctx.fs.stat(normalized);
+  const stat = await ctx.fs.stat(normalized, proc);
   if (stat.kind !== "directory") throw enotdir(normalized);
+  await ctx.fs.access(normalized, proc, X);
 
   const alive = requireAlive(ctx, pid);
   ctx.processes.setCwd(alive.pid, normalized);

@@ -20,12 +20,13 @@ import type {
   WindowInfo,
   WindowOptions,
 } from "../windows/types";
+import { apiSyscalls, type ApiRequest, type ApiResponse } from "./api-fetch";
 import { displaySyscalls } from "./display";
 import { eventsSyscalls } from "./events";
 import { fdSyscalls } from "./fd";
 import { shellSyscalls } from "./shell";
 import { fsSyscalls } from "./fs";
-import { processSyscalls, type SpawnOptions } from "./process";
+import { processSyscalls, type Ids, type SpawnOptions } from "./process";
 import { timersSyscalls } from "./timers";
 import { windowSyscalls } from "./window";
 
@@ -113,10 +114,14 @@ export interface SyscallTable {
   cwd(callerPid: Pid): Promise<string>;
   getenv(callerPid: Pid): Promise<Record<string, string>>;
   setenv(callerPid: Pid, name: string, value?: string): Promise<void>;
+  ids(callerPid: Pid): Promise<Ids>;
+  chmod(callerPid: Pid, path: string, mode: number): Promise<void>;
+  chown(callerPid: Pid, path: string, uid: number, gid: number): Promise<void>;
   pipe(callerPid: Pid): Promise<PipeFds>;
   openpty(callerPid: Pid): Promise<{ master: number; slave: number }>;
   openExternal(callerPid: Pid, url: string): Promise<void>;
   getLocation(callerPid: Pid): Promise<LocationInfo>;
+  apiFetch(callerPid: Pid, path: string, request?: ApiRequest): Promise<ApiResponse>;
 }
 
 export function createSyscallTable(ctx: KernelContext): SyscallTable {
@@ -129,5 +134,6 @@ export function createSyscallTable(ctx: KernelContext): SyscallTable {
     ...fsSyscalls(ctx),
     ...fdSyscalls(ctx),
     ...shellSyscalls(ctx),
+    ...apiSyscalls(ctx),
   };
 }

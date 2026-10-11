@@ -60,6 +60,16 @@ export function eperm(pid: number, syscall?: string): KernelError {
   );
 }
 
+export function eacces(path: string): KernelError {
+  return new KernelError("EACCES", `Permission denied: ${path}`, { path });
+}
+
+export function epermPath(path: string): KernelError {
+  return new KernelError("EPERM", `Operation not permitted: ${path}`, {
+    path,
+  });
+}
+
 export function enoexec(path: string): KernelError {
   return new KernelError("ENOEXEC", `File is not executable: ${path}`, {
     path,

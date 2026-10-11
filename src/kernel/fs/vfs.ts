@@ -1,10 +1,12 @@
 import {
+  eacces,
   ebusy,
   efbig,
   eintr,
   einval,
   eisdir,
   enotdir,
+  epermPath,
   erofs,
   KernelError,
 } from "../errors";
@@ -17,12 +19,27 @@ import {
   relativeSegments,
   walk,
 } from "./mount";
-import { basename, isValidName, normalize } from "./path";
-import type { DirEntry, Mount, Node, StatResult } from "./types";
+import { basename, dirname, isValidName, normalize, split } from "./path";
+import { defaultAttr, permits, R, ROOT, W, X, type Attr, type Cred } from "./perm";
+import type { DirEntry, Mount, Node, NodeKind, StatResult } from "./types";
 import { VfsFile } from "./vfsFile.ts";
 
+/**
+ * Every method takes the caller's credentials last; leaving them out means
+ * root, which is what the kernel's own calls (boot, procfs) want.
+ */
 export class VFS {
   private readonly mounts: Mount[] = [];
+
+  /**
+   * Owner, group and mode per absolute path. Kept here rather than in the
+   * drivers because OPFS can't store them; no entry means root-owned with the
+   * default mode. Checks are map lookups, so "x on every parent" costs no I/O.
+   */
+  private readonly attrs = new Map<string, Attr>();
+
+  /** Called after any change to `attrs`, so the kernel can persist them. */
+  public onAttrsChange: () => void = () => {};
 
   private static readonly CHUNK_SIZE = 64 * 1024; // 64KB
   private static readonly MAX_SIZE = 64 * 1024 * 1024; // 64MB
@@ -40,17 +57,29 @@ export class VFS {
    * @param path string
    * @returns Promise<StatResult>
    */
-  public async stat(path: string): Promise<StatResult> {
-    const { mount, node } = await this.resolve(path);
+  public async stat(path: string, cred: Cred = ROOT): Promise<StatResult> {
+    const normalized = normalize(path);
+    this.assertSearch(normalized, cred);
+    const { mount, node } = await this.resolve(normalized);
     const stat = await mount.driver.stat(node);
     const readonly = mount.readonly;
-    return { ...stat, readonly };
+    return { ...stat, readonly, ...this.attr(normalized, stat.kind) };
   }
 
-  public async readdir(path: string): Promise<DirEntry[]> {
+  /** Throws EACCES unless `cred` may reach `path` and do `want` (R|W|X) on it. */
+  public async access(path: string, cred: Cred, want: number): Promise<void> {
+    const normalized = normalize(path);
+    this.assertSearch(normalized, cred);
+    const { node } = await this.resolve(normalized);
+    this.assertAccess(normalized, node.kind, cred, want);
+  }
+
+  public async readdir(path: string, cred: Cred = ROOT): Promise<DirEntry[]> {
     const dir = normalize(path);
+    this.assertSearch(dir, cred);
     const { mount, node } = await this.resolve(dir);
     if (node.kind !== "directory") throw enotdir(dir);
+    this.assertAccess(dir, node.kind, cred, R);
 
     const names = new Set(
       (await mount.driver.readdir(node)).filter(isValidName),
@@ -70,7 +99,11 @@ export class VFS {
     return entries;
   }
 
-  public async open(path: string, flags: OpenFlags): Promise<OpenFile> {
+  public async open(
+    path: string,
+    flags: OpenFlags,
+    cred: Cred = ROOT,
+  ): Promise<OpenFile> {
     const normalized = normalize(path);
 
     if (!flags.read && !flags.write)
@@ -80,12 +113,18 @@ export class VFS {
 
     const mount = findMount(this.mounts, normalized);
     if (flags.write) this.assertWritable(mount, normalized);
+    this.assertSearch(normalized, cred);
 
-    const node = flags.create
-      ? await this.openCreate(mount, normalized)
-      : (await this.resolve(normalized)).node;
+    const { node, created } = flags.create
+      ? await this.openCreate(mount, normalized, cred)
+      : { node: (await this.resolve(normalized)).node, created: false };
 
     if (node.kind !== "file") throw eisdir(normalized);
+    // A file we just made is ours to open, whatever its mode says.
+    if (!created) {
+      const want = (flags.read ? R : 0) | (flags.write ? W : 0);
+      this.assertAccess(normalized, node.kind, cred, want);
+    }
     if (flags.truncate) await mount.driver.truncate(node, 0);
 
     return (
@@ -94,8 +133,12 @@ export class VFS {
     );
   }
 
-  public async readFile(path: string, signal?: AbortSignal): Promise<Bytes> {
-    const file = await this.open(path, { read: true });
+  public async readFile(
+    path: string,
+    signal?: AbortSignal,
+    cred: Cred = ROOT,
+  ): Promise<Bytes> {
+    const file = await this.open(path, { read: true }, cred);
     try {
       return await this.readAll(file, 0, normalize(path), signal);
     } finally {
@@ -107,12 +150,13 @@ export class VFS {
     path: string,
     data: Bytes,
     signal?: AbortSignal,
+    cred: Cred = ROOT,
   ): Promise<void> {
-    const file = await this.open(path, {
-      write: true,
-      create: true,
-      truncate: true,
-    });
+    const file = await this.open(
+      path,
+      { write: true, create: true, truncate: true },
+      cred,
+    );
     try {
       await file.write(0, data, signal);
     } finally {
@@ -120,25 +164,83 @@ export class VFS {
     }
   }
 
-  public async mkdir(path: string): Promise<void> {
-    const { mount, parent, name } = await this.resolveParent(path);
-    this.assertWritable(mount, path);
+  public async mkdir(path: string, cred: Cred = ROOT): Promise<void> {
+    const normalized = normalize(path);
+    const { mount, parent, name } = await this.resolveParent(normalized);
+    this.assertWritable(mount, normalized);
+    this.assertCanModifyParent(normalized, cred);
 
     await mount.driver.create(parent, name, "directory");
+    this.setAttr(normalized, { uid: cred.euid, gid: cred.gid, mode: 0o755 });
   }
 
-  public async unlink(path: string): Promise<void> {
-    const { mount, parent, name } = await this.resolveParent(path);
-    this.assertWritable(mount, path);
+  public async unlink(path: string, cred: Cred = ROOT): Promise<void> {
+    const normalized = normalize(path);
+    const { mount, parent, name } = await this.resolveParent(normalized);
+    this.assertWritable(mount, normalized);
+    this.assertCanModifyParent(normalized, cred);
 
     await mount.driver.unlink(parent, name);
+    this.dropAttr(normalized);
   }
 
-  public async rmdir(path: string): Promise<void> {
-    const { mount, parent, name } = await this.resolveParent(path);
-    this.assertWritable(mount, path);
+  public async rmdir(path: string, cred: Cred = ROOT): Promise<void> {
+    const normalized = normalize(path);
+    const { mount, parent, name } = await this.resolveParent(normalized);
+    this.assertWritable(mount, normalized);
+    this.assertCanModifyParent(normalized, cred);
 
     await mount.driver.rmdir(parent, name);
+    this.dropAttr(normalized);
+  }
+
+  /** Only the owner (or root) may change a mode. */
+  public async chmod(path: string, mode: number, cred: Cred = ROOT): Promise<void> {
+    const normalized = normalize(path);
+    const { mount, node } = await this.resolveChecked(normalized, cred);
+    this.assertWritable(mount, normalized);
+    const current = this.attr(normalized, node.kind);
+    if (cred.euid !== 0 && cred.euid !== current.uid) throw epermPath(normalized);
+    this.setAttr(normalized, { ...current, mode: mode & 0o777 });
+  }
+
+  /** Only root may give a file away. */
+  public async chown(
+    path: string,
+    uid: number,
+    gid: number,
+    cred: Cred = ROOT,
+  ): Promise<void> {
+    const normalized = normalize(path);
+    const { mount, node } = await this.resolveChecked(normalized, cred);
+    this.assertWritable(mount, normalized);
+    if (cred.euid !== 0) throw epermPath(normalized);
+    this.setAttr(normalized, { ...this.attr(normalized, node.kind), uid, gid });
+  }
+
+  /**
+   * Kernel-only: set attributes without any check, e.g. on read-only
+   * mounts at boot (program files) or when loading saved attributes.
+   */
+  public setAttr(path: string, attr: Attr): void {
+    this.attrs.set(normalize(path), { ...attr });
+    this.onAttrsChange();
+  }
+
+  /** Every stored attribute whose path is under one of `prefixes`. */
+  public attrsUnder(prefixes: string[]): Record<string, Attr> {
+    const under = (path: string) =>
+      prefixes.some((p) => path === p || path.startsWith(`${p}/`));
+    return Object.fromEntries(
+      [...this.attrs].filter(([path]) => under(path)),
+    );
+  }
+
+  /** Bulk load, e.g. the saved attributes at boot. Doesn't notify. */
+  public loadAttrs(saved: Record<string, Attr>): void {
+    for (const [path, attr] of Object.entries(saved)) {
+      this.attrs.set(normalize(path), attr);
+    }
   }
 
   /**
@@ -174,12 +276,74 @@ export class VFS {
     return { mount, parent, name };
   }
 
-  private async openCreate(mount: Mount, path: string): Promise<Node> {
+  private async openCreate(
+    mount: Mount,
+    path: string,
+    cred: Cred,
+  ): Promise<{ node: Node; created: boolean }> {
     const { parent, name } = await this.resolveParent(path);
-    return (
-      (await mount.driver.lookup(parent, name)) ??
-      (await mount.driver.create(parent, name, "file"))
-    );
+    const existing = await mount.driver.lookup(parent, name);
+    if (existing) return { node: existing, created: false };
+
+    this.assertCanModifyParent(path, cred);
+    const node = await mount.driver.create(parent, name, "file");
+    this.setAttr(path, { uid: cred.euid, gid: cred.gid, mode: 0o644 });
+    return { node, created: true };
+  }
+
+  private async resolveChecked(
+    path: string,
+    cred: Cred,
+  ): Promise<{ mount: Mount; node: Node }> {
+    this.assertSearch(path, cred);
+    return this.resolve(path);
+  }
+
+  /**
+   * No entry: the default mode, owned by whoever owns the nearest directory
+   * above that has one. That's how files that appeared in OPFS behind our
+   * back (or before users existed) end up belonging to the home's owner.
+   */
+  private attr(path: string, kind: NodeKind): Attr {
+    const own = this.attrs.get(path);
+    if (own) return own;
+    const fallback = defaultAttr(kind);
+    for (let dir = path; dir !== "/"; ) {
+      dir = dirname(dir);
+      const above = this.attrs.get(dir);
+      if (above) return { ...fallback, uid: above.uid, gid: above.gid };
+    }
+    return fallback;
+  }
+
+  private dropAttr(path: string): void {
+    if (this.attrs.delete(path)) this.onAttrsChange();
+  }
+
+  private assertAccess(
+    path: string,
+    kind: NodeKind,
+    cred: Cred,
+    want: number,
+  ): void {
+    if (!permits(this.attr(path, kind), cred, want)) throw eacces(path);
+  }
+
+  /** x on every directory above `path` (not `path` itself). */
+  private assertSearch(path: string, cred: Cred): void {
+    if (cred.euid === 0) return;
+    let dir = "/";
+    for (const segment of split(path).slice(0, -1)) {
+      this.assertAccess(dir, "directory", cred, X);
+      dir = dir === "/" ? `/${segment}` : `${dir}/${segment}`;
+    }
+    if (path !== "/") this.assertAccess(dir, "directory", cred, X);
+  }
+
+  /** Creating or removing an entry needs w+x on the directory holding it. */
+  private assertCanModifyParent(path: string, cred: Cred): void {
+    this.assertSearch(path, cred);
+    this.assertAccess(dirname(path), "directory", cred, W | X);
   }
 
   private assertWritable(mount: Mount, path: string): void {
@@ -204,7 +368,12 @@ export class VFS {
       if (!node) return null;
 
       const stat = await source.driver.stat(node);
-      return { name, ...stat, readonly: source.readonly };
+      return {
+        name,
+        ...stat,
+        readonly: source.readonly,
+        ...this.attr(childPath, stat.kind),
+      };
     } catch (error) {
       if (VFS.isTransient(error)) return null;
       throw error;
