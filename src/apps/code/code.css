@@ -196,8 +196,15 @@
   text-align: left;
 }
 
+.code-section-title [data-field="root-name"] {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .code-section-actions {
   display: flex;
+  flex: none;
   gap: 2px;
   opacity: 0;
   transition: opacity 0.15s;

@@ -288,7 +288,7 @@ class Editor {
       if (this.rootDir === null) return this.flash("Open a folder first");
       void this.open(join(this.rootDir, LAUNCH_FILE), false);
     });
-    for (const name of ["open-folder", "open-folder-btn", "welcome-open"])
+    for (const name of ["open-folder", "welcome-open"])
       this.field(name).addEventListener(
         "click",
         () => void this.promptOpenFolder(),
