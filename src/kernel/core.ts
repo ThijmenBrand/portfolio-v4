@@ -1,8 +1,10 @@
+import { paths } from "./binfmt";
 import { Display } from "./display/display";
 import { EventBus } from "./events/bus";
 import { MemFS } from "./fs/drivers/memfs";
 import { opfsAvailable, OpfsFS } from "./fs/drivers/opfs";
 import { ProcFS } from "./fs/drivers/procfs";
+import { basename, dirname } from "./fs/path";
 import { VFS } from "./fs/vfs";
 import { KernelError } from "./errors";
 import { faultProcess } from "./proc/faultproc";
@@ -97,9 +99,37 @@ export function createKernel(screen: HTMLElement): {
   return {
     os,
     boot: async () => {
+      await mountPrograms(fs);
       await fs.mkdir("/tmp");
       if (!opfsAvailable()) await fs.mkdir("/home");
+      // System-wide startup programs, read by the desktop session (like
+      // /etc/xdg/autostart or HKLM\...\Run). Per-user ones go in
+      // ~/.config/autostart. One path per line, started in order.
+      await fs.mkdir("/etc");
+      await fs.writeFile(
+        "/etc/autostart",
+        new TextEncoder().encode("/System/Taskbar\n/System/launcher\n"),
+      );
       await os.process.spawn("/System/desktop");
     },
   };
+}
+
+/**
+ * Make /ProgramFiles and /System listable, like /usr/bin: one empty,
+ * read-only file per binfmt path. binfmt stays the source of truth for
+ * exec; these files only exist so readdir (ls, tab completion) sees them.
+ */
+async function mountPrograms(fs: VFS): Promise<void> {
+  const dirs = new Map<string, string[]>();
+  for (const path of paths) {
+    const dir = dirname(path);
+    dirs.set(dir, [...(dirs.get(dir) ?? []), basename(path)]);
+  }
+  for (const [dir, names] of dirs) {
+    const driver = new MemFS();
+    const root = await driver.root();
+    for (const name of names) await driver.create(root, name, "file");
+    fs.mount({ path: dir, driver, readonly: true });
+  }
 }

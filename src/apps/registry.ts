@@ -1,3 +1,5 @@
+import type { AppManifest } from "../kernel/binfmt";
+
 export interface AppEntry {
   /** Stable, URL-safe id: what ?launch=<id> refers to (System/launcher). */
   id: string;
@@ -6,19 +8,17 @@ export interface AppEntry {
   exec: string;
 }
 
+const manifests = import.meta.glob<AppManifest>("./*/app.ts", {
+  eager: true,
+  import: "default",
+});
+
+/** Every GUI app whose app.ts declares `desktop`, plus the system ones. */
 export const registry: AppEntry[] = [
-  {
-    id: "resume",
-    name: "Resume",
-    icon: "/assets/icons/resume.svg",
-    exec: "/ProgramFiles/resume",
-  },
-  {
-    id: "terminal",
-    name: "Terminal",
-    icon: "/assets/icons/terminal.png",
-    exec: "/ProgramFiles/terminal",
-  },
+  ...Object.entries(manifests).flatMap(([key, { desktop }]) => {
+    const id = key.split("/")[1]; // "./resume/app.ts" -> "resume"
+    return desktop ? [{ id, ...desktop, exec: `/ProgramFiles/${id}` }] : [];
+  }),
   {
     id: "task-manager",
     name: "Task Manager",

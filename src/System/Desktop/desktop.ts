@@ -37,14 +37,7 @@ export async function main(os: SystemInterface): Promise<void> {
   await desktop.start();
 
   await os.process.chdir("/home");
-  await os.process.spawn("/System/Taskbar");
-
-  // Opens the apps the URL asks for (?launch=...), or the resume by default.
-  // After the taskbar, so they show up there too. A failure here must never
-  // take the desktop down.
-  await os.process.spawn("/System/launcher").catch((error) =>
-    console.error("[desktop] could not start the launcher:", error),
-  );
+  await autostart(os);
 
   await os.process.onSignal("SIGTERM", () => {
     desktop.destroy();
@@ -52,6 +45,32 @@ export async function main(os: SystemInterface): Promise<void> {
   });
 
   await os.process.onSignal("SIGCHLD", () => void reapZombies(os));
+}
+
+const AUTOSTART_FILES = ["/etc/autostart", "/home/.config/autostart"];
+
+/** One program path per line; blank lines and `#` comments are skipped. */
+export function autostartEntries(text: string): string[] {
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith("#"));
+}
+
+/**
+ * Starts the system list, then the user's, in order and one at a time (the
+ * taskbar must be up before the launcher opens windows). A missing file or a
+ * bad entry must never take the desktop down.
+ */
+async function autostart(os: SystemInterface): Promise<void> {
+  for (const file of AUTOSTART_FILES) {
+    const text = await os.fs.readTextFile(file).catch(() => "");
+    for (const path of autostartEntries(text)) {
+      await os.process.spawn(path).catch((error) =>
+        console.error(`[desktop] autostart ${path} failed:`, error),
+      );
+    }
+  }
 }
 
 /** SIGCHLD only says "a child died" — find out which ones. */

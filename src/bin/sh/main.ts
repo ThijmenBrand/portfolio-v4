@@ -1,9 +1,7 @@
 import { KernelError } from "../../kernel/errors";
 import type { AppInterface } from "../../kernel/syscalls/api";
 import type { Pid } from "../../kernel/types";
-
-/** Where bare command names are looked up. Explicit paths skip this. */
-const SEARCH_PATH = ["/ProgramFiles/", "/System/"];
+import { PATH } from "./path";
 
 interface Redirect {
   path: string;
@@ -277,7 +275,7 @@ class Shell {
         "find:      tree  find [-name glob]  stat",
         "procs:     ps   kill [-SIGNAL] pid   sleep N",
         "misc:      date  whoami  uname  open <url>",
-        "programs:  anything in /ProgramFiles or /System",
+        "programs:  anything in /ProgramFiles",
         "redirect:  cmd > file   cmd >> file   cmd < file",
         "pipeline:  cmd | cmd | cmd",
         "chain:     cmd && cmd (if ok)   cmd ; cmd (always)",
@@ -290,7 +288,7 @@ class Shell {
   // ------------------------------------------------------------- external
 
   /**
-   * binfmt is an exact-match table, so bare names need a search path.
+   * binfmt is an exact-match table, so bare names are looked up on PATH.
    * spawn throws ENOENT synchronously, which makes "try each" cheap.
    */
   private async spawn(
@@ -304,9 +302,9 @@ class Shell {
       return await this.os.process.spawn(name, args, { fds });
     }
 
-    for (const prefix of SEARCH_PATH) {
+    for (const dir of PATH) {
       try {
-        return await this.os.process.spawn(`${prefix}${name}`, args, { fds });
+        return await this.os.process.spawn(`${dir}/${name}`, args, { fds });
       } catch (error) {
         if (errorCode(error) !== "ENOENT") throw error;
       }

@@ -12,58 +12,50 @@ export type FileEntry =
       privileged?: boolean;
     };
 
+/** What a GUI app declares in src/apps/<name>/app.ts. */
+export interface AppManifest {
+  window: WindowOptions;
+  /** Present when the app gets a desktop icon (src/apps/registry.ts). */
+  desktop?: { name: string; icon: string };
+}
+
+/** "../bin/ls/main.ts" -> "ls" */
+const folder = (key: string) => key.split("/")[2];
+
+// Programs without a UI: every src/bin/<name>/main.ts is a worker at
+// /ProgramFiles/<name>. Not eager: only the keys are used, so no program
+// code is bundled into the kernel.
+const bins = Object.keys(import.meta.glob("../bin/*/main.ts")).map(folder);
+
+/** GUI apps: src/apps/<name>/app.ts, keyed by <name>. */
+const manifests: Record<string, AppManifest> = Object.fromEntries(
+  Object.entries(
+    import.meta.glob<AppManifest>("../apps/*/app.ts", {
+      eager: true,
+      import: "default",
+    }),
+  ).map(([key, manifest]) => [folder(key), manifest]),
+);
+
 const files: Record<string, FileEntry> = {
-  // Programs without a UI: workers.
-  "/ProgramFiles/echo": { format: "worker", entry: "apps/echo/main" },
-  "/ProgramFiles/cat": { format: "worker", entry: "apps/cat/main" },
-  "/ProgramFiles/sh": { format: "worker", entry: "apps/sh/main" },
-  "/ProgramFiles/ls": { format: "worker", entry: "apps/ls/main" },
-  "/ProgramFiles/clear": { format: "worker", entry: "apps/clear/main" },
-  "/ProgramFiles/mkdir": { format: "worker", entry: "apps/mkdir/main" },
-  "/ProgramFiles/rmdir": { format: "worker", entry: "apps/rmdir/main" },
-  "/ProgramFiles/rm": { format: "worker", entry: "apps/rm/main" },
-  "/ProgramFiles/touch": { format: "worker", entry: "apps/touch/main" },
-  "/ProgramFiles/cp": { format: "worker", entry: "apps/cp/main" },
-  "/ProgramFiles/mv": { format: "worker", entry: "apps/mv/main" },
-  "/ProgramFiles/ps": { format: "worker", entry: "apps/ps/main" },
-  "/ProgramFiles/kill": { format: "worker", entry: "apps/kill/main" },
-  "/ProgramFiles/head": { format: "worker", entry: "apps/head/main" },
-  "/ProgramFiles/tail": { format: "worker", entry: "apps/tail/main" },
-  "/ProgramFiles/wc": { format: "worker", entry: "apps/wc/main" },
-  "/ProgramFiles/grep": { format: "worker", entry: "apps/grep/main" },
-  "/ProgramFiles/sort": { format: "worker", entry: "apps/sort/main" },
-  "/ProgramFiles/uniq": { format: "worker", entry: "apps/uniq/main" },
-  "/ProgramFiles/tee": { format: "worker", entry: "apps/tee/main" },
-  "/ProgramFiles/tree": { format: "worker", entry: "apps/tree/main" },
-  "/ProgramFiles/find": { format: "worker", entry: "apps/find/main" },
-  "/ProgramFiles/stat": { format: "worker", entry: "apps/stat/main" },
-  "/ProgramFiles/sleep": { format: "worker", entry: "apps/sleep/main" },
-  "/ProgramFiles/date": { format: "worker", entry: "apps/date/main" },
-  "/ProgramFiles/whoami": { format: "worker", entry: "apps/whoami/main" },
-  "/ProgramFiles/uname": { format: "worker", entry: "apps/uname/main" },
-  "/ProgramFiles/open": { format: "worker", entry: "apps/open/main" },
-  "/System/launcher": { format: "worker", entry: "System/Launcher/main" },
+  ...Object.fromEntries(
+    bins.map((name) => [
+      `/ProgramFiles/${name}`,
+      { format: "worker" as const, entry: `bin/${name}/main` },
+    ]),
+  ),
 
   // GUI apps: sandboxed iframes. `window` is created at exec; the app
   // claims it with windows.create (which applies the title).
-  "/ProgramFiles/resume": {
-    format: "iframe",
-    entry: "apps/resume/main",
-    window: {
-      title: "Resume — Thijmen Brand",
-      x: 170,
-      y: 40,
-      width: 760,
-      height: 640,
-      minWidth: 380,
-      minHeight: 320,
-    },
-  },
-  "/ProgramFiles/terminal": {
-    format: "iframe",
-    entry: "apps/terminal/main",
-    window: { title: "Terminal", width: 680, height: 440, minWidth: 360, minHeight: 220 },
-  },
+  ...Object.fromEntries(
+    Object.entries(manifests).map(([name, manifest]) => [
+      `/ProgramFiles/${name}`,
+      { format: "iframe" as const, entry: `apps/${name}/main`, window: manifest.window },
+    ]),
+  ),
+
+  "/System/launcher": { format: "worker", entry: "System/Launcher/main" },
+
   "/System/DebugPs": {
     format: "iframe",
     entry: "System/DebugPs/debug-ps",
@@ -83,6 +75,9 @@ const files: Record<string, FileEntry> = {
     privileged: true,
   },
 };
+
+/** Every executable path; the kernel lists these as read-only directories. */
+export const paths = Object.keys(files);
 
 export function resolve(path: string): FileEntry | undefined {
   return files[path];

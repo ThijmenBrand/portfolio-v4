@@ -20,7 +20,7 @@ export interface BootMessage {
   v: typeof PROTOCOL_VERSION;
   pid: Pid;
   path: string;
-  /** App module to load inside the realm, relative to src/ without ".ts" (e.g. "apps/cat/main"). */
+  /** App module to load inside the realm, relative to src/ without ".ts" (e.g. "bin/cat/main"). */
   entry: string;
   args: string[];
 }

@@ -34,7 +34,7 @@ export async function runApp(
 ): Promise<void> {
   const client = new WireClient(port);
   try {
-    // entry is a module path relative to src/, e.g. "apps/cat/main".
+    // entry is a module path relative to src/, e.g. "bin/cat/main".
     const load = apps[`../${boot.entry}.ts`];
     if (!load) throw new KernelError("ENOEXEC", `not an app for this realm: ${boot.entry}`);
     const module = await load();

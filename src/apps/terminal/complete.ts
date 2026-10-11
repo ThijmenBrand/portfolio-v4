@@ -1,4 +1,5 @@
 import type { AppInterface } from "../../kernel/syscalls/api";
+import { PATH } from "../../bin/sh/path";
 
 /**
  * Tab completion for the terminal's input line.
@@ -11,43 +12,13 @@ import type { AppInterface } from "../../kernel/syscalls/api";
 
 const BUILTINS = ["cd", "pwd", "exit", "help"];
 
-/**
- * Programs on sh's search path. Executables only exist in the binfmt table,
- * not in the VFS, so they can't be listed with readdir yet.
- * TODO: derive this from readdir once /ProgramFiles is a real directory.
- */
-const PROGRAMS = [
-  "cat",
-  "clear",
-  "cp",
-  "date",
-  "echo",
-  "find",
-  "grep",
-  "head",
-  "kill",
-  "ls",
-  "mkdir",
-  "mv",
-  "open",
-  "ps",
-  "resume",
-  "rm",
-  "rmdir",
-  "sh",
-  "sleep",
-  "sort",
-  "stat",
-  "tail",
-  "tee",
-  "terminal",
-  "touch",
-  "tree",
-  "uname",
-  "uniq",
-  "wc",
-  "whoami",
-];
+/** Every file in a PATH directory, like bash's command completion. */
+async function programs(os: AppInterface): Promise<string[]> {
+  const listings = await Promise.all(
+    PATH.map((dir) => os.fs.readdir(dir).catch(() => [])),
+  );
+  return listings.flat().filter((e) => e.kind === "file").map((e) => e.name);
+}
 
 export interface Completion {
   value: string;
@@ -129,7 +100,7 @@ export async function complete(
       ? {
           base: "",
           prefix: word.text,
-          items: [...BUILTINS, ...PROGRAMS]
+          items: [...new Set([...BUILTINS, ...(await programs(os))])]
             .filter((name) => name.startsWith(word.text))
             .map((name) => ({ name, directory: false })),
         }
