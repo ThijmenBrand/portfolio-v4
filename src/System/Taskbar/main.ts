@@ -18,6 +18,7 @@ import {
   loadSettings,
   setInPathList,
 } from "../../utils/settings";
+import { shortcutsTo } from "../../utils/filetypes";
 
 const DEFAULT_ICON = "/assets/icons/default-app.svg";
 const SETTINGS = "/ProgramFiles/settings";
@@ -184,7 +185,7 @@ class Taskbar {
       });
       tile.addEventListener("contextmenu", (event) => {
         event.preventDefault();
-        void this.tileMenuItems(entry.exec)
+        void this.tileMenuItems(entry)
           .then((items) => this.showMenu(tileMenu, event, items))
           .catch(logError);
       });
@@ -223,15 +224,17 @@ class Taskbar {
     });
   }
 
-  private async tileMenuItems(exec: string): Promise<MenuItems> {
-    const onDesktop = (await loadPathList(this.os, "desktop")).includes(exec);
+  private async tileMenuItems({ name, exec }: AppEntry): Promise<MenuItems> {
+    const folder = `${(await this.os.process.env()).HOME ?? ""}/Desktop`;
+    const shortcuts = await shortcutsTo(this.os, folder, exec);
     return [
       this.pinItem(exec),
       [
-        onDesktop ? "Remove from desktop" : "Add to desktop",
+        shortcuts.length ? "Remove from desktop" : "Add to desktop",
         async () => {
-          // The desktop owns this list; edit it, then tell it to re-read (as Settings does).
-          await setInPathList(this.os, "desktop", exec, !onDesktop);
+          // The desktop shows ~/Desktop; SIGHUP makes it look now instead of on its next scan.
+          if (shortcuts.length) for (const path of shortcuts) await this.os.fs.unlink(path);
+          else await this.os.fs.writeTextFile(`${folder}/${name}.app`, `${exec}\n`);
           await this.signalDesktop("SIGHUP");
         },
       ],

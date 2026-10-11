@@ -12,12 +12,14 @@ export function enableDrag(
   let startY = 0;
   let dragging = false;
   let origins: IconPosition[] = [];
+  let lastPointerType = "mouse";
 
   const onPointerDown = (event: PointerEvent): void => {
     // Ignore secondary touches outright — a second finger must not hijack a
     // drag already in flight.
     if (event.button !== 0 || activePointer !== null) return;
     event.stopPropagation();
+    lastPointerType = event.pointerType;
 
     if (event.shiftKey || event.ctrlKey || event.metaKey) {
       commands.toggleSelect(icon);
@@ -70,7 +72,11 @@ export function enableDrag(
     }
     activePointer = null;
 
-    if (!dragging) return;
+    if (!dragging) {
+      // Touch has no reliable double-click: a tap opens, like a phone home screen.
+      if (event.type === "pointerup" && event.pointerType !== "mouse") commands.launch(icon);
+      return;
+    }
     dragging = false;
     for (const origin of origins) setDragging(origin.icon, false);
     commands.commitMove(origins.map((origin) => origin.icon));
@@ -79,7 +85,8 @@ export function enableDrag(
 
   const onDoubleClick = (event: MouseEvent): void => {
     event.stopPropagation();
-    commands.launch(icon);
+    // A touch tap already launched in onPointerEnd; don't open a second copy.
+    if (lastPointerType === "mouse") commands.launch(icon);
   };
 
   icon.element.addEventListener("pointerdown", onPointerDown);

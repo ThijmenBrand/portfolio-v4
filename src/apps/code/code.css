@@ -761,3 +761,23 @@
 .code-panel .term-out {
   padding-top: 4px;
 }
+
+.code-badge svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+  margin: 0 auto;
+}
+
+/* Phone width: the sidebar floats over the editor instead of taking a column;
+   opening a file closes it (main.ts open()). */
+@media (max-width: 600px) {
+  .code { --code-sidebar: 0px; }
+  .code-sidebar {
+    position: relative;
+    z-index: 3;
+    width: min(260px, calc(100vw - var(--code-activity) - 24px));
+    box-shadow: 8px 0 24px rgba(0, 0, 0, 0.4);
+  }
+  .code-resizer { display: none; }
+}

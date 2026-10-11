@@ -6,6 +6,11 @@ export const PLACES = [
     svg: '<path d="M3 8.5 10 3l7 5.5V16a1 1 0 0 1-1 1h-3.5v-5h-5v5H4a1 1 0 0 1-1-1z" />',
   },
   {
+    label: "Desktop",
+    path: "~/Desktop",
+    svg: '<rect x="2.5" y="3.5" width="15" height="10.5" rx="1.5" /><path d="M7 17h6" />',
+  },
+  {
     label: "Documents",
     path: "~/Documents",
     svg: '<path d="M5 2.5h7l3.5 3.5v11a.5.5 0 0 1-.5.5H5a.5.5 0 0 1-.5-.5V3a.5.5 0 0 1 .5-.5z" /><path d="M7.5 10h5M7.5 13h5" />',

@@ -299,7 +299,9 @@
 .session-menu button:focus-visible { background: rgba(255, 255, 255, 0.1); }
 .session-menu hr { margin: 4px 0; border: 0; border-top: 1px solid rgba(255, 255, 255, 0.1); }
 
-/* A visible maximized window: tuck the topbar away, leaving a 2px hover strip at the top edge. */
+/* A visible maximized window: tuck the topbar away, leaving a 2px hover strip at the top edge.
+   Not on phones (utils/phone.ts query): no hover to bring it back, windows fit between the bars. */
+@media not ((max-width: 700px) or ((pointer: coarse) and (max-width: 1024px))) {
 #screen:has(.window.maximized:not(.minimized)) .topbar {
   transform: translateY(calc(-100% + 2px));
   transition: transform 150ms ease;
@@ -317,4 +319,5 @@
 }
 #screen:has(.window.maximized:not(.minimized)) .taskbar:is(:hover, :focus-within, :has(:popover-open)) {
   transform: none;
+}
 }

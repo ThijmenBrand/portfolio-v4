@@ -1,5 +1,4 @@
-import { registry, type AppEntry } from "../../apps/registry";
-import { ADMIN_GID } from "../../kernel/fs/perm";
+import { registry } from "../../apps/registry";
 import { kernelError, logError } from "../../kernel/errors";
 import type { SystemInterface } from "../../kernel/syscalls/api";
 import type { Rect } from "../../kernel/types";
@@ -7,11 +6,19 @@ import {
   applyAccent,
   ICON_SCALES,
   loadAutostart,
+  loadIconLayout,
   loadPathList,
   loadSettings,
-  setInPathList,
+  saveIconLayout,
   wallpaperCSS,
+  type IconLayout,
 } from "../../utils/settings";
+import {
+  defaultAppFor,
+  FILE_SVG,
+  FOLDER_SVG,
+  readShortcut,
+} from "../../utils/filetypes";
 
 import {
   cellKey,
@@ -35,7 +42,12 @@ import { enableDrag } from "./interactions/drag";
 import { enableKeyboard } from "./interactions/keyboard";
 import { enableMarquee } from "./interactions/marquee";
 import { createMenu, type ContextMenu, type MenuItem } from "./menu";
-import type { DesktopCommands, DesktopIcon, IconPosition } from "./types";
+import type {
+  DesktopCommands,
+  DesktopIcon,
+  DesktopItem,
+  IconPosition,
+} from "./types";
 
 import desktopHTML from "./desktop.html?raw";
 import appIconHTML from "./app-icon.html?raw";
@@ -49,17 +61,19 @@ import "./desktop.css";
  */
 const USER_DIRS = ["Documents", "Downloads", "Pictures", "Music", "Videos"];
 
-export async function main(os: SystemInterface): Promise<void> {
-  const { gid } = await os.process.ids();
-  // Cosmetic: exec of an admin app fails anyway (EACCES), this just hides it.
-  const apps = registry.filter((app) => !app.admin || gid === ADMIN_GID);
-  const desktop = new Desktop(os, apps, await os.display.root());
-  await desktop.start();
+/** Polling stands in for fs change events, which the kernel doesn't have. */
+const RESCAN_MS = 2000;
 
+export async function main(os: SystemInterface): Promise<void> {
   const home = (await os.process.env()).HOME ?? "/";
   await os.process.chdir(home).catch(() => os.process.chdir("/"));
   // Created as the user, so they own them. Deleted ones come back next login, like XDG.
   for (const dir of USER_DIRS) await os.fs.mkdir(`${home}/${dir}`).catch(() => {});
+  const folder = `${home}/Desktop`;
+  await createDesktopFolder(os, folder);
+
+  const desktop = new Desktop(os, folder, await os.display.root());
+  await desktop.start();
   await autostart(os);
 
   await os.process.onSignal("SIGTERM", () => {
@@ -76,6 +90,22 @@ export async function main(os: SystemInterface): Promise<void> {
   await os.process.onSignal("SIGCHLD", () => void reapZombies(os));
 }
 
+
+/**
+ * The desktop shows ~/Desktop. A new one gets a shortcut per app from the
+ * old ~/.config/desktop list (or the default one), so nobody loses theirs.
+ */
+async function createDesktopFolder(os: SystemInterface, folder: string): Promise<void> {
+  try {
+    await os.fs.mkdir(folder);
+  } catch {
+    return; // Already there: the user's files are the truth now.
+  }
+  for (const exec of await loadPathList(os, "desktop")) {
+    const app = registry.find((entry) => entry.exec === exec);
+    if (app) await os.fs.writeTextFile(`${folder}/${app.name}.app`, `${exec}\n`).catch(logError);
+  }
+}
 
 /** One program path per line; blank lines and `#` comments are skipped. */
 export function autostartEntries(text: string): string[] {
@@ -126,17 +156,19 @@ class Desktop implements DesktopCommands {
   private readonly menu: ContextMenu;
 
   private readonly marquee: HTMLElement;
-  private readonly entries: AppEntry[];
+  private readonly folder: string;
 
   private readonly icons: DesktopIcon[] = [];
   private readonly iconDisposers = new Map<DesktopIcon, () => void>();
   private readonly disposers: Array<() => void> = [];
   private focused: DesktopIcon | null = null;
+  private layout: IconLayout = {};
+  private syncing: Promise<void> = Promise.resolve();
 
-  constructor(os: SystemInterface, entries: AppEntry[], root: HTMLElement) {
+  constructor(os: SystemInterface, folder: string, root: HTMLElement) {
     this.os = os;
     this.root = root;
-    this.entries = entries;
+    this.folder = folder;
     root.innerHTML = desktopHTML;
 
     this.surface = this.require("#desktop");
@@ -153,6 +185,7 @@ class Desktop implements DesktopCommands {
     await this.applyWorkArea();
     await this.applySettings();
 
+    this.layout = await loadIconLayout(this.os);
     await this.syncIcons();
 
     this.disposers.push(
@@ -164,6 +197,11 @@ class Desktop implements DesktopCommands {
         () => void this.onWorkAreaChanged(),
       ),
     );
+    const rescan = await this.os.timers.setInterval(
+      () => void this.syncIcons().catch(logError),
+      RESCAN_MS,
+    );
+    this.disposers.push(() => void this.os.timers.clearInterval(rescan));
 
     this.surface.focus();
   }
@@ -227,9 +265,16 @@ class Desktop implements DesktopCommands {
     style.height = `${area.height}px`;
   }
 
-  private addIcon(entry: AppEntry): void {
-    const icon = createIcon(entry, appIconHTML);
-    const cell = nextFreeCell(this.takenCells(), this.rows());
+  private addIcon(item: DesktopItem): void {
+    const icon = createIcon(item, appIconHTML);
+    const taken = this.takenCells();
+    const saved = this.layout[item.name];
+    const fits =
+      saved &&
+      saved.column < this.columns() &&
+      saved.row < this.rows() &&
+      !taken.has(cellKey(saved));
+    const cell = fits ? saved : nextFreeCell(taken, this.rows());
     const point = cellToPoint(cell);
 
     icon.x = point.x;
@@ -270,26 +315,51 @@ class Desktop implements DesktopCommands {
   }
 
   /**
-   * Match the icons to ~/.config/desktop. This process owns that list; the
-   * taskbar's app menu edits it too and then sends SIGHUP.
+   * Match the icons to the files in ~/Desktop. Anyone may change that folder
+   * (Files, the terminal, the taskbar's app menu); we rescan on a timer and
+   * on SIGHUP. Queued, so two scans never add the same file twice.
    */
-  public async syncIcons(): Promise<void> {
-    const wanted = new Set(await loadPathList(this.os, "desktop"));
+  public syncIcons(): Promise<void> {
+    this.syncing = this.syncing.then(() => this.scan(), () => this.scan());
+    return this.syncing;
+  }
+
+  private async scan(): Promise<void> {
+    const entries = (await this.os.fs.readdir(this.folder).catch(() => []))
+      .filter((entry) => !entry.name.startsWith("."));
+    const names = new Set(entries.map((entry) => entry.name));
     for (const icon of [...this.icons]) {
-      if (!wanted.has(icon.entry.exec)) this.removeIcon(icon);
+      if (!names.has(icon.item.name)) this.removeIcon(icon);
     }
-    for (const entry of this.entries) {
-      if (wanted.has(entry.exec) && !this.icons.some((icon) => icon.entry === entry)) {
-        this.addIcon(entry);
-      }
+    for (const entry of entries) {
+      if (this.icons.some((icon) => icon.item.name === entry.name)) continue;
+      const path = `${this.folder}/${entry.name}`;
+      const exec = (await readShortcut(this.os, path)) ?? undefined;
+      const directory = entry.kind === "directory";
+      this.addIcon({
+        name: entry.name,
+        path,
+        exec,
+        directory,
+        label: exec ? entry.name.slice(0, -".app".length) : entry.name,
+        image: exec
+          ? (registry.find((app) => app.exec === exec)?.icon ?? "/assets/icons/default-app.svg")
+          : undefined,
+        svg: directory ? FOLDER_SVG : FILE_SVG,
+      });
     }
   }
 
-  private async removeFromDesktop(icons: readonly DesktopIcon[]): Promise<void> {
+  /** Only shortcuts: deleting real files is Files' job, with its confirm. */
+  private async removeShortcuts(icons: readonly DesktopIcon[]): Promise<void> {
     for (const icon of icons) {
-      await setInPathList(this.os, "desktop", icon.entry.exec, false);
+      if (icon.item.exec) await this.os.fs.unlink(icon.item.path).catch(logError);
     }
     await this.syncIcons();
+  }
+
+  private showInFiles(): void {
+    void this.os.process.spawn("/ProgramFiles/files", [this.folder]).catch(logError);
   }
 
   private columns(): number {
@@ -327,6 +397,15 @@ class Desktop implements DesktopCommands {
       const point = cellToPoint(cell);
       this.place(icon, point.x, point.y);
     }
+    this.saveLayout();
+  }
+
+  /** Remember where the user put things, so the next login looks the same. */
+  private saveLayout(): void {
+    for (const icon of this.icons) {
+      this.layout[icon.item.name] = pointToCell(icon.x, icon.y);
+    }
+    void saveIconLayout(this.os, this.layout).catch(logError);
   }
 
   /** After a work-area change, rescue anything now off the edge. */
@@ -425,6 +504,7 @@ class Desktop implements DesktopCommands {
       const point = cellToPoint(cell);
       this.place(icon, point.x, point.y);
     }
+    this.saveLayout();
   }
 
   // ---------------------------------------------------------------- actions
@@ -439,13 +519,25 @@ class Desktop implements DesktopCommands {
 
   private spawn(icons: readonly DesktopIcon[]): void {
     for (const icon of icons) {
-      // A stale registry path rejects with ENOENT. This runs inside a dblclick
+      // A stale shortcut rejects with ENOENT. This runs inside a dblclick
       // handler, which is not a kernel callback site, so an unhandled rejection
       // would not even register as a fault — it would just vanish.
-      void this.os.process.spawn(icon.entry.exec).catch(logError);
+      void this.open(icon.item).catch(logError);
     }
 
     this.clearSelection();
+  }
+
+  /** Same rules as double-clicking it in Files. */
+  private async open(item: DesktopItem): Promise<void> {
+    if (item.exec) {
+      await this.os.process.spawn(item.exec);
+    } else if (item.directory) {
+      await this.os.process.spawn("/ProgramFiles/files", [item.path]);
+    } else {
+      const { openWith } = await loadSettings(this.os);
+      await this.os.process.spawn(defaultAppFor(item.path, openWith), [item.path]);
+    }
   }
 
   public moveFocus(
@@ -531,18 +623,21 @@ class Desktop implements DesktopCommands {
               selection.length > 1 ? `Open ${selection.length} items` : "Open",
             action: () => this.activateSelection(),
           },
-          {
-            label: "Remove from desktop",
-            action: () => void this.removeFromDesktop(selection).catch(logError),
-          },
+          selection.every((selected) => selected.item.exec)
+            ? {
+                label: "Remove from desktop",
+                action: () => void this.removeShortcuts(selection).catch(logError),
+              }
+            : { label: "Show in Files", action: () => this.showInFiles() },
         ]
       : [
+          { label: "Open Desktop folder", action: () => this.showInFiles() },
           {
             label: "Sort by name",
             action: () =>
               this.reflow(
                 [...this.icons].sort((a, b) =>
-                  a.entry.name.localeCompare(b.entry.name),
+                  a.item.label.localeCompare(b.item.label),
                 ),
               ),
           },

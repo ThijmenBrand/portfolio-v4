@@ -279,6 +279,8 @@ button { cursor: default; }
 .item-icon {
   position: relative;
   display: grid;
+  /* Fixed track, so a large image's intrinsic size can't grow the cell past the icon box. */
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
   place-items: center;
 }
 .item-icon > svg, .item-icon > img { width: 100%; height: 100%; }

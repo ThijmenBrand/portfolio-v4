@@ -60,6 +60,8 @@ export interface Settings {
   animateMinimize: boolean;
   /** "" shows the name's initial; else an AVATARS key or CUSTOM_AVATAR. */
   avatar: string;
+  /** Extension -> program path, overriding filetypes' built-in default app. */
+  openWith: Record<string, string>;
 }
 
 export const DEFAULTS: Settings = {
@@ -71,6 +73,7 @@ export const DEFAULTS: Settings = {
   iconSize: "medium",
   animateMinimize: true,
   avatar: "",
+  openWith: {},
 };
 
 /** Point --app-accent (theme.css) at the chosen accent, in this document. */
@@ -154,7 +157,7 @@ export async function saveCustomAvatar(os: AppInterface, file: File): Promise<vo
 
 /**
  * Program lists in ~/.config, one path per line, each owned by one process:
- * autostart (started by the desktop at login), desktop (its shortcuts) and
+ * autostart (started by the desktop at login), desktop (seeds a new ~/Desktop) and
  * taskbar (pinned apps). The value here stands in until the user saves their own.
  */
 export const PATH_LISTS = {
@@ -184,6 +187,23 @@ export async function setInPathList(os: AppInterface, name: PathList, path: stri
 export const loadAutostart = (os: AppInterface): Promise<string[]> => loadPathList(os, "autostart");
 export const setAutostart = (os: AppInterface, path: string, enabled: boolean): Promise<void> =>
   setInPathList(os, "autostart", path, enabled);
+
+/** Desktop icon cells by file name in ~/Desktop, saved by the desktop after the user moves icons. */
+export type IconLayout = Record<string, { column: number; row: number }>;
+
+export async function loadIconLayout(os: AppInterface): Promise<IconLayout> {
+  const text = await os.fs.readTextFile(`${await configDir(os)}/desktop-layout.json`).catch(() => "{}");
+  try {
+    return JSON.parse(text) as IconLayout;
+  } catch {
+    return {};
+  }
+}
+
+export async function saveIconLayout(os: AppInterface, layout: IconLayout): Promise<void> {
+  const dir = await ensureConfigDir(os);
+  await os.fs.writeTextFile(`${dir}/desktop-layout.json`, JSON.stringify(layout, null, 2) + "\n");
+}
 
 async function ensureConfigDir(os: AppInterface): Promise<string> {
   const dir = await configDir(os);

@@ -22,6 +22,7 @@ import {
   WALLPAPERS,
   type Settings,
 } from "../../utils/settings";
+import { defaultAppFor, FILE_APPS, FILE_TYPES } from "../../utils/filetypes";
 import { registry } from "../registry";
 import settingsHTML from "./settings.html?raw";
 import "../../ui/theme.css";
@@ -47,6 +48,7 @@ export async function main(os: AppInterface, args: string[] = []): Promise<void>
   document.body.innerHTML = settingsHTML;
 
   setUpTabs(args[0]);
+  bindOpenWith(settings);
   await bindForm(os, settings);
   await bindStartup(os);
   await showAccount(os);
@@ -78,6 +80,35 @@ async function bindStartup(os: AppInterface): Promise<void> {
     });
     group.append(row);
   }
+}
+
+/** A folding section per kind of file, the first one open, with an app picker per type. */
+function bindOpenWith(settings: Settings): void {
+  const [panel] = fields("open-with");
+  const apps = registry.filter((app) => FILE_APPS.includes(app.exec));
+  Object.entries(FILE_TYPES).forEach(([section, exts], i) => {
+    const fold = document.createElement("details");
+    fold.className = "fold";
+    fold.open = i === 0;
+    fold.innerHTML = `<summary></summary><div class="group"></div>`;
+    fold.querySelector("summary")!.textContent = section;
+    const group = fold.querySelector("div")!;
+    for (const ext of exts) {
+      const row = document.createElement("label");
+      row.className = "row";
+      row.innerHTML = `<span class="row-label"></span><select class="button"></select>`;
+      row.querySelector("span")!.textContent = `.${ext}`;
+      const select = row.querySelector("select")!;
+      for (const app of apps) select.add(new Option(app.name, app.exec));
+      select.value = defaultAppFor(`x.${ext}`, settings.openWith);
+      // Runs before the form's handler, which saves.
+      select.addEventListener("change", () => {
+        settings.openWith = { ...settings.openWith, [ext]: select.value };
+      });
+      group.append(row);
+    }
+    panel.append(fold);
+  });
 }
 
 function fields(name: string): HTMLElement[] {

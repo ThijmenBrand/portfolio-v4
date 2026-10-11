@@ -26,6 +26,7 @@ import { python } from "@codemirror/lang-python";
 
 import codeHTML from "./code.html?raw";
 import { followAccent } from "../../utils/settings";
+import { extOf, IMAGE_TYPES } from "../../utils/filetypes";
 import "../../ui/theme.css";
 import "./code.css";
 
@@ -59,6 +60,22 @@ const BADGES: Record<string, [string, string]> = {
   md: ["M", "#5ab0c6"],
   py: ["PY", "#6cd39a"],
 };
+
+const svg = (body: string): string =>
+  `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
+const PAGE = '<path d="M9.5 1.5h-5a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1v-9z"/><path d="M9.5 1.5v3h3"/>';
+const IMAGE_ICON: [string, string] = [
+  svg('<rect x="2" y="3" width="12" height="10" rx="1.5"/><circle cx="6" cy="6.5" r="1"/><path d="m2.5 12 3.5-3.5 2.5 2.5 2-2 3 3"/>'),
+  "#c58af9",
+];
+/** Explorer/tab icon for files without a language badge: [svg, color]. */
+const ICONS: Record<string, [string, string]> = {
+  ...Object.fromEntries(Object.keys(IMAGE_TYPES).map((ext) => [ext, IMAGE_ICON])),
+  sh: [svg('<rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/><path d="m4.5 6 2 2-2 2M8 10h3.5"/>'), "#6cd39a"],
+  txt: [svg(`${PAGE}<path d="M5.5 8h5M5.5 10.5h5"/>`), "#9b9ba6"],
+  pdf: [svg(`${PAGE}<path d="M5.5 8h5M5.5 10.5h3"/>`), "#ff7676"],
+};
+const FILE_ICON: [string, string] = [svg(PAGE), "var(--app-text-faint)"];
 
 const IS_MAC = navigator.userAgent.includes("Mac");
 
@@ -103,11 +120,6 @@ const dirname = (p: string): string =>
   p.slice(0, Math.max(p.lastIndexOf("/"), 1));
 const join = (dir: string, name: string): string =>
   dir === "/" ? `/${name}` : `${dir}/${name}`;
-const extOf = (p: string): string => {
-  const name = basename(p);
-  const dot = name.lastIndexOf(".");
-  return dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
-};
 
 function resolve(cwd: string, path: string): string {
   const parts: string[] = [];
@@ -133,8 +145,11 @@ function el<K extends keyof HTMLElementTagNameMap>(
 }
 
 function badge(path: string): HTMLElement {
-  const [glyph, color] = BADGES[extOf(path)] ?? ["≡", "var(--app-text-faint)"];
-  const node = el("span", "code-badge", glyph);
+  const ext = extOf(path);
+  const text = BADGES[ext];
+  const node = el("span", "code-badge", text?.[0]);
+  const [icon, color] = text ? ["", text[1]] : (ICONS[ext] ?? FILE_ICON);
+  if (icon) node.innerHTML = icon;
   node.style.color = color;
   return node;
 }
@@ -885,14 +900,30 @@ class Editor {
 
   /** `mustExist: false` opens a missing file as an empty buffer; saving creates it. */
   private async open(path: string, mustExist = true): Promise<void> {
+    // Phone width: the sidebar covers the editor (code.css), so get it out of the way.
+    if (matchMedia("(max-width: 600px)").matches && !this.root.classList.contains("no-sidebar")) {
+      this.toggleSidebar();
+    }
     const existing = this.tabs.find((t) => t.path === path);
     if (existing) return this.activate(existing);
 
     let text = "";
     let readonly = false;
+    let binary = false;
     try {
       readonly = (await this.os.fs.stat(path)).readonly;
-      text = await this.os.fs.readTextFile(path);
+      const bytes = await this.os.fs.readFile(path);
+      try {
+        text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+        binary = text.includes("\0");
+      } catch {
+        binary = true;
+      }
+      // Not text: show the raw bytes (one char per byte), read-only so saving can't corrupt it.
+      if (binary) {
+        text = new TextDecoder("latin1").decode(bytes);
+        readonly = true;
+      }
     } catch (error) {
       if (mustExist || errorCode(error) !== "ENOENT") {
         this.flash(
@@ -922,6 +953,7 @@ class Editor {
     this.tabs.push(tab);
     this.tabsEl.append(tab.el);
     this.activate(tab);
+    if (binary) this.flash(`${basename(path)}: file type not supported, showing raw bytes`, true);
   }
 
   private tabEl(path: string): HTMLElement {

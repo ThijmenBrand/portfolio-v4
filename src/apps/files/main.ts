@@ -9,6 +9,7 @@ import { registry } from "../registry";
 import { followAccent, loadSettings } from "../../utils/settings";
 import { formatSize, freeName } from "./names";
 import { PLACES } from "../../utils/places";
+import { defaultAppFor, extOf, FILE_SVG, FOLDER_SVG, IMAGE_TYPES, readShortcut } from "../../utils/filetypes";
 import filesHTML from "./files.html?raw";
 import "../../ui/theme.css";
 import "./files.css";
@@ -24,18 +25,6 @@ const MAX_THUMB = 8 * 1024 * 1024;
 const MAX_PEEK_TEXT = 64 * 1024;
 const IS_MAC = navigator.userAgent.includes("Mac");
 const DRAG_TYPE = "application/x-vfs-paths";
-
-const IMAGE_TYPES: Record<string, string> = {
-  png: "image/png",
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  gif: "image/gif",
-  webp: "image/webp",
-  avif: "image/avif",
-  bmp: "image/bmp",
-  ico: "image/x-icon",
-  svg: "image/svg+xml",
-};
 
 /** Extension -> [kind, label color]. Colors match Code's explorer badges. */
 const TYPES: Record<string, [string, string]> = {
@@ -62,10 +51,6 @@ const ERRORS: Record<string, string> = {
   EEXIST: "An item with that name already exists.",
 };
 
-const FOLDER_SVG =
-  '<svg viewBox="0 0 48 48" aria-hidden="true"><path class="folder-back" d="M6 13a3 3 0 0 1 3-3h10l4 4h16a3 3 0 0 1 3 3v3H6z" /><path class="folder-front" d="M6 18h36v17a3 3 0 0 1-3 3H9a3 3 0 0 1-3-3z" /></svg>';
-const FILE_SVG =
-  '<svg viewBox="0 0 48 48" aria-hidden="true"><path class="page" d="M12 5h17l9 9v27a2 2 0 0 1-2 2H12a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z" /><path class="page-fold" d="M29 5v7a2 2 0 0 0 2 2h7" /></svg>';
 const PROGRAM_SVG =
   '<svg viewBox="0 0 48 48" aria-hidden="true"><rect class="page" x="6" y="9" width="36" height="30" rx="4" /><path class="prompt" d="m14 19 5 5-5 5M23 29h10" /></svg>';
 
@@ -75,10 +60,6 @@ const basename = (p: string): string => p.slice(p.lastIndexOf("/") + 1) || "/";
 const dirname = (p: string): string => p.slice(0, Math.max(p.lastIndexOf("/"), 1));
 const join = (dir: string, name: string): string => (dir === "/" ? `/${name}` : `${dir}/${name}`);
 const isInside = (path: string, dir: string): boolean => path === dir || path.startsWith(dir === "/" ? "/" : `${dir}/`);
-const extOf = (name: string): string => {
-  const dot = name.lastIndexOf(".");
-  return dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
-};
 
 function resolve(cwd: string, path: string): string {
   const parts: string[] = [];
@@ -233,6 +214,7 @@ function kindOf(item: Item): string {
   if (appFor(item)) return "Application";
   if (isProgram(item)) return "Program";
   const ext = extOf(item.name);
+  if (ext === "app") return "Shortcut";
   if (IMAGE_TYPES[ext]) return `${ext.toUpperCase()} image`;
   return TYPES[ext]?.[0] ?? (ext ? `${ext.toUpperCase()} file` : "Document");
 }
@@ -284,6 +266,12 @@ function iconFor(item: Item): HTMLElement {
     icon.append(Object.assign(el("img"), { src: app.icon, alt: "", draggable: false }));
   } else if (isProgram(item)) {
     icon.innerHTML = PROGRAM_SVG;
+  } else if (ext === "app") {
+    icon.innerHTML = PROGRAM_SVG;
+    void readShortcut(os, item.path).then((exec) => {
+      const target = registry.find((entry) => entry.exec === exec);
+      if (target) icon.replaceChildren(Object.assign(el("img"), { src: target.icon, alt: "", draggable: false }));
+    });
   } else if (IMAGE_TYPES[ext] && item.size <= MAX_THUMB) {
     icon.innerHTML = FILE_SVG;
     void thumbnail(item).then((url) => {
@@ -522,8 +510,13 @@ async function open(item: Item): Promise<void> {
     return;
   }
   if (isProgram(item)) return openTerminalHere(dirname(item.path) === "/ProgramFiles" ? item.name : item.path);
-  if (IMAGE_TYPES[extOf(item.name)]) return peek(item);
-  await os.process.spawn("/ProgramFiles/code", [item.path]).catch((error) => toast(`Couldn't open in Code (${errorCode(error)}).`, true));
+  const exec = await readShortcut(os, item.path);
+  if (exec) {
+    await os.process.spawn(exec).catch((error) => toast(`Couldn't start ${item.name}. ${ERRORS[errorCode(error)] ?? ""}`, true));
+    return;
+  }
+  const { openWith } = await loadSettings(os);
+  await os.process.spawn(defaultAppFor(item.path, openWith), [item.path]).catch((error) => toast(`Couldn't open ${item.name} (${errorCode(error)}).`, true));
 }
 
 /** Terminal in the current folder, optionally running `command` there. */
@@ -886,7 +879,7 @@ function bindChrome(): void {
     const dialog = field<HTMLDialogElement>("peek");
     const item = visible.find((i) => i.path === dialog.dataset.path);
     dialog.close();
-    if (item) void (item.kind === "file" && IMAGE_TYPES[extOf(item.name)] ? os.process.spawn("/ProgramFiles/code", [item.path]) : open(item));
+    if (item) void open(item);
   });
 
   const upload$ = field<HTMLInputElement>("upload");

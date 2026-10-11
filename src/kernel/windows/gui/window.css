@@ -196,3 +196,16 @@
 body.wm-interacting iframe {
     pointer-events: none;
 }
+
+/* Phone mode (utils/phone.ts, keep the query in sync): every window is a
+   fullscreen app, so no restore and no resize edges; a taller bar for thumbs. */
+@media (max-width: 700px), (pointer: coarse) and (max-width: 1024px) {
+    #window-maximize-button,
+    .resize-handle {
+        display: none;
+    }
+
+    .top-bar {
+        height: 44px;
+    }
+}

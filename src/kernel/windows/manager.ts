@@ -18,6 +18,7 @@ import { enableDrag } from "./interactions/drag";
 import { enableControls } from "./interactions/controls";
 import type { Pid, Rect, WindowId } from "../types";
 import { kernelError, logError } from "../errors";
+import { isPhone } from "../../utils/phone";
 
 /**
  * Second ✕ on a window whose app is handling a close request:
@@ -87,6 +88,7 @@ export class WindowManager implements WindowManagerInterface {
     this.windowLayer.appendChild(elements.rootElement);
 
     this.WindowChrome.applyFrameToWindow(record);
+    if (isPhone()) this.setWindowState(record.id, "maximized");
 
     const windowCommands = this.createWindowCommands(record);
     record.disposers.push(
@@ -153,6 +155,8 @@ export class WindowManager implements WindowManagerInterface {
     state: "normal" | "maximized",
   ): void {
     const windowRecord = this.getWindowRecord(windowId);
+    // Phones have no floating windows: the title-bar double-click can't restore.
+    if (state === "normal" && isPhone()) return;
     windowRecord.restoreFrame ??= { ...windowRecord.frame };
 
     if (state === "normal") {
@@ -332,7 +336,13 @@ export class WindowManager implements WindowManagerInterface {
   }
 
   public reflowMaximized(): void {
+    const phone = isPhone();
     for (const record of this.windows.values()) {
+      // Shrinking into phone mode (rotation, narrow browser) maximizes floating windows too.
+      if (phone && record.state !== "maximized") {
+        this.setWindowState(record.id, "maximized");
+        continue;
+      }
       if (record.state !== "maximized") continue;
       record.frame = this.maximizedFrame();
       this.WindowChrome.applyFrameToWindow(record);
@@ -387,6 +397,8 @@ export class WindowManager implements WindowManagerInterface {
   /** Fullscreen: maximized windows cover the whole screen (topbar and dock auto-hide over them). */
   private maximizedFrame(): Rect {
     const area = this.workArea.get();
+    // Touch has no hover to reveal the bars (taskbar.css keeps them out on phones): fit between them.
+    if (isPhone()) return area;
     return { x: area.x, y: 0, width: area.width, height: window.innerHeight };
   }
 

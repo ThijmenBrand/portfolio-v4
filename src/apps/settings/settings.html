@@ -21,6 +21,10 @@
         <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="3" width="5.5" height="5.5" rx="1.5" /><rect x="11.5" y="3" width="5.5" height="5.5" rx="1.5" /><rect x="3" y="11.5" width="5.5" height="5.5" rx="1.5" /><rect x="11.5" y="11.5" width="5.5" height="5.5" rx="1.5" /></svg>
         Desktop
       </button>
+      <button type="button" role="tab" id="tab-apps" aria-controls="panel-apps">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M11.5 2.5H6a1.5 1.5 0 0 0-1.5 1.5v12A1.5 1.5 0 0 0 6 17.5h8a1.5 1.5 0 0 0 1.5-1.5V6.5z" /><path d="M11.5 2.5v4h4" /></svg>
+        Default apps
+      </button>
       <button type="button" role="tab" id="tab-account" aria-controls="panel-account">
         <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="7" r="3.2" /><path d="M3.8 17c.8-3.2 3.3-5 6.2-5s5.4 1.8 6.2 5" /></svg>
         Account
@@ -106,8 +110,15 @@
         </label>
       </div>
 
-      <h2>Start at login</h2>
-      <div class="group" data-field="startup"></div>
+      <details class="fold">
+        <summary>Start at login</summary>
+        <div class="group" data-field="startup"></div>
+      </details>
+    </section>
+
+    <section role="tabpanel" id="panel-apps" aria-labelledby="tab-apps" hidden>
+      <header><h1>Default apps</h1><output class="status" aria-live="polite"></output></header>
+      <div data-field="open-with"></div>
     </section>
 
     <section role="tabpanel" id="panel-account" aria-labelledby="tab-account" hidden>

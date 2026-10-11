@@ -1,25 +1,25 @@
-import type { AppEntry } from "../../apps/registry";
 import {
   htmlStringToTemplate,
   selectElementFromTemplate,
 } from "../../utils/html";
-import type { DesktopIcon } from "./types";
+import type { DesktopIcon, DesktopItem } from "./types";
 
-export function createIcon(entry: AppEntry, template: string): DesktopIcon {
+export function createIcon(item: DesktopItem, template: string): DesktopIcon {
   const element = htmlStringToTemplate(template);
 
   const image = selectElementFromTemplate<HTMLImageElement>(
     element,
     "[data-field='icon']",
   );
-  image.src = entry.icon;
+  if (item.image) image.src = item.image;
+  else if (item.svg) image.outerHTML = item.svg;
   image.alt = "";
 
   selectElementFromTemplate(element, "[data-field='label']").textContent =
-    entry.name;
-  element.title = entry.name;
+    item.label;
+  element.title = item.name;
 
-  return { entry, element, x: 0, y: 0, selected: false };
+  return { item, element, x: 0, y: 0, selected: false };
 }
 
 export function renderPosition(icon: DesktopIcon): void {
