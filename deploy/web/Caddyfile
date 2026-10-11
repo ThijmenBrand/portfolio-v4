@@ -1,0 +1,76 @@
+# Caddy INSIDE the portfolio container: serves the static Vite build on :8080.
+# TLS, HSTS and compression are the host's Caddy's job (deploy/caddy/portfolio.caddy);
+# this file owns everything that belongs to the site itself: CSP, CORS, caching.
+{
+	# No admin API: the config never changes at runtime.
+	admin off
+	# Plain HTTP; the host's Caddy terminates TLS.
+	auto_https off
+	log {
+		output stderr
+		format console
+	}
+}
+
+:8080 {
+	root * /srv
+
+	# Liveness for the Docker healthcheck; no file lookup involved.
+	handle /healthz {
+		respond "ok" 200
+	}
+
+	# --- headers on every response -----------------------------------------
+	header {
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Cross-Origin-Opener-Policy "same-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()"
+		-Server
+	}
+
+	# --- CSP ---------------------------------------------------------------
+	# The realm host pages (app-host / worker-host) ship their own, stricter
+	# CSP as a <meta> tag (vite.config.ts). A header CSP would be enforced IN
+	# ADDITION to it, so they only get what a <meta> can't express:
+	# frame-ancestors — only the kernel page on this origin may frame them.
+	@realm path /app-host.html /worker-host.html
+	header @realm Content-Security-Policy "frame-ancestors 'self'"
+
+	# Everything else, i.e. the kernel page (index.html). It runs the window
+	# manager and frames the realm hosts; it loads no third-party code and
+	# talks to no server.
+	@kernel not path /app-host.html /worker-host.html
+	header @kernel Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' data: blob:; connect-src 'self'; worker-src 'none'; frame-src 'self'; child-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+
+	# --- CORS --------------------------------------------------------------
+	# Realms are sandboxed iframes with an opaque origin, so the browser
+	# fetches their module scripts and CSS with `Origin: null`. Without this
+	# header no app or worker program can start. Public static files only.
+	header /assets/* Access-Control-Allow-Origin "*"
+
+	# --- caching -----------------------------------------------------------
+	# Vite's hashed build output never changes under the same name.
+	@hashed path_regexp ^/assets/[^/]+-[A-Za-z0-9_-]{8}\.[a-z0-9]+$
+	header @hashed Cache-Control "public, max-age=31536000, immutable"
+
+	# Unhashed files from public/ (icons, wallpapers, favicon): short cache.
+	@unhashed {
+		not path_regexp ^/assets/[^/]+-[A-Za-z0-9_-]{8}\.[a-z0-9]+$
+		not path / *.html
+	}
+	header @unhashed Cache-Control "public, max-age=3600"
+
+	# HTML always revalidates, so a deploy is visible on the next load.
+	@html path / *.html
+	header @html Cache-Control "no-cache"
+
+	file_server
+
+	# Errors (404 etc.) skip the deferred header ops above; keep them plain.
+	handle_errors {
+		header -Server
+		header Cache-Control "no-store"
+		respond "{err.status_code} {err.status_text}"
+	}
+}

@@ -1,0 +1,21 @@
+# The portfolio on the server: one static Caddy container behind the host's
+# reverse proxy (deploy/caddy/portfolio.caddy). Lives at /srv/portfolio/.
+#
+# Started by the deploy script on a pinned image digest:
+#   IMAGE=ghcr.io/thijmenbrand/portfolio-v4@sha256:… docker compose up -d --wait
+
+services:
+  web:
+    image: ${IMAGE}
+    ports:
+      - "127.0.0.1:8081:8080"   # only the host's reverse proxy can reach it
+    read_only: true
+    tmpfs:
+      - /tmp                     # Caddy's config/data dirs (XDG_* in the Dockerfile)
+    user: "65532:65532"
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 64m
+    cpus: 0.5
+    restart: unless-stopped

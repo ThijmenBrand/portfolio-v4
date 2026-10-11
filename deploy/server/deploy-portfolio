@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# Forced command for the portfolio's deploy key. In ~deploy/.ssh/authorized_keys:
+#
+#   restrict,command="/usr/local/bin/deploy-portfolio" ssh-ed25519 AAAA… portfolio-deploy
+#
+# That key can then only run:  deploy <image@digest> | rollback | status
+# — and only for the portfolio. (FinTrack's key keeps its own command.)
+set -euo pipefail
+
+APP_DIR=/srv/portfolio
+COMPOSE=(docker compose --project-name portfolio -f "$APP_DIR/docker-compose.yml")
+# Only images built by this repo's pipeline, pinned by digest.
+IMAGE_PATTERN='^ghcr\.io/thijmenbrand/portfolio-v4@sha256:[a-f0-9]{64}$'
+
+# The workflow's command arrives in SSH_ORIGINAL_COMMAND (or as args when run by hand).
+read -r -a argv <<< "${SSH_ORIGINAL_COMMAND:-$*}"
+action="${argv[0]:-}"
+
+log() { printf '[deploy-portfolio] %s\n' "$*"; }
+
+start() {  # start <image>; returns non-zero if it doesn't become healthy
+  IMAGE="$1" "${COMPOSE[@]}" up -d --wait --wait-timeout 60
+}
+
+case "$action" in
+  deploy)
+    image="${argv[1]:-}"
+    if [[ ! "$image" =~ $IMAGE_PATTERN ]]; then
+      log "refusing image '$image' (expected ghcr.io/thijmenbrand/portfolio-v4@sha256:…)"
+      exit 2
+    fi
+    previous="$(cat "$APP_DIR/current" 2>/dev/null || true)"
+    log "pulling $image"
+    docker pull --quiet "$image"
+    if start "$image"; then
+      [[ -n "$previous" ]] && printf '%s\n' "$previous" > "$APP_DIR/previous"
+      printf '%s\n' "$image" > "$APP_DIR/current"
+      # No `docker image prune` here: digest-pulled images are untagged, so it
+      # would delete the previous image — the one a rollback needs.
+      log "deployed $image"
+    else
+      log "new image is not healthy"
+      if [[ -n "$previous" ]]; then
+        log "rolling back to $previous"
+        start "$previous"
+      fi
+      exit 1
+    fi
+    ;;
+  rollback)
+    previous="$(cat "$APP_DIR/previous" 2>/dev/null || true)"
+    current="$(cat "$APP_DIR/current" 2>/dev/null || true)"
+    [[ -n "$previous" ]] || { log "nothing to roll back to"; exit 1; }
+    start "$previous"
+    printf '%s\n' "$previous" > "$APP_DIR/current"
+    printf '%s\n' "$current" > "$APP_DIR/previous"
+    log "rolled back to $previous"
+    ;;
+  status)
+    log "current: $(cat "$APP_DIR/current" 2>/dev/null || echo none)"
+    "${COMPOSE[@]}" ps
+    ;;
+  *)
+    log "usage: deploy <image@digest> | rollback | status"
+    exit 2
+    ;;
+esac
