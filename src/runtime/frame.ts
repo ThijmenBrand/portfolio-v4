@@ -30,7 +30,7 @@ export function bootFrame(apps: AppLoaders): void {
   );
 
   // Same for the launcher shortcut (Ctrl/Cmd+Space, see the taskbar) and
-  // Ctrl+W (close window, see the window manager): keys in
+  // Ctrl+W / Ctrl/Cmd+` (close / cycle windows, see the window manager): keys in
   // this frame never reach the kernel's document either.
   window.addEventListener(
     "keydown",
@@ -41,6 +41,9 @@ export function bootFrame(apps: AppLoaders): void {
       } else if (event.key.toLowerCase() === "w" && event.ctrlKey && !event.metaKey) {
         event.preventDefault();
         window.parent.postMessage({ t: "realm-close" }, "*");
+      } else if (event.code === "Backquote" && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        window.parent.postMessage({ t: "realm-cycle" }, "*");
       }
     },
     true,

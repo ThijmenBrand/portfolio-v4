@@ -66,6 +66,24 @@ export class WindowManager implements WindowManagerInterface {
       event.preventDefault();
       this.requestClose(this.focusedId as WindowId);
     });
+
+    // Ctrl/Cmd+` cycles window focus. Cmd+` only arrives if macOS "Move focus to next window" is unbound.
+    document.addEventListener("keydown", (event) => {
+      if (event.code !== "Backquote" || !(event.ctrlKey || event.metaKey)) return;
+      event.preventDefault();
+      this.cycleFocus();
+    });
+  }
+
+  /** Raise the bottom-most visible window: repeated presses round-robin through all of them. */
+  public cycleFocus(): void {
+    // ponytail: no MRU switcher overlay; add one if round-robin feels wrong with many windows.
+    let bottom: WindowRecord | undefined;
+    for (const record of this.windows.values()) {
+      if (record.minimized) continue;
+      if (!bottom || record.zIndex < bottom.zIndex) bottom = record;
+    }
+    if (bottom) this.focusWindow(bottom.id);
   }
 
   public createWindow(options: WindowOptions, ownerPid: Pid): WindowRecord {

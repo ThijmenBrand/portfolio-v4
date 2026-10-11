@@ -3,7 +3,7 @@ import type { AppInterface } from "../kernel/syscalls/api";
 import * as kit from "../ui/kit";
 import { formatManifest, parseManifest, type AppFileManifest } from "../utils/appfile";
 import { followAccent } from "../utils/settings";
-import { loadProgram } from "./jsload";
+import { loadProgram, pipeConsole } from "./jsload";
 
 /**
  * `#!/ProgramFiles/jsapp`: run a JS file from the VFS as a GUI app, in this
@@ -31,6 +31,7 @@ export async function main(os: AppInterface, args: string[]): Promise<void> {
     },
   };
 
+  pipeConsole(os);
   try {
     const program = await loadProgram((p) => os.fs.readTextFile(p), path, {
       "os:ui": kitModule(),

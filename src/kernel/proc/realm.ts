@@ -64,9 +64,16 @@ const WORKER_HOST: Record<Host, string> = {
  * kernel's DOM, cookies, OPFS (/home) or IndexedDB, and the CSP on the host
  * page (vite.config.ts) blocks network access. Removing the iframe is the kill.
  */
-function sandboxedFrame(src: string, title: string): HTMLIFrameElement {
+function sandboxedFrame(
+  src: string,
+  title: string,
+  forms = false,
+): HTMLIFrameElement {
   const iframe = document.createElement("iframe");
-  iframe.setAttribute("sandbox", "allow-scripts");
+  iframe.setAttribute(
+    "sandbox",
+    forms ? "allow-scripts allow-forms" : "allow-scripts",
+  );
   // Write-only, and the browser still requires a click (Aliases copies with it).
   iframe.allow = "clipboard-write";
   iframe.title = title;
@@ -123,7 +130,10 @@ export function executeWorker(
   entry: string,
   host: Host = "system",
 ): void {
-  const iframe = sandboxedFrame(WORKER_HOST[host], `${proc.path} [${proc.pid}]`);
+  const iframe = sandboxedFrame(
+    WORKER_HOST[host],
+    `${proc.path} [${proc.pid}]`,
+  );
 
   // The host reports a worker that fails to load (the port is inside the
   // worker by then). Accept it only from THIS frame.
@@ -174,7 +184,7 @@ export function executeIframe(
   const record = ctx.windows.createWindow(window, proc.pid);
   proc.surface = { windowId: record.id, claimed: false };
 
-  const iframe = sandboxedFrame(APP_HOST[host], window.title);
+  const iframe = sandboxedFrame(APP_HOST[host], window.title, host === "user");
   iframe.className = "app-frame";
 
   // Removing the iframe unloads its document: that IS the kill. (The window
@@ -188,9 +198,12 @@ export function executeIframe(
     if (data?.t === "realm-pointerdown") ctx.windows.focusWindow(record.id);
     // Replay the launcher shortcut on our document, where the taskbar listens.
     if (data?.t === "realm-launcher") {
-      document.dispatchEvent(new KeyboardEvent("keydown", { code: "Space", ctrlKey: true }));
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { code: "Space", ctrlKey: true }),
+      );
     }
     if (data?.t === "realm-close") ctx.windows.requestClose(record.id);
+    if (data?.t === "realm-cycle") ctx.windows.cycleFocus();
   };
   globalThis.addEventListener("message", onMessage);
 

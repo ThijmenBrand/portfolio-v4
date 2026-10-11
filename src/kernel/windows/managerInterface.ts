@@ -8,6 +8,7 @@ export interface WindowManagerInterface {
   destroy(windowId: WindowId): void;
   addCloseRequestHandler(windowId: WindowId, handler: () => void): void;
   requestClose(windowId: WindowId): void;
+  cycleFocus(): void;
   validateWindowOwnership(windowId: WindowId, pid: Pid): void;
   releaseFor(pid: Pid): void;
   windowCountFor(pid: Pid): number;

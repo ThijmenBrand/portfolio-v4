@@ -176,8 +176,9 @@ export function processSyscalls(
   };
 
   return {
+    // args is optional over the wire (spawn(path) from Files/desktop).
     spawn: alive(ctx, (parentPid, path, args, options) =>
-      startProcess(ctx, path, args, options, parentPid),
+      startProcess(ctx, path, args ?? [], options ?? {}, parentPid),
     ),
     exit: (pid, code) => terminateProcess(ctx, pid, code, "exit"),
     kill: alive(ctx, async (callerPid, targetPid, signal) => {

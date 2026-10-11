@@ -6,6 +6,12 @@
         <path d="M15 3v4h4M4 7v13a1 1 0 0 0 1 1h10" />
       </svg>
     </button>
+    <button class="code-activity-btn" data-field="search-btn" title="Search (Ctrl+Shift+F)" aria-label="Search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+        <circle cx="10.5" cy="10.5" r="6" />
+        <path d="M15 15l5 5" />
+      </svg>
+    </button>
     <button class="code-activity-btn" data-field="run-btn" title="Run and Debug" aria-label="Run and debug">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
         <path d="M9 4.5v4M9 4.5l11 7-7.5 4.8" />
@@ -50,6 +56,16 @@
       <p>You have not yet opened a folder.</p>
       <button class="code-btn primary" data-field="open-folder">Open Folder</button>
     </div>
+    </div>
+
+    <div class="code-view" data-field="search-view" hidden>
+      <header class="code-sidebar-head">
+        <span>Search</span>
+      </header>
+      <div class="code-config-form code-search-form">
+        <input data-field="search-input" placeholder="Search" spellcheck="false" aria-label="Search in folder" />
+      </div>
+      <div class="code-tree" data-field="search-results"></div>
     </div>
 
     <div class="code-view" data-field="run-view" hidden>
@@ -105,6 +121,7 @@
         <dt>Toggle explorer</dt><dd><kbd data-mod></kbd><kbd>B</kbd></dd>
         <dt>Toggle terminal</dt><dd><kbd>Ctrl</kbd><kbd>`</kbd></dd>
         <dt>Find in file</dt><dd><kbd data-mod></kbd><kbd>F</kbd></dd>
+        <dt>Search in folder</dt><dd><kbd data-mod></kbd><kbd>Shift</kbd><kbd>F</kbd></dd>
         <dt>Open from terminal</dt><dd><kbd>code file.txt</kbd></dd>
       </dl>
     </section>

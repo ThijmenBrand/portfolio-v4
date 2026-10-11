@@ -65,15 +65,25 @@ const BADGES: Record<string, [string, string]> = {
 
 const svg = (body: string): string =>
   `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
-const PAGE = '<path d="M9.5 1.5h-5a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1v-9z"/><path d="M9.5 1.5v3h3"/>';
+const PAGE =
+  '<path d="M9.5 1.5h-5a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1v-9z"/><path d="M9.5 1.5v3h3"/>';
 const IMAGE_ICON: [string, string] = [
-  svg('<rect x="2" y="3" width="12" height="10" rx="1.5"/><circle cx="6" cy="6.5" r="1"/><path d="m2.5 12 3.5-3.5 2.5 2.5 2-2 3 3"/>'),
+  svg(
+    '<rect x="2" y="3" width="12" height="10" rx="1.5"/><circle cx="6" cy="6.5" r="1"/><path d="m2.5 12 3.5-3.5 2.5 2.5 2-2 3 3"/>',
+  ),
   "#c58af9",
 ];
 /** Explorer/tab icon for files without a language badge: [svg, color]. */
 const ICONS: Record<string, [string, string]> = {
-  ...Object.fromEntries(Object.keys(IMAGE_TYPES).map((ext) => [ext, IMAGE_ICON])),
-  sh: [svg('<rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/><path d="m4.5 6 2 2-2 2M8 10h3.5"/>'), "#6cd39a"],
+  ...Object.fromEntries(
+    Object.keys(IMAGE_TYPES).map((ext) => [ext, IMAGE_ICON]),
+  ),
+  sh: [
+    svg(
+      '<rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/><path d="m4.5 6 2 2-2 2M8 10h3.5"/>',
+    ),
+    "#6cd39a",
+  ],
   txt: [svg(`${PAGE}<path d="M5.5 8h5M5.5 10.5h5"/>`), "#9b9ba6"],
   pdf: [svg(`${PAGE}<path d="M5.5 8h5M5.5 10.5h3"/>`), "#ff7676"],
 };
@@ -100,6 +110,11 @@ interface LaunchConfig {
 }
 
 const LAUNCH_FILE = ".code/launch.json";
+
+type View = "explorer" | "search" | "run";
+
+const SEARCH_SKIP = new Set([".git", "node_modules", "dist"]);
+const SEARCH_LIMIT = 2000;
 
 const PLAY_SVG =
   '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M4.5 2.8v10.4a.5.5 0 0 0 .77.42l8-5.2a.5.5 0 0 0 0-.84l-8-5.2a.5.5 0 0 0-.77.42z" /></svg>';
@@ -202,7 +217,10 @@ class Editor {
   private flashTimer = 0;
   private terminal: Terminal | null = null;
   private launch: LaunchConfig[] = [];
-  private sidebarView: "explorer" | "run" = "explorer";
+  private sidebarView: View = "explorer";
+  /** Bumped per query so a slow, stale search stops rendering. */
+  private searchRun = 0;
+  private searchTimer = 0;
 
   public constructor(os: AppInterface, win: WindowHandle) {
     this.os = os;
@@ -278,7 +296,12 @@ class Editor {
       const dir = await this.os.fs
         .readTextFile(`${await ensureConfigDir(this.os)}/code-folder`)
         .catch(() => "");
-      const ok = dir !== "" && (await this.os.fs.stat(dir).then((s) => s.kind === "directory", () => false));
+      const ok =
+        dir !== "" &&
+        (await this.os.fs.stat(dir).then(
+          (s) => s.kind === "directory",
+          () => false,
+        ));
       return ok ? this.openFolder(dir) : this.renderTree();
     }
     const path = resolve(await this.os.process.cwd(), arg);
@@ -327,6 +350,15 @@ class Editor {
       this.showView("explorer"),
     );
     this.field("run-btn").addEventListener("click", () => this.showView("run"));
+    this.field("search-btn").addEventListener("click", () => this.openSearch());
+    const searchInput = this.field<HTMLInputElement>("search-input");
+    searchInput.addEventListener("input", () => {
+      clearTimeout(this.searchTimer);
+      this.searchTimer = window.setTimeout(
+        () => void this.search(searchInput.value),
+        200,
+      );
+    });
     this.field("config-add").addEventListener(
       "click",
       () => void this.startConfig(),
@@ -399,7 +431,8 @@ class Editor {
       (e) => {
         const mod = IS_MAC ? e.metaKey : e.ctrlKey;
         let handled = true;
-        if (mod && e.code === "KeyS")
+        if (mod && e.shiftKey && e.code === "KeyF") this.openSearch();
+        else if (mod && e.code === "KeyS")
           void (this.active && this.save(this.active));
         else if (mod && e.code === "KeyB") this.toggleSidebar();
         else if (mod && e.code === "KeyO") void this.promptOpenFolder();
@@ -445,13 +478,14 @@ class Editor {
   }
 
   /** Like VS Code: clicking the open view's icon hides the sidebar. */
-  private showView(view: "explorer" | "run"): void {
+  private showView(view: View): void {
     const hidden = this.root.classList.contains("no-sidebar");
     if (!hidden && view === this.sidebarView) return this.toggleSidebar();
     this.field(`${this.sidebarView}-btn`).classList.remove("active");
     this.sidebarView = view;
     this.field("explorer-view").hidden = view !== "explorer";
     this.field("run-view").hidden = view !== "run";
+    this.field("search-view").hidden = view !== "search";
     if (hidden) this.toggleSidebar();
     else this.field(`${view}-btn`).classList.add("active");
   }
@@ -581,7 +615,11 @@ class Editor {
       const open = el("button", "code-btn primary", "Open Folder");
       open.addEventListener("click", () => void this.promptOpenFolder());
       list.replaceChildren(
-        el("div", "code-tree-note", "Open a folder to add launch configurations."),
+        el(
+          "div",
+          "code-tree-note",
+          "Open a folder to add launch configurations.",
+        ),
         open,
       );
       return;
@@ -749,6 +787,152 @@ class Editor {
     });
   }
 
+  // ---- search -------------------------------------------------------------
+
+  /** Opens the search view (never toggles it closed) and focuses the query. */
+  private openSearch(): void {
+    if (
+      this.root.classList.contains("no-sidebar") ||
+      this.sidebarView !== "search"
+    )
+      this.showView("search");
+    const input = this.field<HTMLInputElement>("search-input");
+    const selected = this.active
+      ? this.view.state.sliceDoc(
+          this.view.state.selection.main.from,
+          this.view.state.selection.main.to,
+        )
+      : "";
+    if (selected && !selected.includes("\n")) {
+      input.value = selected;
+      void this.search(selected);
+    }
+    input.focus();
+    input.select();
+  }
+
+  /** Case-insensitive substring search over every text file under the root. */
+  private async search(query: string): Promise<void> {
+    const run = ++this.searchRun;
+    const list = this.field("search-results");
+    const root = this.rootDir;
+    if (query === "") return list.replaceChildren();
+    if (root === null)
+      return list.replaceChildren(
+        el("div", "code-tree-note", "Open a folder to search in it."),
+      );
+
+    const needle = query.toLowerCase();
+    const rows = document.createDocumentFragment();
+    let matches = 0;
+    let files = 0;
+    // ponytail: walks and reads the whole folder per query; an index if folders get big.
+    const walk = async (dir: string): Promise<void> => {
+      let entries: DirEntry[];
+      try {
+        entries = await this.os.fs.readdir(dir);
+      } catch {
+        return;
+      }
+      entries.sort((a, b) => a.name.localeCompare(b.name));
+      for (const entry of entries) {
+        if (run !== this.searchRun || matches >= SEARCH_LIMIT) return;
+        const path = join(dir, entry.name);
+        if (entry.kind === "directory") {
+          if (!SEARCH_SKIP.has(entry.name)) await walk(path);
+          continue;
+        }
+        const text = await this.textOf(path);
+        if (text === null) continue;
+        const hits = this.searchFile(path, text, needle, query.length);
+        if (hits.length === 0) continue;
+        files++;
+        matches += hits.length - 1;
+        const head = el("div", "code-row");
+        head.style.paddingLeft = "6px";
+        head.title = path;
+        head.append(
+          badge(path),
+          el("span", "code-row-name", path.slice(root.length + 1) || path),
+          el("span", "code-config-detail", String(hits.length - 1)),
+        );
+        head.addEventListener("click", () => void this.open(path));
+        rows.append(...hits.map((h, i) => (i === 0 ? head : h)));
+      }
+    };
+    await walk(root);
+    if (run !== this.searchRun) return;
+    const summary =
+      matches === 0
+        ? "No results found."
+        : `${matches}${matches >= SEARCH_LIMIT ? "+" : ""} result${matches === 1 ? "" : "s"} in ${files} file${files === 1 ? "" : "s"}`;
+    list.replaceChildren(el("div", "code-tree-note", summary), rows);
+  }
+
+  /** An open tab's live buffer wins over disk; binary files are skipped. */
+  private async textOf(path: string): Promise<string | null> {
+    const tab = this.tabs.find((t) => t.path === path);
+    if (tab) return tab.state.doc.toString();
+    try {
+      const text = new TextDecoder("utf-8", { fatal: true }).decode(
+        await this.os.fs.readFile(path),
+      );
+      return text.includes("\0") ? null : text;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Match rows for one file, with a placeholder at [0] for its header. */
+  private searchFile(
+    path: string,
+    text: string,
+    needle: string,
+    length: number,
+  ): HTMLElement[] {
+    const rows: HTMLElement[] = [el("div")];
+    text.split("\n").forEach((line, i) => {
+      const col = line.toLowerCase().indexOf(needle);
+      if (col < 0) return;
+      const row = el("div", "code-row code-search-line");
+      row.style.paddingLeft = "24px";
+      // Trim long leading context so the match stays visible.
+      const start = Math.max(0, col - 20);
+      const name = el("span", "code-row-name");
+      name.append(
+        (start > 0 ? "…" : "") + line.slice(start, col).trimStart(),
+        el("mark", "", line.slice(col, col + length)),
+        line.slice(col + length, col + length + 200),
+      );
+      row.title = `${path}:${i + 1}`;
+      row.append(name);
+      row.addEventListener(
+        "click",
+        () => void this.reveal(path, i + 1, col, length),
+      );
+      rows.push(row);
+    });
+    return rows;
+  }
+
+  private async reveal(
+    path: string,
+    line: number,
+    col: number,
+    length: number,
+  ): Promise<void> {
+    await this.open(path);
+    if (this.active?.path !== path) return;
+    const doc = this.view.state.doc;
+    if (line > doc.lines) return;
+    const from = Math.min(doc.line(line).from + col, doc.length);
+    this.view.dispatch({
+      selection: { anchor: from, head: Math.min(from + length, doc.length) },
+      scrollIntoView: true,
+    });
+    this.view.focus();
+  }
+
   // ---- context menu -------------------------------------------------------
 
   private bindMenu(): void {
@@ -761,12 +945,16 @@ class Editor {
       const path = row?.dataset.path;
       const isDir = row ? row.dataset.dir === "true" : true;
       // New items and pastes land in the folder that was clicked (or holds the file).
-      const dir = path === undefined ? this.rootDir : isDir ? path : dirname(path);
+      const dir =
+        path === undefined ? this.rootDir : isDir ? path : dirname(path);
       this.selectedDir = dir;
       this.highlight();
       this.openMenu(e.clientX, e.clientY, [
         { label: "New File…", action: () => void this.startCreate("file") },
-        { label: "New Folder…", action: () => void this.startCreate("directory") },
+        {
+          label: "New Folder…",
+          action: () => void this.startCreate("directory"),
+        },
         null,
         ...(path === undefined
           ? []
@@ -780,7 +968,9 @@ class Editor {
     });
     this.menu.addEventListener("keydown", (e) => {
       const buttons = [
-        ...this.menu.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"),
+        ...this.menu.querySelectorAll<HTMLButtonElement>(
+          "button:not(:disabled)",
+        ),
       ];
       const at = buttons.indexOf(document.activeElement as HTMLButtonElement);
       const next = { ArrowDown: at + 1, ArrowUp: at - 1 }[e.key];
@@ -817,7 +1007,9 @@ class Editor {
       {
         label: "Copy Relative Path",
         action: () =>
-          copyText(isRoot ? "." : path.slice(root === "/" ? 1 : root.length + 1)),
+          copyText(
+            isRoot ? "." : path.slice(root === "/" ? 1 : root.length + 1),
+          ),
       },
       null,
       {
@@ -841,7 +1033,8 @@ class Editor {
   private openMenu(x: number, y: number, entries: (MenuEntry | null)[]): void {
     // Drop separators that would sit at an edge or next to another.
     const tidy = entries.filter(
-      (entry, i) => entry || (i > 0 && i < entries.length - 1 && entries[i - 1]),
+      (entry, i) =>
+        entry || (i > 0 && i < entries.length - 1 && entries[i - 1]),
     );
     this.menu.replaceChildren(
       ...tidy.map((entry) => {
@@ -864,7 +1057,9 @@ class Editor {
     this.menu.hidden = false;
     this.menu.style.left = `${Math.min(x, innerWidth - this.menu.offsetWidth - 4)}px`;
     this.menu.style.top = `${Math.min(y, innerHeight - this.menu.offsetHeight - 4)}px`;
-    this.menu.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
+    this.menu
+      .querySelector<HTMLButtonElement>("button:not(:disabled)")
+      ?.focus();
   }
 
   private closeMenu(): void {
@@ -899,7 +1094,10 @@ class Editor {
       }
       if (dir !== this.rootDir) this.expanded.add(dir);
     } catch (error) {
-      this.flash(`Couldn't paste ${basename(clip.path)} (${errorCode(error)})`, true);
+      this.flash(
+        `Couldn't paste ${basename(clip.path)} (${errorCode(error)})`,
+        true,
+      );
     }
     await this.renderTree();
   }
@@ -914,12 +1112,20 @@ class Editor {
     const to = join(dirname(path), name);
     try {
       // moveTree would happily overwrite; refuse like VS Code does.
-      if (await this.os.fs.stat(to).then(() => true, () => false))
+      if (
+        await this.os.fs.stat(to).then(
+          () => true,
+          () => false,
+        )
+      )
         throw Object.assign(new Error(), { code: "EEXIST" });
       await moveTree(this.os, path, to);
       this.moved(path, to);
     } catch (error) {
-      this.flash(`Couldn't rename ${basename(path)} (${errorCode(error)})`, true);
+      this.flash(
+        `Couldn't rename ${basename(path)} (${errorCode(error)})`,
+        true,
+      );
     }
     await this.renderTree();
   }
@@ -1159,8 +1365,10 @@ class Editor {
     for (const tab of this.tabs.filter((t) => isInside(t.path, path)))
       this.dropTab(tab);
     if (isInside(this.selectedDir, path)) this.selectedDir = dirname(path);
-    for (const p of this.expanded) if (isInside(p, path)) this.expanded.delete(p);
-    if (this.clipboard && isInside(this.clipboard.path, path)) this.clipboard = null;
+    for (const p of this.expanded)
+      if (isInside(p, path)) this.expanded.delete(p);
+    if (this.clipboard && isInside(this.clipboard.path, path))
+      this.clipboard = null;
     await this.renderTree();
   }
 
@@ -1169,7 +1377,10 @@ class Editor {
   /** `mustExist: false` opens a missing file as an empty buffer; saving creates it. */
   private async open(path: string, mustExist = true): Promise<void> {
     // Phone width: the sidebar covers the editor (code.css), so get it out of the way.
-    if (matchMedia("(max-width: 600px)").matches && !this.root.classList.contains("no-sidebar")) {
+    if (
+      matchMedia("(max-width: 600px)").matches &&
+      !this.root.classList.contains("no-sidebar")
+    ) {
       this.toggleSidebar();
     }
     const existing = this.tabs.find((t) => t.path === path);
@@ -1221,7 +1432,11 @@ class Editor {
     this.tabs.push(tab);
     this.tabsEl.append(tab.el);
     this.activate(tab);
-    if (binary) this.flash(`${basename(path)}: file type not supported, showing raw bytes`, true);
+    if (binary)
+      this.flash(
+        `${basename(path)}: file type not supported, showing raw bytes`,
+        true,
+      );
   }
 
   private tabEl(path: string): HTMLElement {

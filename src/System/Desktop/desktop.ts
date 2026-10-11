@@ -1,5 +1,5 @@
 import { allApps, registry } from "../../apps/registry";
-import { isAppFile } from "../../utils/appfile";
+import { isAppFile, readManifest } from "../../utils/appfile";
 import { dirname } from "../../kernel/fs/path";
 import { kernelError, logError } from "../../kernel/errors";
 import type { SystemInterface } from "../../kernel/syscalls/api";
@@ -372,6 +372,10 @@ class Desktop implements DesktopCommands {
       const path = `${this.folder}/${entry.name}`;
       const exec = (await readShortcut(this.os, path)) ?? undefined;
       const directory = entry.kind === "directory";
+      // A one-file app shows its own icon, from its //@app manifest (data, never run).
+      const appIcon = isAppFile(path)
+        ? ((await readManifest((p) => this.os.fs.readFile(p), path))?.icon ?? "/assets/icons/default-app.svg")
+        : undefined;
       this.addIcon({
         name: entry.name,
         path,
@@ -380,7 +384,7 @@ class Desktop implements DesktopCommands {
         label: exec ? entry.name.slice(0, -".app".length) : entry.name,
         image: exec
           ? (apps.find((app) => app.exec === exec)?.icon ?? "/assets/icons/default-app.svg")
-          : undefined,
+          : appIcon,
         svg: directory ? FOLDER_SVG : FILE_SVG,
       });
     }

@@ -209,7 +209,7 @@ async function navigate(
     if (errorCode(error) === "ENOTDIR")
       return navigate(dirname(path), record, [basename(path)]);
     toast(
-      `Couldn't open “${basename(path)}”. ${ERRORS[errorCode(error)] ?? ""}`,
+      `Couldn't open “${basename(path)}”. ${ERRORS[errorCode(error)] ?? (error as Error).message ?? ""}`,
       true,
     );
     if (!items.length && path !== "/") await navigate(dirname(path), false);
@@ -641,7 +641,7 @@ async function open(item: Item): Promise<void> {
       .spawn(app.exec)
       .catch((error) =>
         toast(
-          `Couldn't start ${app.name}. ${ERRORS[errorCode(error)] ?? ""}`,
+          `Couldn't start ${app.name}. ${ERRORS[errorCode(error)] ?? (error as Error).message ?? ""}`,
           true,
         ),
       );
@@ -658,7 +658,7 @@ async function open(item: Item): Promise<void> {
       .spawn(exec)
       .catch((error) =>
         toast(
-          `Couldn't start ${item.name}. ${ERRORS[errorCode(error)] ?? ""}`,
+          `Couldn't start ${item.name}. ${ERRORS[errorCode(error)] ?? (error as Error).message ?? ""}`,
           true,
         ),
       );

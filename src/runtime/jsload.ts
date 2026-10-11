@@ -191,3 +191,34 @@ export async function loadProgram(
   }
   return module as Program;
 }
+
+/**
+ * Point the realm's console at the program's stdio: log/info/debug to fd 1,
+ * warn/error to fd 2, so they land in the terminal it was started from.
+ * The realm (worker or iframe) is this program's alone, so patching is safe. Returns a flush: await it before exiting.
+ */
+export function pipeConsole(os: { io: { write(fd: number, data: Uint8Array): Promise<unknown> } }): () => Promise<void> {
+  const encoder = new TextEncoder();
+  let queue = Promise.resolve(); // keep lines in call order
+  const show = (value: unknown): string => {
+    if (typeof value === "string") return value;
+    if (value instanceof Error) return value.stack ?? `${value.name}: ${value.message}`;
+    try {
+      return JSON.stringify(value) ?? String(value);
+    } catch {
+      return String(value); // cyclic
+    }
+  };
+  const pipe = (fd: number) => (...args: unknown[]) => {
+    const line = encoder.encode(args.map(show).join(" ") + "\n");
+    queue = queue.then(() => os.io.write(fd, line)).then(() => {}, () => {});
+  };
+  Object.assign(console, {
+    log: pipe(1),
+    info: pipe(1),
+    debug: pipe(1),
+    warn: pipe(2),
+    error: pipe(2),
+  });
+  return () => queue;
+}

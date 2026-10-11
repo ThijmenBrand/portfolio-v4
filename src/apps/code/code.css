@@ -102,6 +102,23 @@
   display: none;
 }
 
+/* ---- search ---- */
+
+.code-search-form {
+  border-top: none;
+  padding-top: 2px;
+}
+
+.code-search-line {
+  font: 12px var(--app-mono);
+}
+
+.code-search-line mark {
+  background: var(--app-accent-soft);
+  color: var(--app-text);
+  border-radius: 2px;
+}
+
 /* ---- run and debug ---- */
 
 .code-config-play {
