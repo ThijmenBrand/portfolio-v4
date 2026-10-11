@@ -272,9 +272,20 @@ class Editor {
       this.field("config-form").hidden = true;
     });
     const form = this.field<HTMLFormElement>("config-form");
-    form.addEventListener("submit", (e) => {
-      e.preventDefault();
+    // ponytail: no submit event; the realm sandbox lacks allow-forms, so
+    // the browser blocks form submission outright. Click and Enter instead.
+    const submit = (): void => {
+      if (!form.reportValidity()) return;
       void this.addConfig(new FormData(form));
+    };
+    this.field("config-submit").addEventListener("click", submit);
+    form.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !(e.target instanceof HTMLSelectElement)) {
+        e.preventDefault();
+        submit();
+      } else if (e.key === "Escape") {
+        form.hidden = true;
+      }
     });
     this.field("root-btn").addEventListener("click", () => {
       this.selectedDir = this.rootDir;
