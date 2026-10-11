@@ -1,0 +1,39 @@
+body {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  padding: 0;
+}
+
+.toolbar { margin: 0; }
+
+/* The grass fills the window; any sliver the grid can't use reads as a hedge. */
+.board {
+  position: relative;
+  flex: 1;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  overflow: hidden;
+  background: #5fa843;
+}
+
+canvas { display: block; }
+
+.overlay {
+  position: absolute;
+  display: grid;
+  gap: 4px;
+  max-width: min(320px, calc(100% - 32px));
+  padding: 16px 20px;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--app-surface) 92%, transparent);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .3);
+  text-align: center;
+  text-wrap: balance;
+}
+
+.overlay[hidden] { display: none; }
+.overlay strong { font-size: 18px; }
+.overlay span { color: var(--app-text-dim); }
