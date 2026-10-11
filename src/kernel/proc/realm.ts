@@ -175,6 +175,7 @@ export function executeIframe(
     if (data?.t === "realm-launcher") {
       document.dispatchEvent(new KeyboardEvent("keydown", { code: "Space", ctrlKey: true }));
     }
+    if (data?.t === "realm-close") ctx.windows.requestClose(record.id);
   };
   globalThis.addEventListener("message", onMessage);
 

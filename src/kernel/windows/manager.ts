@@ -57,6 +57,15 @@ export class WindowManager implements WindowManagerInterface {
     this.actions = actions;
     this.events = events;
     this.workArea = workArea;
+
+    // Ctrl+W closes the focused window. Ctrl only: browsers reserve Cmd+W.
+    // App frames forward it (iframe-entry.ts → realm.ts).
+    document.addEventListener("keydown", (event) => {
+      if (event.key.toLowerCase() !== "w" || !event.ctrlKey || event.metaKey) return;
+      if (this.focusedId === null) return;
+      event.preventDefault();
+      this.requestClose(this.focusedId as WindowId);
+    });
   }
 
   public createWindow(options: WindowOptions, ownerPid: Pid): WindowRecord {
