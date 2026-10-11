@@ -59,7 +59,14 @@ function tokenize(line: string): string[] {
       continue;
     }
 
-    if (ch === "|" || ch === "<" || ch === ">") {
+    // ponytail: `&&` only splits at a word start, so `./&&` stays a filename.
+    if (ch === "&" && line[i + 1] === "&" && current === "" && !quoted) {
+      tokens.push("&&");
+      i += 1;
+      continue;
+    }
+
+    if (ch === "|" || ch === "<" || ch === ">" || ch === ";") {
       flush();
       if (ch === ">" && line[i + 1] === ">") {
         tokens.push(">>");
@@ -203,8 +210,30 @@ class Shell {
     }
   }
 
+  /** `a && b` runs b only if a succeeded; `a ; b` always runs b. */
   private async execute(line: string): Promise<number> {
-    const commands = parse(tokenize(line));
+    const tokens = tokenize(line);
+    let status = 0;
+    let start = 0;
+    let skip = false;
+
+    for (let i = 0; i <= tokens.length; i += 1) {
+      const token = tokens[i];
+      if (token !== undefined && token !== "&&" && token !== ";") continue;
+
+      const group = tokens.slice(start, i);
+      if (group.length === 0 && token !== undefined) {
+        throw new Error(`syntax error near \`${token}\``);
+      }
+      if (group.length > 0 && !skip) status = await this.executeGroup(group);
+      skip = token === "&&" && status !== 0;
+      start = i + 1;
+    }
+    return status;
+  }
+
+  private async executeGroup(tokens: string[]): Promise<number> {
+    const commands = parse(tokens);
 
     if (commands.length === 1 && this.isBuiltin(commands[0]!.argv[0]!)) {
       return this.runBuiltin(commands[0]!);
@@ -248,6 +277,7 @@ class Shell {
         "programs:  anything in /ProgramFiles or /System",
         "redirect:  cmd > file   cmd >> file   cmd < file",
         "pipeline:  cmd | cmd | cmd",
+        "chain:     cmd && cmd (if ok)   cmd ; cmd (always)",
         "",
       ].join("\n"),
     );
