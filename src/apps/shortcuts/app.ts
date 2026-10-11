@@ -7,6 +7,7 @@ export default {
     height: 420,
     minWidth: 340,
     minHeight: 300,
+    translucent: true,
   },
   launcher: { name: "Shortcuts", icon: "/assets/icons/shortcuts.svg" },
 } satisfies AppManifest;

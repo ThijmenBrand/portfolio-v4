@@ -12,6 +12,8 @@ export interface WindowOptions {
   minHeight?: number;
   maxWidth?: number;
   maxHeight?: number;
+  translucent?: boolean;
+  titleBar?: "default" | "hidden";
 }
 
 export interface WindowRecord {

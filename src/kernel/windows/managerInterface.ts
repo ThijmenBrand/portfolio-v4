@@ -5,6 +5,7 @@ export interface WindowManagerInterface {
   createWindow(options: WindowOptions, ownerPid: Pid): WindowRecord;
   setTitle(windowId: WindowId, title: string): void;
   resizeTo(windowId: WindowId, width: number, height: number): void;
+  setAppearance(windowId: WindowId, options: WindowOptions): void;
   destroy(windowId: WindowId): void;
   addCloseRequestHandler(windowId: WindowId, handler: () => void): void;
   requestClose(windowId: WindowId): void;

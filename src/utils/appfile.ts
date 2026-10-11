@@ -7,10 +7,15 @@
  */
 export interface AppFileManifest {
   name?: string;
-  /** data:image/(svg+xml|png|webp|gif|jpeg) URL. */
   icon?: string;
   version?: string;
-  window?: { title?: string; width?: number; height?: number };
+  window?: {
+    title?: string;
+    width?: number;
+    height?: number;
+    translucent?: true;
+    titleBar?: "hidden";
+  };
 }
 
 const PREFIX = "//@app ";
@@ -52,6 +57,8 @@ export function parseManifest(source: string): AppFileManifest | null {
       width: size(win.width, 160, 1920),
       height: size(win.height, 120, 1080),
     };
+    if (win.translucent === true) manifest.window.translucent = true;
+    if (win.titleBar === "hidden") manifest.window.titleBar = "hidden";
   }
   return manifest;
 }

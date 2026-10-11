@@ -2,7 +2,7 @@ import {
   htmlStringToTemplate,
   selectElementFromTemplate,
 } from "../../utils/html";
-import type { WindowRecord } from "./types";
+import type { WindowOptions, WindowRecord } from "./types";
 
 interface buildWindowChromeResult {
   rootElement: HTMLElement;
@@ -20,6 +20,7 @@ export interface WindowChromeInterface {
   applyFrameToWindow(windowRecord: WindowRecord): void;
   applyStateToWindow(windowRecord: WindowRecord, isFocused: boolean): void;
   setWindowTitle(windowRecord: WindowRecord, title: string): void;
+  applyAppearance(windowRecord: WindowRecord, options: WindowOptions): void;
 }
 
 export class WindowChrome implements WindowChromeInterface {
@@ -88,5 +89,14 @@ export class WindowChrome implements WindowChromeInterface {
 
   public setWindowTitle(windowRecord: WindowRecord, title: string): void {
     windowRecord.titleEl.textContent = title;
+  }
+
+  public applyAppearance(
+    windowRecord: WindowRecord,
+    options: WindowOptions,
+  ): void {
+    const root = windowRecord.root;
+    root.classList.toggle("translucent", options.translucent === true);
+    root.classList.toggle("titlebar-hidden", options.titleBar === "hidden");
   }
 }

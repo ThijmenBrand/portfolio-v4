@@ -1,10 +1,9 @@
-html, body { height: 100%; }
+html, body { height: 100%; background: transparent; }
 
 body {
   margin: 0;
   font: 13px/1.4 var(--app-sans);
   color: var(--app-text);
-  background: var(--app-bg);
   -webkit-font-smoothing: antialiased;
 }
 

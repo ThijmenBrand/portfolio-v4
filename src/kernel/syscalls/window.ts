@@ -57,6 +57,13 @@ export function windowSyscalls(
       if (Number.isFinite(width) && Number.isFinite(height)) {
         ctx.windows.resizeTo(proc.surface.windowId, width!, height!);
       }
+      if (options && ("translucent" in options || "titleBar" in options)) {
+        ctx.windows.setAppearance(proc.surface.windowId, {
+          title: "",
+          translucent: options.translucent === true,
+          titleBar: options.titleBar === "hidden" ? "hidden" : "default",
+        });
+      }
       return proc.surface.windowId;
     }),
     listWindows: async (pid: Pid) => {

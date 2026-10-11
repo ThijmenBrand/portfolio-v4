@@ -192,6 +192,65 @@
     background: rgba(0, 0, 0, 0.35);
 }
 
+/* ------------------------------------------- appearance (WindowOptions) */
+
+/* translucent: frosted glass like the taskbar (taskbar.css). The app clears
+   its own html/body background; we clear everything between it and the glass. */
+.window.translucent {
+    background: rgba(26, 26, 30, 0.6);
+    -webkit-backdrop-filter: blur(24px) saturate(160%);
+    backdrop-filter: blur(24px) saturate(160%);
+}
+
+.window.translucent > .top-bar,
+.window.translucent.focused > .top-bar {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.window.translucent #window-content,
+.window.translucent .app-frame {
+    background: transparent;
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .window.translucent {
+        background: var(--app-bg);
+    }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+    .window.translucent {
+        background: var(--app-bg);
+        -webkit-backdrop-filter: none;
+        backdrop-filter: none;
+    }
+}
+
+/* titlebar-hidden: the app fills the window; the bar stays on top as an
+   invisible drag strip holding the buttons. The app keeps that strip free of
+   its own controls (the kernel can't see into the iframe). */
+.window.titlebar-hidden > .top-bar,
+.window.titlebar-hidden.focused > .top-bar {
+    position: absolute;
+    inset: 0 0 auto;
+    z-index: 1;
+    background: transparent;
+    border-bottom: 0;
+}
+
+/* Still the window's name for screen readers, just not drawn. */
+.window.titlebar-hidden .window-title {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+}
+
+.window.titlebar-hidden .window-buttons {
+    margin-left: auto;
+}
+
 /* While dragging/resizing, iframes must not swallow the mouse (interactions/shield.ts). */
 body.wm-interacting iframe {
     pointer-events: none;

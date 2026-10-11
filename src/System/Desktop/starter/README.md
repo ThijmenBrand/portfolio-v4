@@ -82,6 +82,12 @@ bundle main.js --install
 This writes `Notes.app.js`: the whole app in one file, with the name, icon
 and window size from `app.json`. `--install` also adds it to the app menu.
 
+The window's look comes from `app.json` too: `"translucent": true` gives a
+frosted-glass window (make your `html, body` background transparent), and
+`"titleBar": "hidden"` lets your content run under the title bar. The top
+34px stays a drag strip with the window buttons on the right, so put only
+text there (see `style.css`).
+
 - Double-click the `.app.js` in Files to run it.
 - Right-click → Download to save it outside the OS.
 - Upload it into Files anywhere else to run it there.

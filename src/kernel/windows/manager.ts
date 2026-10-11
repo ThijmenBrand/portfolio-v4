@@ -115,6 +115,7 @@ export class WindowManager implements WindowManagerInterface {
     this.windowLayer.appendChild(elements.rootElement);
 
     this.WindowChrome.applyFrameToWindow(record);
+    this.WindowChrome.applyAppearance(record, options);
     if (isPhone()) this.setWindowState(record.id, "maximized");
 
     const windowCommands = this.createWindowCommands(record);
@@ -150,6 +151,10 @@ export class WindowManager implements WindowManagerInterface {
       windowId: windowRecord.id,
       title: title,
     });
+  }
+
+  public setAppearance(windowId: WindowId, options: WindowOptions): void {
+    this.WindowChrome.applyAppearance(this.getWindowRecord(windowId), options);
   }
 
   public moveWindow(windowId: WindowId, x: number, y: number): void {

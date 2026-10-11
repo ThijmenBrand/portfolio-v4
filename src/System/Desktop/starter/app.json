@@ -2,5 +2,5 @@
   "name": "Notes",
   "icon": "icon.svg",
   "version": "1.0",
-  "window": { "title": "Notes", "width": 420, "height": 460 }
+  "window": { "title": "Notes", "width": 420, "height": 460, "translucent": true, "titleBar": "hidden" }
 }

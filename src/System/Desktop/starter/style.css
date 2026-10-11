@@ -2,3 +2,16 @@
 form.row { margin-bottom: 12px; }
 form.row input { flex: 1; }
 .notes li { padding-block: 4px; }
+
+/* app.json asks for "translucent": let the window's glass show through. */
+html, body { background: transparent; }
+
+/* app.json asks for "titleBar": "hidden": the toolbar is the title bar now.
+   The window's drag strip (34px) and its buttons (~132px, top right) sit on
+   top of it, so nothing clickable goes here. */
+.toolbar {
+  height: 34px;
+  padding-block: 0;
+  padding-right: 140px;
+  background: transparent;
+}
