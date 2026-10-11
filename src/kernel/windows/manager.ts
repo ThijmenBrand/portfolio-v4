@@ -160,7 +160,7 @@ export class WindowManager implements WindowManagerInterface {
       windowRecord.frame = { ...windowRecord.restoreFrame };
       windowRecord.restoreFrame = undefined;
     } else if (state === "maximized") {
-      windowRecord.frame = { ...this.workArea.get() };
+      windowRecord.frame = this.maximizedFrame();
       windowRecord.state = "maximized";
     }
 
@@ -331,13 +331,17 @@ export class WindowManager implements WindowManagerInterface {
   }
 
   public reflowMaximized(): void {
-    const area = this.workArea.get();
-
     for (const record of this.windows.values()) {
       if (record.state !== "maximized") continue;
-      record.frame = { ...area };
+      record.frame = this.maximizedFrame();
       this.WindowChrome.applyFrameToWindow(record);
     }
+  }
+
+  /** Fullscreen: maximized windows cover the whole screen (topbar and dock auto-hide over them). */
+  private maximizedFrame(): Rect {
+    const area = this.workArea.get();
+    return { x: area.x, y: 0, width: area.width, height: window.innerHeight };
   }
 
   /**

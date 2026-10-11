@@ -2,9 +2,11 @@
 // works (kernel api.fetch -> server -> session check). Private routes live
 // under /api/private/ in server/main.ts.
 import type { AppInterface } from "../../kernel/syscalls/api";
+import { followAccent } from "../../utils/settings";
 import "../../ui/theme.css";
 
 export async function main(os: AppInterface): Promise<void> {
+  await followAccent(os);
   const handle = await os.windows.create({ title: "Admin" });
   void handle.onCloseRequest(() => void os.process.exit(0));
 

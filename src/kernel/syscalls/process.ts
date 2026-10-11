@@ -107,7 +107,11 @@ async function startProcess(
  * program is setuid (it runs as root, but keeps the caller as its real uid so
  * su/passwd know who called them).
  */
-function childIds(parent: Process, options: SpawnOptions, setuid: boolean): Ids {
+function childIds(
+  parent: Process,
+  options: SpawnOptions,
+  setuid: boolean,
+): Ids {
   if (options?.uid !== undefined) {
     if (parent.euid !== 0) throw eperm(parent.pid, "spawn as another user");
     const gid = options.gid ?? options.uid;
@@ -141,7 +145,12 @@ export function processSyscalls(
     ),
     exit: (pid, code) => terminateProcess(ctx, pid, code, "exit"),
     kill: alive(ctx, async (callerPid, targetPid, signal) => {
-      requireControl(ctx, callerPid, targetPid);
+      const caller = requireAlive(ctx, callerPid);
+      const target = ctx.processes.get(targetPid);
+      const sameUser =
+        target !== undefined &&
+        (caller.uid === target.uid || caller.euid === target.uid);
+      if (!sameUser) requireControl(ctx, callerPid, targetPid);
       await sendSignal(ctx, targetPid, signal);
     }),
     wait: (callerPid, targetPid) => waitFor(ctx, callerPid, targetPid),

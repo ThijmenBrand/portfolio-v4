@@ -6,6 +6,7 @@ import {
 
 import terminalHTML from "./terminal.html?raw";
 import "./terminal.css";
+import { followAccent } from "../../utils/settings";
 import "../../ui/theme.css";
 import type { Pid, Termination } from "../../kernel/types";
 import { AnsiParser } from "./ansi";
@@ -306,6 +307,7 @@ export class Terminal {
 }
 
 export async function main(os: AppInterface): Promise<void> {
+  await followAccent(os);
   const handle = await os.windows.create({
     title: "Terminal",
     width: 680,

@@ -1,14 +1,18 @@
 import type { Rect } from "../../kernel/types";
 import type { Cell } from "./types";
 
-export const GRID = {
-  cellWidth: 96,
-  cellHeight: 104,
-  iconWidth: 88,
-  iconHeight: 96,
-  originX: 12,
-  originY: 12,
-} as const;
+const BASE = { cellWidth: 96, cellHeight: 104, iconWidth: 88, iconHeight: 96 };
+
+// ponytail: module state, fine with one desktop per realm.
+export const GRID = { ...BASE, originX: 12, originY: 12 };
+
+/** Icon size setting: scales cells and icons; desktop.css follows --icon-scale. */
+export function setIconScale(scale: number): void {
+  GRID.cellWidth = Math.round(BASE.cellWidth * scale);
+  GRID.cellHeight = Math.round(BASE.cellHeight * scale);
+  GRID.iconWidth = Math.round(BASE.iconWidth * scale);
+  GRID.iconHeight = Math.round(BASE.iconHeight * scale);
+}
 
 export function cellKey(cell: Cell): string {
   return `${cell.column},${cell.row}`;

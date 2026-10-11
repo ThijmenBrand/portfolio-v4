@@ -10,8 +10,10 @@ import {
   selectElementFromTemplate,
 } from "../../utils/html";
 import { registry } from "../../apps/registry";
+import { clockFormat, loadSettings } from "../../utils/settings";
 
 const DEFAULT_ICON = "/assets/icons/default-app.svg";
+const SETTINGS = "/ProgramFiles/settings";
 
 interface TaskWindow {
   id: WindowId;
@@ -92,13 +94,7 @@ class Taskbar {
     await this.os.display.reserveStrut("top", topbar.offsetHeight || 28);
     user.textContent = (await this.os.process.env()).USER ?? "user";
 
-    const format = new Intl.DateTimeFormat(undefined, {
-      weekday: "short",
-      day: "numeric",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    let format = clockFormat(await loadSettings(this.os));
     const tick = (): void => {
       const now = new Date();
       clock.textContent = format.format(now);
@@ -106,6 +102,24 @@ class Taskbar {
     };
     tick();
     this.clockTimer = setInterval(tick, 1000);
+
+    // The Settings app sends SIGHUP after writing ~/.config/settings.json.
+    await this.os.process.onSignal("SIGHUP", () => {
+      void loadSettings(this.os)
+        .then((settings) => {
+          format = clockFormat(settings);
+          tick();
+        })
+        .catch(logError);
+    });
+
+    const menu = this.root.querySelector<HTMLElement>("#session-menu");
+    const openSettings = (args: string[]): void => {
+      menu?.hidePopover();
+      void this.os.process.spawn(SETTINGS, args).catch(logError);
+    };
+    this.root.querySelector("#session-account")?.addEventListener("click", () => openSettings(["account"]));
+    this.root.querySelector("#session-settings")?.addEventListener("click", () => openSettings([]));
 
     logout.addEventListener("click", () => {
       void this.os.process
@@ -271,10 +285,9 @@ class Taskbar {
     const windows = [...group.windows.values()];
 
     group.icon.src = entry?.icon ?? DEFAULT_ICON;
-    group.icon.alt = name;
+    group.icon.alt = ""; // the label is the button's name (and its hover tooltip)
     group.label.textContent = name;
     group.count.textContent = windows.length > 1 ? String(windows.length) : "";
-    group.button.title = windows.map((win) => win.title).join("\n");
 
     group.button.classList.toggle("is-active", this.focusedPid === pid);
     group.button.classList.toggle(

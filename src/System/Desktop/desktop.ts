@@ -3,6 +3,7 @@ import { ADMIN_GID } from "../../kernel/fs/perm";
 import { kernelError, logError } from "../../kernel/errors";
 import type { SystemInterface } from "../../kernel/syscalls/api";
 import type { Rect } from "../../kernel/types";
+import { applyAccent, ICON_SCALES, loadSettings, wallpaperCSS } from "../../utils/settings";
 
 import {
   cellKey,
@@ -14,6 +15,7 @@ import {
   nextFreeCell,
   pointToCell,
   rowsFor,
+  setIconScale,
 } from "./grid";
 import {
   createIcon,
@@ -52,6 +54,8 @@ export async function main(os: SystemInterface): Promise<void> {
     desktop.destroy();
     void os.process.exit(0);
   });
+
+  await os.process.onSignal("SIGHUP", () => void desktop.applySettings().catch(logError));
 
   await os.process.onSignal("SIGCHLD", () => void reapZombies(os));
 }
@@ -132,6 +136,7 @@ class Desktop implements DesktopCommands {
   public async start(): Promise<void> {
     // Before any icon is placed: the grid needs a laid-out container.
     await this.applyWorkArea();
+    await this.applySettings();
 
     for (const entry of this.entries) this.addIcon(entry);
 
@@ -146,6 +151,23 @@ class Desktop implements DesktopCommands {
     );
 
     this.surface.focus();
+  }
+
+  public async applySettings(): Promise<void> {
+    const settings = await loadSettings(this.os);
+    this.surface.style.background = await wallpaperCSS(this.os, settings);
+    applyAccent(settings, this.root.ownerDocument);
+
+    // Keep each icon on its cell while the cells change size.
+    const scale = ICON_SCALES[settings.iconSize] ?? 1;
+    const cells = this.icons.map((icon) => pointToCell(icon.x, icon.y));
+    setIconScale(scale);
+    this.root.style.setProperty("--icon-scale", String(scale));
+    this.icons.forEach((icon, i) => {
+      const point = cellToPoint(cells[i]);
+      this.place(icon, point.x, point.y);
+    });
+    this.relayoutOutOfBounds();
   }
 
   private async onWorkAreaChanged(): Promise<void> {

@@ -18,8 +18,8 @@
   position: absolute;
   left: 0;
   top: 0;
-  border: 1px solid rgba(120, 180, 255, 0.9);
-  background: rgba(90, 160, 255, 0.18);
+  border: 1px solid color-mix(in srgb, var(--app-accent) 90%, transparent);
+  background: color-mix(in srgb, var(--app-accent) 18%, transparent);
   border-radius: 2px;
   pointer-events: none;
 }
@@ -34,7 +34,7 @@
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  width: 88px;
+  width: calc(88px * var(--icon-scale, 1));
   padding: 8px 4px;
   box-sizing: border-box;
   border: 1px solid transparent;
@@ -48,11 +48,11 @@
 .app-icon:hover { background: rgba(255, 255, 255, 0.08); }
 
 .app-icon.is-selected {
-  background: rgba(90, 160, 255, 0.26);
-  border-color: rgba(120, 180, 255, 0.55);
+  background: color-mix(in srgb, var(--app-accent) 26%, transparent);
+  border-color: color-mix(in srgb, var(--app-accent) 55%, transparent);
 }
 
-.app-icon.is-focused { box-shadow: 0 0 0 2px rgba(150, 200, 255, 0.65); }
+.app-icon.is-focused { box-shadow: 0 0 0 2px color-mix(in srgb, var(--app-accent) 65%, transparent); }
 
 .app-icon.is-dragging {
   transform-origin: center;
@@ -64,15 +64,15 @@
 .app-icon-tile {
   display: grid;
   place-items: center;
-  width: 52px;
-  height: 52px;
-  border-radius: 12px;
+  width: calc(52px * var(--icon-scale, 1));
+  height: calc(52px * var(--icon-scale, 1));
+  border-radius: calc(12px * var(--icon-scale, 1));
   background: rgba(255, 255, 255, 0.06);
 }
 
 .app-icon-img {
-  width: 36px;
-  height: 36px;
+  width: calc(36px * var(--icon-scale, 1));
+  height: calc(36px * var(--icon-scale, 1));
   pointer-events: none; /* the drag target is always the icon element */
 }
 
@@ -120,7 +120,7 @@
   cursor: default;
 }
 
-.menu-button:hover:not(:disabled) { background: #3a6ea5; }
+.menu-button:hover:not(:disabled) { background: color-mix(in srgb, var(--app-accent) 55%, #232323); }
 .menu-button:disabled { color: #777; }
 
 .menu-separator {

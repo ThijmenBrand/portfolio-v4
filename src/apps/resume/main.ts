@@ -4,6 +4,7 @@
 import type { AppInterface } from "../../kernel/syscalls/api";
 import { resume, type Entry } from "./content";
 import photoUrl from "./photo.jpg";
+import { followAccent } from "../../utils/settings";
 import "../../ui/theme.css";
 import "./resume.css";
 
@@ -40,6 +41,7 @@ function list(items: string[], className: string): HTMLElement {
 }
 
 export async function main(os: AppInterface): Promise<void> {
+  await followAccent(os);
   const win = await os.windows.create({ title: `Resume — ${resume.name}` });
   void win.onCloseRequest(() => void os.process.exit(0));
 

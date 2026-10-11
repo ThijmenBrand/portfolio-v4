@@ -25,6 +25,7 @@ import { markdown } from "@codemirror/lang-markdown";
 import { python } from "@codemirror/lang-python";
 
 import codeHTML from "./code.html?raw";
+import { followAccent } from "../../utils/settings";
 import "../../ui/theme.css";
 import "./code.css";
 
@@ -1078,6 +1079,7 @@ export async function main(
   os: AppInterface,
   args: string[] = [],
 ): Promise<void> {
+  await followAccent(os);
   const win = await os.windows.create({ title: "Code" });
   const editor = new Editor(os, win);
   await editor.start(args);

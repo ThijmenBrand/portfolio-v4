@@ -1,0 +1,139 @@
+<div class="settings">
+  <aside class="sidebar">
+    <div class="me">
+      <span class="avatar" data-field="avatar" aria-hidden="true"></span>
+      <span class="me-text">
+        <span class="me-name" data-field="name"></span>
+        <span class="me-role" data-field="role"></span>
+      </span>
+    </div>
+
+    <nav class="tabs" role="tablist" aria-orientation="vertical" aria-label="Settings">
+      <button type="button" role="tab" id="tab-appearance" aria-controls="panel-appearance">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7" /><path d="M10 3a7 7 0 0 0 0 14z" fill="currentColor" stroke="none" /></svg>
+        Appearance
+      </button>
+      <button type="button" role="tab" id="tab-time" aria-controls="panel-time">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7" /><path d="M10 6v4l2.5 2" /></svg>
+        Date &amp; Time
+      </button>
+      <button type="button" role="tab" id="tab-desktop" aria-controls="panel-desktop">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="3" width="5.5" height="5.5" rx="1.5" /><rect x="11.5" y="3" width="5.5" height="5.5" rx="1.5" /><rect x="3" y="11.5" width="5.5" height="5.5" rx="1.5" /><rect x="11.5" y="11.5" width="5.5" height="5.5" rx="1.5" /></svg>
+        Desktop
+      </button>
+      <button type="button" role="tab" id="tab-account" aria-controls="panel-account">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="7" r="3.2" /><path d="M3.8 17c.8-3.2 3.3-5 6.2-5s5.4 1.8 6.2 5" /></svg>
+        Account
+      </button>
+    </nav>
+  </aside>
+
+  <form class="content" autocomplete="off">
+    <section role="tabpanel" id="panel-appearance" aria-labelledby="tab-appearance" hidden>
+      <header><h1>Appearance</h1><output class="status" aria-live="polite"></output></header>
+
+      <h2 id="wallpaper-label">Wallpaper</h2>
+      <div class="wallpapers" role="radiogroup" aria-labelledby="wallpaper-label" data-field="wallpapers"></div>
+
+      <h2>Accent color</h2>
+      <div class="group">
+        <div class="row">
+          <span class="row-text">
+            <span class="row-label" id="accent-label">Highlight</span>
+            <span class="row-hint">Selection, focus rings and active tabs</span>
+          </span>
+          <span class="swatches" role="radiogroup" aria-labelledby="accent-label" data-field="accents"></span>
+        </div>
+      </div>
+    </section>
+
+    <section role="tabpanel" id="panel-time" aria-labelledby="tab-time" hidden>
+      <header><h1>Date &amp; Time</h1><output class="status" aria-live="polite"></output></header>
+
+      <div class="preview">
+        <span class="row-hint">Top bar preview</span>
+        <span class="preview-clock" data-field="preview"></span>
+      </div>
+
+      <div class="group">
+        <label class="row">
+          <span class="row-text">
+            <span class="row-label">24-hour clock</span>
+            <span class="row-hint">Show 14:30 instead of 2:30 PM</span>
+          </span>
+          <input type="checkbox" role="switch" name="clock24h" />
+        </label>
+        <label class="row">
+          <span class="row-text">
+            <span class="row-label">Show seconds</span>
+          </span>
+          <input type="checkbox" role="switch" name="clockSeconds" />
+        </label>
+        <div class="row">
+          <span class="row-text">
+            <span class="row-label" id="date-label">Date in top bar</span>
+          </span>
+          <span class="segmented" role="radiogroup" aria-labelledby="date-label">
+            <label><input type="radio" name="dateFormat" value="weekday" /><span>Day &amp; date</span></label>
+            <label><input type="radio" name="dateFormat" value="date" /><span>Date</span></label>
+            <label><input type="radio" name="dateFormat" value="none" /><span>Off</span></label>
+          </span>
+        </div>
+      </div>
+    </section>
+
+    <section role="tabpanel" id="panel-desktop" aria-labelledby="tab-desktop" hidden>
+      <header><h1>Desktop</h1><output class="status" aria-live="polite"></output></header>
+
+      <div class="group">
+        <div class="row">
+          <span class="row-text">
+            <span class="row-label" id="size-label">Icon size</span>
+            <span class="row-hint">Icons keep their place on the grid</span>
+          </span>
+          <span class="segmented" role="radiogroup" aria-labelledby="size-label">
+            <label><input type="radio" name="iconSize" value="small" /><span>Small</span></label>
+            <label><input type="radio" name="iconSize" value="medium" /><span>Medium</span></label>
+            <label><input type="radio" name="iconSize" value="large" /><span>Large</span></label>
+          </span>
+        </div>
+      </div>
+    </section>
+
+    <section role="tabpanel" id="panel-account" aria-labelledby="tab-account" hidden>
+      <header><h1>Account</h1></header>
+
+      <div class="profile">
+        <span class="avatar avatar-lg" data-field="avatar" aria-hidden="true"></span>
+        <span>
+          <span class="profile-name" data-field="name"></span>
+          <span class="role-badge" data-field="role"></span>
+        </span>
+      </div>
+
+      <div class="group">
+        <div class="row"><span class="row-label">User ID</span><span class="row-value" data-field="uid"></span></div>
+        <div class="row"><span class="row-label">Groups</span><span class="row-value" data-field="groups"></span></div>
+        <div class="row"><span class="row-label">Home folder</span><span class="row-value mono" data-field="home"></span></div>
+        <div class="row"><span class="row-label">Shell</span><span class="row-value mono" data-field="shell"></span></div>
+      </div>
+
+      <div class="group">
+        <div class="row">
+          <span class="row-text">
+            <span class="row-label">Password</span>
+            <span class="row-hint" data-field="password-hint"></span>
+          </span>
+          <button type="button" class="button" data-action="terminal">Open Terminal</button>
+        </div>
+        <div class="row">
+          <span class="row-text">
+            <span class="row-label">Log out</span>
+            <span class="row-hint">Closes every app in this session</span>
+          </span>
+          <button type="button" class="button button-danger" data-action="logout">Log out</button>
+        </div>
+      </div>
+    </section>
+  </form>
+</div>
