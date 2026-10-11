@@ -1,0 +1,51 @@
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  font: 13px/1.4 var(--app-sans);
+  color: var(--app-text);
+  background: var(--app-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+.about { padding: 18px; }
+
+.hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.thumb {
+  flex: none;
+  width: 88px;
+  height: 56px;
+  border-radius: 6px;
+  border: 1px solid var(--app-border);
+  background-size: cover;
+  background-position: center;
+}
+
+.hero-text { display: grid; }
+.os-name { font-size: 20px; font-weight: 600; }
+.os-version { color: var(--app-text-dim); }
+
+.group {
+  margin: 0;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--app-surface);
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 14px;
+}
+.row + .row { border-top: 1px solid var(--app-border); }
+
+dt { font-weight: 500; }
+dd { margin: 0; color: var(--app-text-dim); text-align: right; overflow-wrap: anywhere; }
+.mono { font-family: var(--app-mono); font-size: 12px; }

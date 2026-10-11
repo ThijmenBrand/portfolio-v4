@@ -32,7 +32,7 @@ import "./settings.css";
 const RELOAD_ON_HUP = [
   "/System/desktop",
   "/System/Taskbar",
-  ...["admin", "code", "files", "resume", "terminal"].map((id) => `/ProgramFiles/${id}`),
+  ...["about", "admin", "code", "files", "resume", "terminal"].map((id) => `/ProgramFiles/${id}`),
 ];
 const DESKTOP = "/System/desktop";
 const MAX_UPLOAD = 20 * 1024 * 1024;
