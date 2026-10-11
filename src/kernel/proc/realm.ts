@@ -196,3 +196,47 @@ export function executeIframe(
   record.bodyEl.appendChild(iframe);
   iframe.focus();
 }
+
+/**
+ * A web process: an external site (src/apps/<name>/app.ts `url`) framed
+ * straight into its window. It has its own origin, so allow-same-origin
+ * gives it ITS cookies/storage, never the kernel's. No port: it can't make
+ * syscalls, and it may navigate freely within itself.
+ */
+export function executeWeb(
+  ctx: KernelContext,
+  proc: Process,
+  url: string,
+  window: WindowOptions,
+): void {
+  const record = ctx.windows.createWindow(window, proc.pid);
+  proc.surface = { windowId: record.id, claimed: true }; // nothing will claim it
+
+  const iframe = document.createElement("iframe");
+  iframe.setAttribute(
+    "sandbox",
+    "allow-scripts allow-same-origin allow-forms allow-popups allow-downloads",
+  );
+  // Cross-origin frames get no passkeys/clipboard unless delegated.
+  iframe.allow =
+    "publickey-credentials-get; publickey-credentials-create; clipboard-write";
+  iframe.title = window.title;
+  iframe.src = url;
+  iframe.className = "app-frame is-loading";
+  iframe.addEventListener("load", () => iframe.classList.remove("is-loading"), {
+    once: true,
+  });
+
+  const onBlur = () => {
+    if (document.activeElement === iframe) ctx.windows.focusWindow(record.id);
+  };
+  globalThis.addEventListener("blur", onBlur);
+
+  ctx.processes.registerResource(proc.pid, "realm", () => {
+    globalThis.removeEventListener("blur", onBlur);
+    iframe.remove();
+  });
+
+  ctx.processes.setStatus(proc.pid, "running");
+  record.bodyEl.appendChild(iframe);
+}

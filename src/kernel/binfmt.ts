@@ -16,11 +16,13 @@ export type FileEntry = Flags &
         entry: string;
         window: WindowOptions;
       }
+    | { format: "web"; url: string; window: WindowOptions }
   );
 
 /** What a GUI app declares in src/apps/<name>/app.ts. */
 export interface AppManifest {
   window: WindowOptions;
+  url?: string;
   desktop?: { name: string; icon: string };
   admin?: boolean;
 }
@@ -52,14 +54,21 @@ const files: Record<string, FileEntry> = {
   ),
 
   ...Object.fromEntries(
-    Object.entries(manifests).map(([name, manifest]) => [
+    Object.entries(manifests).map(([name, manifest]): [string, FileEntry] => [
       `/ProgramFiles/${name}`,
-      {
-        format: "iframe" as const,
-        entry: `apps/${name}/main`,
-        window: manifest.window,
-        admin: manifest.admin === true,
-      },
+      manifest.url
+        ? {
+            format: "web",
+            url: manifest.url,
+            window: manifest.window,
+            admin: manifest.admin === true,
+          }
+        : {
+            format: "iframe",
+            entry: `apps/${name}/main`,
+            window: manifest.window,
+            admin: manifest.admin === true,
+          },
     ]),
   ),
 

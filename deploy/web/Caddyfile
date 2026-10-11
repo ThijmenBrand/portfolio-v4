@@ -55,7 +55,7 @@
 	# manager and frames the realm hosts; it loads no third-party code and
 	# talks to no server.
 	@kernel not path /app-host.html /worker-host.html
-	header @kernel Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' data: blob:; connect-src 'self'; worker-src 'none'; frame-src 'self'; child-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+	header @kernel Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' data: blob:; connect-src 'self'; worker-src 'none'; frame-src 'self' https://finance.thijmenbrand.nl; child-src 'self' https://finance.thijmenbrand.nl; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 
 	# --- CORS --------------------------------------------------------------
 	# Realms are sandboxed iframes with an opaque origin, so the browser
