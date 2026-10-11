@@ -180,9 +180,10 @@ label.row { cursor: default; }
   gap: 12px;
 }
 
-.wallpaper { display: grid; gap: 6px; text-align: center; font-size: 12px; color: var(--app-text-dim); text-transform: capitalize; }
+.wallpaper { position: relative; display: grid; gap: 6px; text-align: center; font-size: 12px; color: var(--app-text-dim); text-transform: capitalize; }
 
-.wallpaper input { position: absolute; opacity: 0; pointer-events: none; }
+/* Pinned inside the tile: the hidden file input is ~250px wide and would otherwise overflow the page. */
+.wallpaper input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; pointer-events: none; }
 
 .wallpaper-thumb {
   aspect-ratio: 16 / 10;
