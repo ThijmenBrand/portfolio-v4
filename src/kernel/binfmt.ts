@@ -19,6 +19,14 @@ const files: Record<string, FileEntry> = {
   "/ProgramFiles/sh": { format: "worker", entry: "apps/sh/main" },
   "/ProgramFiles/ls": { format: "worker", entry: "apps/ls/main" },
   "/ProgramFiles/clear": { format: "worker", entry: "apps/clear/main" },
+  "/ProgramFiles/mkdir": { format: "worker", entry: "apps/mkdir/main" },
+  "/ProgramFiles/rmdir": { format: "worker", entry: "apps/rmdir/main" },
+  "/ProgramFiles/rm": { format: "worker", entry: "apps/rm/main" },
+  "/ProgramFiles/touch": { format: "worker", entry: "apps/touch/main" },
+  "/ProgramFiles/cp": { format: "worker", entry: "apps/cp/main" },
+  "/ProgramFiles/mv": { format: "worker", entry: "apps/mv/main" },
+  "/ProgramFiles/ps": { format: "worker", entry: "apps/ps/main" },
+  "/ProgramFiles/kill": { format: "worker", entry: "apps/kill/main" },
   "/System/launcher": { format: "worker", entry: "System/Launcher/main" },
 
   // GUI apps: sandboxed iframes. `window` is created at exec; the app

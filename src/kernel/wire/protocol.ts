@@ -120,6 +120,7 @@ export const WIRE_CALLS = {
   "fs.stat": "stat",
   "fs.mkdir": "mkdir",
   "fs.unlink": "unlink",
+  "fs.rmdir": "rmdir",
 
   "io.open": "open",
   "io.close": "close",

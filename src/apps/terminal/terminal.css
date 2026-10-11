@@ -3,25 +3,49 @@
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  background: var(--app-bg);
+  background: var(--app-well);
   color: var(--app-text);
-  font: 13px/1.45 var(--app-mono);
+  font: 13.5px/1.55 var(--app-mono);
+  cursor: text;
 }
 
 .term-out {
   flex: 1;
   min-height: 0;
   margin: 0;
-  padding: 10px 12px;
+  padding: 12px 16px;
   overflow-y: auto;
   white-space: pre-wrap;
   word-break: break-word;
   font: inherit;
+  scrollbar-width: thin;
+  scrollbar-color: var(--app-border-hi) transparent;
+}
+
+/* Sits inline right after the prompt, growing as you type. */
+.term-input {
+  field-sizing: content;
+  min-width: 2ch;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--app-text);
+  caret-color: var(--app-accent);
+  font: inherit;
+  outline: none;
+  vertical-align: baseline;
+}
+
+.term-input:disabled {
+  color: var(--app-text-dim);
 }
 
 .term-hints {
-  padding: 4px 12px;
-  border-top: 1px solid var(--app-border);
+  margin: 0 12px 10px;
+  padding: 6px 10px;
+  border-radius: var(--app-radius);
+  background: var(--app-surface);
   color: var(--app-text-dim);
   white-space: pre-wrap;
   word-break: break-word;
@@ -29,25 +53,4 @@
 
 .term-hints[hidden] {
   display: none;
-}
-
-.term-prompt {
-  display: flex;
-  border-top: 1px solid var(--app-border);
-  background: var(--app-surface);
-}
-
-.term-input {
-  flex: 1;
-  height: var(--app-control);
-  padding: 0 12px;
-  border: 0;
-  background: transparent;
-  color: var(--app-text);
-  font: inherit;
-  outline: none;
-}
-
-.term-input:disabled {
-  color: var(--app-text-dim);
 }

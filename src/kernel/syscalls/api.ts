@@ -77,6 +77,7 @@ export interface AppInterface {
     stat(path: string): Promise<StatResult>;
     mkdir(path: string): Promise<void>;
     unlink(path: string): Promise<void>;
+    rmdir(path: string): Promise<void>;
   };
   io: {
     open(path: string, flags: OpenFlags): Promise<number>;
@@ -164,6 +165,7 @@ export function bindSyscalls(target: SyscallTable, pid: Pid): SystemInterface {
       stat: (path) => target.stat(pid, path),
       mkdir: (path) => target.mkdir(pid, path),
       unlink: (path) => target.unlink(pid, path),
+      rmdir: (path) => target.rmdir(pid, path),
     },
     io: {
       open: (path, flags) => target.open(pid, path, flags),

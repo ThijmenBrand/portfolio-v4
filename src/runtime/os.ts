@@ -108,6 +108,7 @@ export function buildAppInterface(client: WireClient, pid: Pid): AppInterface {
       stat: (path) => call("fs.stat", path),
       mkdir: (path) => call("fs.mkdir", path),
       unlink: (path) => call("fs.unlink", path),
+      rmdir: (path) => call("fs.rmdir", path),
     },
 
     io: {

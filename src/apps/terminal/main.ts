@@ -125,6 +125,7 @@ class Terminal {
       }
       // Any other key makes the shown candidates stale.
       this.showHints([]);
+      this.scrollToEnd();
 
       if (event.key === "Enter") {
         const line = this.input.value;
@@ -225,21 +226,40 @@ class Terminal {
    * `clear` doesn't need to, because sh prints a fresh prompt after it exits.
    */
   private clearScreen(keepPrompt: boolean): void {
-    const all = this.out.textContent ?? "";
-    this.out.textContent = keepPrompt ? all.slice(all.lastIndexOf("\n") + 1) : "";
+    const all = this.text();
+    this.setText(keepPrompt ? all.slice(all.lastIndexOf("\n") + 1) : "");
     this.out.scrollTop = 0;
+  }
+
+  /** Output only: the input lives inside `out` as its last child. */
+  private text(): string {
+    let all = "";
+    for (const node of this.out.childNodes) {
+      if (node !== this.input) all += node.textContent ?? "";
+    }
+    return all;
+  }
+
+  private setText(text: string): void {
+    this.out.replaceChildren(document.createTextNode(text), this.input);
+    this.input.focus();
+  }
+
+  private scrollToEnd(): void {
+    this.out.scrollTop = this.out.scrollHeight;
   }
 
   private append(text: string): void {
     const atBottom =
       this.out.scrollTop + this.out.clientHeight >= this.out.scrollHeight - 4;
 
-    this.out.appendChild(document.createTextNode(text));
+    // Before the input, so typing always continues right after the prompt.
+    this.out.insertBefore(document.createTextNode(text), this.input);
 
-    if (this.out.textContent && this.out.textContent.length > MAX_CHARS) {
-      this.out.textContent = this.out.textContent.slice(-MAX_CHARS);
+    if ((this.out.textContent?.length ?? 0) > MAX_CHARS) {
+      this.setText(this.text().slice(-MAX_CHARS));
     }
-    if (atBottom) this.out.scrollTop = this.out.scrollHeight;
+    if (atBottom) this.scrollToEnd();
   }
 }
 

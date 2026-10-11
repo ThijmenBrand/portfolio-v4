@@ -11,6 +11,14 @@ const apps = import.meta.glob<RealmAppModule>([
   "../apps/sh/main.ts",
   "../apps/ls/main.ts",
   "../apps/clear/main.ts",
+  "../apps/mkdir/main.ts",
+  "../apps/rmdir/main.ts",
+  "../apps/rm/main.ts",
+  "../apps/touch/main.ts",
+  "../apps/cp/main.ts",
+  "../apps/mv/main.ts",
+  "../apps/ps/main.ts",
+  "../apps/kill/main.ts",
   "../System/Launcher/main.ts",
 ]);
 
