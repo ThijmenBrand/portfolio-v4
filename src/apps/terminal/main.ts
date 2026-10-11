@@ -306,7 +306,8 @@ export class Terminal {
   }
 }
 
-export async function main(os: AppInterface): Promise<void> {
+/** `terminal [command...]` runs the command in the new shell, as if typed. */
+export async function main(os: AppInterface, args: string[] = []): Promise<void> {
   await followAccent(os);
   const handle = await os.windows.create({
     title: "Terminal",
@@ -321,4 +322,5 @@ export async function main(os: AppInterface): Promise<void> {
   const terminal = new Terminal(os, document.body);
   await os.process.onSignal("SIGTERM", () => terminal.dispose());
   await terminal.start();
+  if (args.length) await terminal.run(args.join(" "));
 }

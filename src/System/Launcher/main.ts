@@ -1,6 +1,6 @@
 // launcher — opens apps named in the page URL, then exits.
 //
-//   /                          → the default app (the resume)
+//   /                          → nothing extra: the user's autostart decides
 //   /?launch=terminal          → just the terminal
 //   /?launch=terminal,resume   → both, in that order (the last one gets focus)
 //   /?launch=                  → nothing: a clean desktop
@@ -11,8 +11,6 @@
 import { registry } from "../../apps/registry";
 import type { AppInterface } from "../../kernel/syscalls/api";
 
-/** Opened when the URL doesn't say otherwise: the first thing a visitor sees. */
-const DEFAULT_APPS = ["resume"];
 /** A link can't open more than this many windows. */
 const MAX_APPS = 5;
 
@@ -24,7 +22,7 @@ const MAX_APPS = 5;
 function requestedApps(search: string): string[] {
   const params = new URLSearchParams(search);
   const raw = params.get("launch");
-  if (raw === null) return DEFAULT_APPS;
+  if (raw === null) return [];
 
   const ids = raw
     .split(",")

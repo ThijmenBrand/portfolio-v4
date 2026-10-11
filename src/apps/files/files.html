@@ -1,0 +1,87 @@
+<div class="files">
+  <aside class="sidebar">
+    <h2 id="places-label">Places</h2>
+    <nav class="places" aria-labelledby="places-label" data-field="places"></nav>
+  </aside>
+
+  <main class="main">
+    <header class="toolbar">
+      <span class="nav-buttons">
+        <button type="button" class="icon-btn" data-action="back" title="Back (Alt+←)" aria-label="Back">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3.5 5.5 8l4.5 4.5" /></svg>
+        </button>
+        <button type="button" class="icon-btn" data-action="forward" title="Forward (Alt+→)" aria-label="Forward">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5 10.5 8 6 12.5" /></svg>
+        </button>
+      </span>
+      <nav class="crumbs" aria-label="Path" data-field="crumbs"></nav>
+      <span class="readonly-badge" data-field="readonly" hidden>Read-only</span>
+
+      <label class="search">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5" /><path d="m10.5 10.5 3 3" /></svg>
+        <input type="search" placeholder="Filter" aria-label="Filter this folder" spellcheck="false" data-field="search" />
+      </label>
+
+      <span class="segmented" role="radiogroup" aria-label="View">
+        <label title="Icons">
+          <input type="radio" name="view" value="grid" checked />
+          <span><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1" /><rect x="9" y="2.5" width="4.5" height="4.5" rx="1" /><rect x="2.5" y="9" width="4.5" height="4.5" rx="1" /><rect x="9" y="9" width="4.5" height="4.5" rx="1" /></svg><span class="sr">Icons</span></span>
+        </label>
+        <label title="List">
+          <input type="radio" name="view" value="list" />
+          <span><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4h11M2.5 8h11M2.5 12h11" /></svg><span class="sr">List</span></span>
+        </label>
+      </span>
+
+      <button type="button" class="icon-btn" data-action="new-folder" title="New folder (Alt+N)" aria-label="New folder">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 4a1 1 0 0 1 1-1h3.6l1.4 1.5h6a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1z" /><path d="M8 7v4M6 9h4" /></svg>
+      </button>
+      <label class="icon-btn" data-action="upload" title="Upload from your computer" aria-label="Upload files">
+        <input type="file" multiple data-field="upload" />
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 10.5V2.5M4.8 5.5 8 2.3l3.2 3.2M2.5 10v2.5a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1V10" /></svg>
+      </label>
+    </header>
+
+    <div class="list-head" data-field="list-head" role="presentation">
+      <button type="button" data-sort="name">Name</button>
+      <button type="button" data-sort="modifiedAt">Modified</button>
+      <button type="button" data-sort="size">Size</button>
+      <button type="button" data-sort="kind">Kind</button>
+    </div>
+
+    <div class="content" data-field="content" role="listbox" aria-multiselectable="true" aria-label="Folder contents" tabindex="0"></div>
+
+    <div class="empty" data-field="empty" hidden>
+      <svg viewBox="0 0 48 48" aria-hidden="true"><path class="folder-back" d="M6 13a3 3 0 0 1 3-3h10l4 4h16a3 3 0 0 1 3 3v3H6z" /><path class="folder-front" d="M6 18h36v17a3 3 0 0 1-3 3H9a3 3 0 0 1-3-3z" /></svg>
+      <p class="empty-title" data-field="empty-title"></p>
+      <p class="empty-hint" data-field="empty-hint"></p>
+    </div>
+
+    <div class="drop-hint" data-field="drop-hint" hidden></div>
+
+    <footer class="statusbar">
+      <span data-field="summary"></span>
+      <span class="toast" role="status" aria-live="polite" data-field="toast"></span>
+    </footer>
+  </main>
+</div>
+
+<div class="menu" role="menu" data-field="menu" hidden></div>
+
+<dialog class="confirm" data-field="confirm">
+  <p class="confirm-title" data-field="confirm-title"></p>
+  <p class="confirm-hint">This can't be undone.</p>
+  <div class="confirm-actions">
+    <button type="button" class="button" value="cancel">Cancel</button>
+    <button type="button" class="button button-danger" value="ok">Delete</button>
+  </div>
+</dialog>
+
+<dialog class="peek" data-field="peek">
+  <header class="peek-head">
+    <span class="peek-name" data-field="peek-name"></span>
+    <span class="peek-meta" data-field="peek-meta"></span>
+    <button type="button" class="icon-btn" data-action="peek-open">Open</button>
+  </header>
+  <div class="peek-body" data-field="peek-body"></div>
+</dialog>

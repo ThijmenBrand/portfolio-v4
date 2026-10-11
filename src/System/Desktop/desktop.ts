@@ -3,7 +3,7 @@ import { ADMIN_GID } from "../../kernel/fs/perm";
 import { kernelError, logError } from "../../kernel/errors";
 import type { SystemInterface } from "../../kernel/syscalls/api";
 import type { Rect } from "../../kernel/types";
-import { applyAccent, ICON_SCALES, loadSettings, wallpaperCSS } from "../../utils/settings";
+import { applyAccent, ICON_SCALES, loadAutostart, loadSettings, wallpaperCSS } from "../../utils/settings";
 
 import {
   cellKey,
@@ -39,6 +39,8 @@ import "./desktop.css";
  * One user's session, started by /System/login with USER/HOME set. Exiting
  * is logging out: login then ends whatever the session left running.
  */
+const USER_DIRS = ["Documents", "Downloads", "Pictures", "Music", "Videos"];
+
 export async function main(os: SystemInterface): Promise<void> {
   const { gid } = await os.process.ids();
   // Cosmetic: exec of an admin app fails anyway (EACCES), this just hides it.
@@ -48,7 +50,9 @@ export async function main(os: SystemInterface): Promise<void> {
 
   const home = (await os.process.env()).HOME ?? "/";
   await os.process.chdir(home).catch(() => os.process.chdir("/"));
-  await autostart(os, home);
+  // Created as the user, so they own them. Deleted ones come back next login, like XDG.
+  for (const dir of USER_DIRS) await os.fs.mkdir(`${home}/${dir}`).catch(() => {});
+  await autostart(os);
 
   await os.process.onSignal("SIGTERM", () => {
     desktop.destroy();
@@ -74,14 +78,12 @@ export function autostartEntries(text: string): string[] {
  * taskbar must be up before the launcher opens windows). A missing file or a
  * bad entry must never take the desktop down.
  */
-async function autostart(os: SystemInterface, home: string): Promise<void> {
-  for (const file of ["/etc/autostart", `${home}/.config/autostart`]) {
-    const text = await os.fs.readTextFile(file).catch(() => "");
-    for (const path of autostartEntries(text)) {
-      await os.process.spawn(path).catch((error) =>
-        console.error(`[desktop] autostart ${path} failed:`, error),
-      );
-    }
+async function autostart(os: SystemInterface): Promise<void> {
+  const system = autostartEntries(await os.fs.readTextFile("/etc/autostart").catch(() => ""));
+  for (const path of [...system, ...(await loadAutostart(os))]) {
+    await os.process.spawn(path).catch((error) =>
+      console.error(`[desktop] autostart ${path} failed:`, error),
+    );
   }
 }
 

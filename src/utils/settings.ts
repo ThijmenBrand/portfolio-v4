@@ -104,6 +104,25 @@ export async function saveCustomWallpaper(os: AppInterface, file: File): Promise
   await os.fs.writeFile(`${dir}/wallpaper`, new Uint8Array(await file.arrayBuffer()));
 }
 
+/** Until the user saves their own list: the resume, the first thing a visitor sees. */
+const DEFAULT_AUTOSTART = "/ProgramFiles/resume\n";
+
+/** Programs in ~/.config/autostart, which the desktop starts at login. */
+export async function loadAutostart(os: AppInterface): Promise<string[]> {
+  const text = await os.fs.readTextFile(`${await configDir(os)}/autostart`).catch(() => DEFAULT_AUTOSTART);
+  return text.split("\n").map((line) => line.trim()).filter((line) => line && !line.startsWith("#"));
+}
+
+/** Add or remove one program, leaving comments and other entries as they are. */
+export async function setAutostart(os: AppInterface, path: string, enabled: boolean): Promise<void> {
+  const file = `${await ensureConfigDir(os)}/autostart`;
+  const lines = (await os.fs.readTextFile(file).catch(() => DEFAULT_AUTOSTART))
+    .split("\n")
+    .filter((line) => line.trim() && line.trim() !== path);
+  if (enabled) lines.push(path);
+  await os.fs.writeTextFile(file, lines.map((line) => line + "\n").join(""));
+}
+
 async function ensureConfigDir(os: AppInterface): Promise<string> {
   const dir = await configDir(os);
   await os.fs.mkdir(dir).catch((error) => {

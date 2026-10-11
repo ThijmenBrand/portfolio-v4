@@ -8,13 +8,16 @@ import {
   clockFormat,
   CUSTOM_WALLPAPER,
   hasCustomWallpaper,
+  loadAutostart,
   loadSettings,
   saveCustomWallpaper,
+  setAutostart,
   saveSettings,
   wallpaperCSS,
   WALLPAPERS,
   type Settings,
 } from "../../utils/settings";
+import { registry } from "../registry";
 import settingsHTML from "./settings.html?raw";
 import "../../ui/theme.css";
 import "./settings.css";
@@ -24,7 +27,7 @@ import "./settings.css";
 const RELOAD_ON_HUP = [
   "/System/desktop",
   "/System/Taskbar",
-  ...["admin", "code", "resume", "terminal"].map((id) => `/ProgramFiles/${id}`),
+  ...["admin", "code", "files", "resume", "terminal"].map((id) => `/ProgramFiles/${id}`),
 ];
 const DESKTOP = "/System/desktop";
 const MAX_UPLOAD = 20 * 1024 * 1024;
@@ -40,7 +43,36 @@ export async function main(os: AppInterface, args: string[] = []): Promise<void>
 
   setUpTabs(args[0]);
   await bindForm(os, settings);
+  await bindStartup(os);
   await showAccount(os);
+}
+
+/** One switch per app, each adding or removing it in ~/.config/autostart. */
+async function bindStartup(os: AppInterface): Promise<void> {
+  const { gid } = await os.process.ids();
+  const enabled = new Set(await loadAutostart(os));
+  const [group] = fields("startup");
+  for (const app of registry.filter((app) => !app.admin || gid === ADMIN_GID)) {
+    const row = document.createElement("label");
+    row.className = "row";
+    row.innerHTML = `<span class="row-label"></span><input type="checkbox" role="switch" />`;
+    row.querySelector("span")!.textContent = app.name;
+    const input = row.querySelector("input")!;
+    input.checked = enabled.has(app.exec);
+    input.addEventListener("change", (event) => {
+      // Not a settings.json field: keep the form's change handler out of it.
+      event.stopPropagation();
+      void setAutostart(os, app.exec, input.checked).then(
+        () => showStatus("Saved"),
+        (error) => {
+          console.error("[settings]", error);
+          input.checked = !input.checked;
+          showStatus("Couldn't save. Try again.", true);
+        },
+      );
+    });
+    group.append(row);
+  }
 }
 
 function fields(name: string): HTMLElement[] {
