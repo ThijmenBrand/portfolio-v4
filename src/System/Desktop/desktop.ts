@@ -1,6 +1,7 @@
 import { allApps, registry } from "../../apps/registry";
 import { isAppFile, readManifest } from "../../utils/appfile";
 import { dirname } from "../../kernel/fs/path";
+import { confirmDialog } from "../../utils/confirm";
 import { emptyTrash, trash, trashCount, trashDir } from "../../utils/trash";
 import { kernelError, logError } from "../../kernel/errors";
 import type { SystemInterface } from "../../kernel/syscalls/api";
@@ -251,7 +252,14 @@ class Desktop implements DesktopCommands {
 
   private async emptyBin(): Promise<void> {
     if (!(await trashCount(this.os, this.home))) return;
-    if (!confirm("Empty the Bin? This can't be undone.")) return;
+    if (
+      !(await confirmDialog("Everything in the Bin will be deleted. This can't be undone.", {
+        title: "Empty the Bin?",
+        ok: "Empty Bin",
+        danger: true,
+      }))
+    )
+      return;
     await emptyTrash(this.os, this.home);
   }
 

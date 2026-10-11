@@ -77,6 +77,7 @@ export class ProcessManager implements ProcessManagerInterface {
       abortController: new AbortController(),
       signalHandlers: new Map(),
       faults: 0,
+      log: "",
       cwd: init.cwd,
       env: { ...init.env },
       uid: init.uid,

@@ -30,6 +30,7 @@ type ProcSource = {
   list(): ProcessInfo[];
   fds(pid: Pid): FdInfo[];
   env(pid: Pid): Record<string, string>;
+  log(pid: Pid): string;
 };
 
 export class ProcFS implements FileSystemDriver {
@@ -54,6 +55,7 @@ export class ProcFS implements FileSystemDriver {
       Object.entries(this.source.env(pid))
         .map(([name, value]) => `${name}=${value}\n`)
         .join(""),
+    log: (pid) => this.source.log(pid),
   };
 
   public constructor(source: ProcSource) {

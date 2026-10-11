@@ -14,6 +14,10 @@ import { signalGroup } from "./signals";
 import { requireAlive } from "../syscalls/guards";
 import type { Bytes, KernelContext, Pid } from "../types";
 
+// ponytail: 64 KiB tail of fd 1/2, so apps without a terminal still leave a trace.
+const LOG_LIMIT = 64 * 1024;
+const decoder = new TextDecoder();
+
 function withOffset<T>(
   ofd: OpenFileDescription,
   op: () => Promise<T>,
@@ -90,6 +94,8 @@ export async function writeFd(
   data: Bytes,
 ): Promise<number> {
   const proc = requireAlive(ctx, pid);
+  // Before get(): a desktop-launched app has no fd 1/2, and that throws EBADF.
+  if (fd === 1 || fd === 2) proc.log = (proc.log + decoder.decode(data)).slice(-LOG_LIMIT);
   const ofd = proc.files.get(fd);
 
   if (!ofd.flags.write) throw ebadf(`fd ${fd} is not open for writing`);

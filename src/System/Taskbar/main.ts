@@ -19,6 +19,7 @@ import {
   setInPathList,
 } from "../../utils/settings";
 import { shortcutsTo } from "../../utils/filetypes";
+import { confirmDialog } from "../../utils/confirm";
 
 const DEFAULT_ICON = "/assets/icons/default-app.svg";
 const SETTINGS = "/ProgramFiles/settings";
@@ -266,7 +267,13 @@ class Taskbar {
           [
             "Uninstall",
             async () => {
-              if (!confirm(`Uninstall ${name}?`)) return;
+              if (
+                !(await confirmDialog(
+                  `${name} and its desktop shortcuts will be removed.`,
+                  { title: `Uninstall ${name}?`, ok: "Uninstall", danger: true },
+                ))
+              )
+                return;
               await this.os.fs.unlink(exec);
               for (const path of shortcuts) await this.os.fs.unlink(path);
               await setInPathList(this.os, "taskbar", exec, false);

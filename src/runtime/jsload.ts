@@ -194,7 +194,8 @@ export async function loadProgram(
 
 /**
  * Point the realm's console at the program's stdio: log/info/debug to fd 1,
- * warn/error to fd 2, so they land in the terminal it was started from.
+ * warn/error to fd 2, so they land in the terminal it was started from
+ * (and in /proc/<pid>/log, which is all a desktop-launched app has).
  * The realm (worker or iframe) is this program's alone, so patching is safe. Returns a flush: await it before exiting.
  */
 export function pipeConsole(os: { io: { write(fd: number, data: Uint8Array): Promise<unknown> } }): () => Promise<void> {

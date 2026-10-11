@@ -8,6 +8,9 @@ ship it as a single file.
 Open this folder in Code and press Run on `main.js`. You can also type
 `./main.js` in a terminal here.
 
+`console.log` goes to the terminal it was started from. Started from the
+desktop, it has none: `cat /proc/<pid>/log` (pid from `ps`) shows the output.
+
 The first line picks how the file runs:
 
 | First line                | Runs as                                     |

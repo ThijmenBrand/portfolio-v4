@@ -38,6 +38,7 @@ export function createKernel(screen: HTMLElement): {
       list: () => processes.list(),
       fds: (pid) => processes.get(pid)?.files.list() ?? [],
       env: (pid) => processes.get(pid)?.env ?? {},
+      log: (pid) => processes.get(pid)?.log ?? "",
     }),
     readonly: true,
   });

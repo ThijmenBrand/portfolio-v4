@@ -107,6 +107,8 @@ export interface Process {
   signalHandlers: Map<Signal, () => void>;
   faults: number;
   lastFault?: FaultInfo;
+  /** Tail of what it wrote to fds 1/2: /proc/<pid>/log. */
+  log: string;
   cwd: string;
   env: Record<string, string>;
   uid: number;
