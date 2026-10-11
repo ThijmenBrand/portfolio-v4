@@ -164,7 +164,20 @@ export function executeIframe(
 
   // Removing the iframe unloads its document: that IS the kill. (The window
   // is destroyed by teardown too; remove() on a detached node is harmless.)
-  const { port } = connectRealm(ctx, proc, () => iframe.remove());
+  // The host reports clicks inside the frame (see iframe-entry.ts): raise
+  // the window. Accept it only from THIS frame. Not a new power: the app
+  // could already focus its own window with `windows.focus`.
+  const onMessage = (event: MessageEvent) => {
+    if (event.source !== iframe.contentWindow) return;
+    const data = event.data as { t?: unknown } | null;
+    if (data?.t === "realm-pointerdown") ctx.windows.focusWindow(record.id);
+  };
+  globalThis.addEventListener("message", onMessage);
+
+  const { port } = connectRealm(ctx, proc, () => {
+    globalThis.removeEventListener("message", onMessage);
+    iframe.remove();
+  });
 
   // Hidden until its host page has painted (dark, see app-host.html), so
   // launching never flashes the iframe's blank initial document.

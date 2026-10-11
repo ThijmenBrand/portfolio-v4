@@ -27,3 +27,12 @@ function onBoot(event: MessageEvent): void {
 }
 
 window.addEventListener("message", onBoot);
+
+// A click inside this frame never reaches the kernel's DOM, so say so: the
+// kernel raises our window. Capture phase, so an app's stopPropagation can't
+// swallow it.
+window.addEventListener(
+  "pointerdown",
+  () => window.parent.postMessage({ t: "realm-pointerdown" }, "*"),
+  true,
+);

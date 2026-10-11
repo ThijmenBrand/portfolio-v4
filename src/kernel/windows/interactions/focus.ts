@@ -22,25 +22,21 @@ export function enableFocus(
   windowElement.addEventListener("mousedown", handleFocus);
 
   // A click inside an iframe app never reaches our mousedown listener. What
-  // we DO see: the kernel's window loses focus to that iframe. If the newly
-  // focused element is an iframe inside this window, raise the window —
-  // but only if a person did it. An app calling .focus() on itself (e.g. a
-  // terminal focusing its input at startup) must not be able to steal the
+  // we DO see: the <iframe> element itself receives focus (focusin bubbles
+  // here). Unlike window "blur", this also fires when focus hops straight
+  // from one app's iframe to another's. Raise the window — but only if a
+  // person did it. An app calling .focus() on itself (e.g. a terminal
+  // focusing its input at startup) must not be able to steal the
   // foreground; then the keyboard goes back to the window that has focus.
-  const handleBlur = () => {
-    // activeElement is updated after blur fires; check on the next task.
-    setTimeout(() => {
-      const active = document.activeElement;
-      if (!(active instanceof HTMLIFrameElement)) return;
-      if (!windowElement.contains(active)) return;
-      if (userIsActive()) commands.focusWindow();
-      else commands.refocusActive();
-    }, 0);
+  const handleFocusIn = (event: FocusEvent) => {
+    if (!(event.target instanceof HTMLIFrameElement)) return;
+    if (userIsActive()) commands.focusWindow();
+    else commands.refocusActive();
   };
-  window.addEventListener("blur", handleBlur);
+  windowElement.addEventListener("focusin", handleFocusIn);
 
   return () => {
     windowElement.removeEventListener("mousedown", handleFocus);
-    window.removeEventListener("blur", handleBlur);
+    windowElement.removeEventListener("focusin", handleFocusIn);
   };
 }

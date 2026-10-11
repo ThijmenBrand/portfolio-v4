@@ -8,7 +8,6 @@ import terminalHTML from "./terminal.html?raw";
 import "./terminal.css";
 import "../../ui/theme.css";
 import type { Pid, Termination } from "../../kernel/types";
-import type { WindowHandle } from "../../kernel/windows/types";
 import { AnsiParser } from "./ansi";
 import { complete } from "./complete";
 
@@ -22,7 +21,7 @@ function errorCode(error: unknown): string | undefined {
   return String((error as { code: unknown }).code);
 }
 
-class Terminal {
+export class Terminal {
   private readonly os: AppInterface;
   private readonly out: HTMLElement;
   private readonly input: HTMLInputElement;
@@ -40,15 +39,15 @@ class Terminal {
 
   private master = -1;
   private disposed = false;
+  private readonly onExit?: () => void;
 
-  public constructor(os: AppInterface, handle: WindowHandle) {
+  /** `onExit` replaces the "shell exited" notice, e.g. to close an embedding panel. */
+  public constructor(os: AppInterface, parent: HTMLElement, onExit?: () => void) {
     this.os = os;
-
-    void handle.onCloseRequest(() => void os.process.exit(0));
+    this.onExit = onExit;
 
     const root = htmlStringToTemplate(terminalHTML);
-    // An iframe app owns its whole document.
-    document.body.appendChild(root);
+    parent.appendChild(root);
 
     this.out = selectElementFromTemplate(root, '[data-field="out"]');
     this.input = selectElementFromTemplate(root, '[data-field="input"]');
@@ -83,6 +82,10 @@ class Terminal {
     this.disposed = true;
   }
 
+  public focus(): void {
+    this.input.focus();
+  }
+
   /** Master -> screen. Ends when the shell exits and its slave end closes. */
   private async pump(): Promise<void> {
     try {
@@ -110,6 +113,7 @@ class Terminal {
       return;
     }
     if (this.disposed) return;
+    if (this.onExit) return this.onExit();
 
     this.append(`\n[${SHELL_PATH} exited with ${termination.code}]\n`);
     this.input.disabled = true;
@@ -284,7 +288,9 @@ export async function main(os: AppInterface): Promise<void> {
     minHeight: 220,
   });
 
-  const terminal = new Terminal(os, handle);
+  void handle.onCloseRequest(() => void os.process.exit(0));
+  // An iframe app owns its whole document.
+  const terminal = new Terminal(os, document.body);
   await os.process.onSignal("SIGTERM", () => terminal.dispose());
   await terminal.start();
 }

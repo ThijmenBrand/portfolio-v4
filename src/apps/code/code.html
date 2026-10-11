@@ -1,0 +1,81 @@
+<div class="code">
+  <nav class="code-activity">
+    <button class="code-activity-btn active" data-field="explorer-btn" title="Explorer (Ctrl+B)" aria-label="Toggle explorer">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round">
+        <path d="M8 3h7l4 4v11a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
+        <path d="M15 3v4h4M4 7v13a1 1 0 0 0 1 1h10" />
+      </svg>
+    </button>
+    <button class="code-activity-btn" data-field="terminal-btn" title="Terminal (Ctrl+`)" aria-label="Toggle terminal">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="4" width="18" height="16" rx="2" />
+        <path d="M7 9l3 3-3 3M12 15h5" />
+      </svg>
+    </button>
+  </nav>
+
+  <aside class="code-sidebar">
+    <header class="code-sidebar-head">
+      <span>Explorer</span>
+    </header>
+    <div class="code-section">
+      <button class="code-section-title" data-field="root-btn" title="Select root folder">
+        <span class="code-chevron open"></span><span data-field="root-name"></span>
+      </button>
+      <div class="code-section-actions">
+        <button class="code-icon-btn" data-field="new-file" title="New File" aria-label="New file">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M9.5 1.5h-5a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1v-9z" /><path d="M9.5 1.5v3h3M8 7.5v4M6 9.5h4" /></svg>
+        </button>
+        <button class="code-icon-btn" data-field="new-folder" title="New Folder" aria-label="New folder">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M1.5 3.5a1 1 0 0 1 1-1h3.6l1.4 1.5h6a1 1 0 0 1 1 1v7.5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1z" /><path d="M8 7v4M6 9h4" /></svg>
+        </button>
+        <button class="code-icon-btn" data-field="refresh" title="Refresh Explorer" aria-label="Refresh">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><path d="M13 8a5 5 0 1 1-1.5-3.6M13 2.5v2.5h-2.5" /></svg>
+        </button>
+        <button class="code-icon-btn" data-field="collapse" title="Collapse Folders" aria-label="Collapse folders">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5" /><path d="M5.5 8h5" /></svg>
+        </button>
+      </div>
+    </div>
+    <div class="code-tree" data-field="tree" role="tree"></div>
+  </aside>
+
+  <div class="code-resizer" data-field="resizer" aria-hidden="true"></div>
+
+  <main class="code-main">
+    <div class="code-tabs" data-field="tabs" role="tablist"></div>
+    <div class="code-crumbs" data-field="crumbs"></div>
+    <div class="code-editor" data-field="editor"></div>
+    <section class="code-welcome" data-field="welcome">
+      <svg class="code-welcome-logo" viewBox="0 0 48 48" fill="none">
+        <path d="M19 17l-7 7 7 7M29 17l7 7-7 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M26 14l-4 20" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.5" />
+      </svg>
+      <h1>Code</h1>
+      <p>Editing evolved, inside a browser tab.</p>
+      <dl class="code-shortcuts">
+        <dt>Save file</dt><dd><kbd data-mod></kbd><kbd>S</kbd></dd>
+        <dt>Close tab</dt><dd><kbd>Alt</kbd><kbd>W</kbd></dd>
+        <dt>Toggle explorer</dt><dd><kbd data-mod></kbd><kbd>B</kbd></dd>
+        <dt>Toggle terminal</dt><dd><kbd>Ctrl</kbd><kbd>`</kbd></dd>
+        <dt>Find in file</dt><dd><kbd data-mod></kbd><kbd>F</kbd></dd>
+        <dt>Open from terminal</dt><dd><kbd>code file.txt</kbd></dd>
+      </dl>
+    </section>
+    <section class="code-panel" data-field="panel" hidden>
+      <header class="code-panel-head">
+        <span>Terminal</span>
+        <button class="code-icon-btn" data-field="panel-close" title="Close Panel" aria-label="Close terminal">×</button>
+      </header>
+    </section>
+  </main>
+
+  <footer class="code-status">
+    <span class="code-status-item code-status-msg" data-field="status-msg"></span>
+    <span class="code-status-spacer"></span>
+    <span class="code-status-item" data-field="status-cursor"></span>
+    <span class="code-status-item" data-field="status-indent"></span>
+    <span class="code-status-item" data-field="status-enc"></span>
+    <span class="code-status-item" data-field="status-lang"></span>
+  </footer>
+</div>
