@@ -24,7 +24,7 @@ export const registry: AppEntry[] = [
   {
     id: "task-manager",
     name: "Task Manager",
-    icon: "/assets/icons/task-manager.png",
+    icon: "/assets/icons/task-manager.svg",
     exec: "/System/DebugPs",
   },
 ];

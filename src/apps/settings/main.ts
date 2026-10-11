@@ -5,6 +5,11 @@ import { ADMIN_GID, readGroups, readUsers, type User } from "../../bin/lib/users
 import {
   ACCENTS,
   applyAccent,
+  AVATARS,
+  CUSTOM_AVATAR,
+  hasCustomAvatar,
+  paintAvatar,
+  saveCustomAvatar,
   clockFormat,
   CUSTOM_WALLPAPER,
   hasCustomWallpaper,
@@ -105,10 +110,10 @@ function setUpTabs(initial?: string): void {
   select(tabs.find((tab) => tab.id === `tab-${initial}`) ?? tabs[0]);
 }
 
-function wallpaperOption(name: string, background: string): HTMLLabelElement {
+function wallpaperOption(name: string, background: string, group = "wallpaper"): HTMLLabelElement {
   const option = document.createElement("label");
   option.className = "wallpaper";
-  option.innerHTML = `<input type="radio" name="wallpaper"><span class="wallpaper-thumb"></span><span></span>`;
+  option.innerHTML = `<input type="radio" name="${group}"><span class="wallpaper-thumb"></span><span></span>`;
   option.querySelector("input")!.value = name;
   option.querySelector<HTMLElement>(".wallpaper-thumb")!.style.background = background;
   option.querySelector("span:last-child")!.textContent = name;
@@ -158,6 +163,8 @@ async function bindForm(os: AppInterface, settings: Settings): Promise<void> {
       });
   });
 
+  await bindAvatars(os, form);
+
   const [accents] = fields("accents");
   for (const [name, color] of Object.entries(ACCENTS)) {
     const swatch = Object.assign(document.createElement("input"), { type: "radio", name: "accent", value: name });
@@ -171,6 +178,7 @@ async function bindForm(os: AppInterface, settings: Settings): Promise<void> {
   const check = (name: string) => form.elements.namedItem(name) as HTMLInputElement;
   radio("wallpaper").value = settings.wallpaper;
   radio("accent").value = settings.accent;
+  radio("avatar").value = settings.avatar;
   radio("dateFormat").value = settings.dateFormat;
   radio("iconSize").value = settings.iconSize;
   check("clock24h").checked = settings.clock24h;
@@ -186,6 +194,8 @@ async function bindForm(os: AppInterface, settings: Settings): Promise<void> {
   form.addEventListener("change", () => {
     settings.wallpaper = radio("wallpaper").value;
     settings.accent = radio("accent").value;
+    const avatarChanged = settings.avatar !== radio("avatar").value;
+    settings.avatar = radio("avatar").value;
     settings.dateFormat = radio("dateFormat").value as Settings["dateFormat"];
     settings.iconSize = radio("iconSize").value as Settings["iconSize"];
     settings.clock24h = check("clock24h").checked;
@@ -193,13 +203,90 @@ async function bindForm(os: AppInterface, settings: Settings): Promise<void> {
     applyAccent(settings);
     renderPreview();
     void apply(os, settings).then(
-      () => showStatus("Saved"),
+      () => {
+        showStatus("Saved");
+        if (avatarChanged) void repaintAvatars(os);
+      },
       (error) => {
         console.error("[settings]", error);
         showStatus("Couldn't save. Try again.", true);
       },
     );
   });
+}
+
+/** Same picker as the wallpapers: initial, presets, the uploaded one, upload. */
+async function bindAvatars(os: AppInterface, form: HTMLFormElement): Promise<void> {
+  const [grid] = fields("avatars");
+  const { USER = "?" } = await os.process.env();
+  const thumb = (option: HTMLElement) => option.querySelector<HTMLElement>(".wallpaper-thumb")!;
+
+  // Folded away under the big avatar; it opens the picker and a pick closes it.
+  const toggle = document.querySelector<HTMLButtonElement>('[data-action="avatar"]')!;
+  const open = (show: boolean) => {
+    grid.hidden = !show;
+    toggle.setAttribute("aria-expanded", String(show));
+  };
+  toggle.addEventListener("click", () => open(toggle.getAttribute("aria-expanded") !== "true"));
+  grid.addEventListener("change", () => open(false));
+
+  const initial = wallpaperOption("", "", "avatar");
+  thumb(initial).textContent = USER[0];
+  initial.querySelector("span:last-child")!.textContent = "Initial";
+  grid.append(initial);
+  for (const [name, emoji] of Object.entries(AVATARS)) {
+    const option = wallpaperOption(name, "", "avatar");
+    thumb(option).textContent = emoji;
+    grid.append(option);
+  }
+
+  const custom = wallpaperOption(CUSTOM_AVATAR, "", "avatar");
+  const paintCustom = async () => {
+    const { HOME } = await os.process.env();
+    // Paint as if chosen, whatever is chosen now: the thumb always shows the upload.
+    const bytes = await os.fs.readFile(`${HOME}/.config/avatar`);
+    thumb(custom).style.background = `url("${URL.createObjectURL(new Blob([bytes]))}") center / cover`;
+  };
+  custom.hidden = !(await hasCustomAvatar(os));
+  if (!custom.hidden) await paintCustom().catch(console.error);
+  grid.append(custom);
+
+  const upload = document.createElement("label");
+  upload.className = "wallpaper wallpaper-upload";
+  upload.innerHTML = `<input type="file" accept="image/*"><span class="wallpaper-thumb" aria-hidden="true">+</span><span>Upload</span>`;
+  grid.append(upload);
+  upload.querySelector("input")!.addEventListener("change", (event) => {
+    event.stopPropagation();
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) return showStatus("Pick an image file.", true);
+    if (file.size > MAX_UPLOAD) return showStatus("Pick an image under 20 MB.", true);
+    void saveCustomAvatar(os, file)
+      .then(paintCustom)
+      .then(() => {
+        custom.hidden = false;
+        custom.querySelector("input")!.checked = true;
+        form.dispatchEvent(new Event("change"));
+        // Same choice as before (custom → new custom) won't count as a change.
+        void repaintAvatars(os);
+      })
+      .catch((error) => {
+        console.error("[settings]", error);
+        showStatus("Couldn't upload. Try again.", true);
+      });
+  });
+}
+
+/** The sidebar and Account avatars: initial first, then the chosen picture over it. */
+async function repaintAvatars(os: AppInterface): Promise<void> {
+  const { USER = "?" } = await os.process.env();
+  for (const el of fields("avatar")) {
+    el.style.background = "";
+    el.textContent = USER[0];
+    await paintAvatar(os, el);
+  }
 }
 
 let statusTimer: ReturnType<typeof setTimeout> | undefined;
@@ -247,6 +334,7 @@ async function showAccount(os: AppInterface): Promise<void> {
     for (const el of fields(name)) el.textContent = text;
   };
   set("avatar", user.name.slice(0, 1));
+  for (const el of fields("avatar")) void paintAvatar(os, el).catch(console.error);
   set("name", user.name);
   set("role", roleOf(user));
   set("uid", String(user.uid));

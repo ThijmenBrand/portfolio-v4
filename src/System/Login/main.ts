@@ -10,6 +10,7 @@ import {
   type User,
 } from "../../bin/lib/users";
 import type { SystemInterface } from "../../kernel/syscalls/api";
+import { paintAvatar as paintPicture } from "../../utils/settings";
 import {
   htmlStringToTemplate,
   selectElementFromTemplate,
@@ -23,7 +24,7 @@ import "../../ui/theme.css";
  * Runs as root, forever: pick a user, run their desktop until they log out,
  * end what their session left behind, repeat.
  *
- * Local users (guest, root, useradd) are checked against /etc/shadow, in the
+ * Local users (guest, useradd; never root) are checked against /etc/shadow, in the
  * browser. Any other name is the owner: the backend checks the password and
  * sets a session cookie, and the owner becomes a local admin-group user.
  */
@@ -86,6 +87,8 @@ async function ownerFromSession(os: SystemInterface): Promise<User | undefined> 
 /** Resolves with the user once their password checks out. */
 async function login(os: SystemInterface, name: string, password: string): Promise<User> {
   const local = userByName(await readUsers(os), name);
+  // Root has no desktop session; same message as a bad password, no hint it exists.
+  if (local?.uid === 0) throw new Error("Wrong user name or password.");
   if (local && local.gid !== ADMIN_GID) {
     const entry = (await readShadow(os)).get(name) ?? "!";
     if (await verifyPassword(entry, password)) return local;
@@ -117,7 +120,11 @@ function avatarColor(name: string): string {
   return `oklch(0.55 0.08 ${Math.abs(hash) % 360})`;
 }
 
-function paintAvatar(avatar: HTMLElement, name: string | undefined): void {
+/** Initial on a color right away, then the user's picture over it once read. */
+function paintAvatar(os: SystemInterface, avatar: HTMLElement, user: User | undefined): void {
+  avatar.style.background = "";
+  const name = user?.name;
+  if (user) void paintPicture(os, avatar, user.home).catch(() => {});
   if (name) {
     avatar.textContent = name[0].toUpperCase();
     avatar.style.setProperty("--avatar", avatarColor(name));
@@ -164,14 +171,14 @@ async function prompt(os: SystemInterface, root: HTMLElement): Promise<User> {
 
   // Local accounts get a tile; the owner picks "Other user" and types their name.
   const shadow = await readShadow(os);
-  const choices: (string | undefined)[] = (await readUsers(os))
-    .filter((user) => user.uid !== 0 && user.gid !== ADMIN_GID)
-    .map((user) => user.name);
+  const accounts = (await readUsers(os)).filter((user) => user.uid !== 0 && user.gid !== ADMIN_GID);
+  const choices: (string | undefined)[] = accounts.map((user) => user.name);
   choices.push(undefined);
+  const userOf = (choice: string | undefined) => accounts.find((user) => user.name === choice);
 
   const tiles: HTMLButtonElement[] = [];
   const select = (choice: string | undefined) => {
-    paintAvatar(avatar, choice);
+    paintAvatar(os, avatar, userOf(choice));
     title.textContent = choice ?? "Other user";
     name.hidden = choice !== undefined;
     name.value = choice ?? "";
@@ -190,7 +197,7 @@ async function prompt(os: SystemInterface, root: HTMLElement): Promise<User> {
     tile.className = "login-user";
     const small = document.createElement("span");
     small.className = "login-avatar";
-    paintAvatar(small, choice);
+    paintAvatar(os, small, userOf(choice));
     tile.append(small, choice ?? "Other user");
     tile.addEventListener("click", () => select(choice));
     tiles.push(tile);

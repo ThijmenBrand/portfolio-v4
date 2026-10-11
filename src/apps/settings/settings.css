@@ -183,6 +183,42 @@ label.row { cursor: default; }
 }
 .wallpaper-upload:hover .wallpaper-thumb { color: var(--app-text); }
 
+.avatar-edit { position: relative; padding: 0; border: 0; font-family: inherit; cursor: default; }
+/* Pencil badge; ::after because the avatar's text gets replaced. */
+.avatar-edit::after {
+  content: "✎";
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--app-surface-hi);
+  box-shadow: 0 0 0 2px var(--app-bg);
+  color: var(--app-text);
+  font-size: 11px;
+}
+.avatar-edit:hover::after,
+.avatar-edit[aria-expanded="true"]::after { background: var(--app-accent); }
+
+.avatars { grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); margin-bottom: 16px; animation: drop-in 160ms ease-out; }
+.avatars[hidden] { display: none; }
+@keyframes drop-in { from { opacity: 0; transform: translateY(-6px); } }
+.avatars .wallpaper-thumb {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: linear-gradient(145deg, var(--app-accent), color-mix(in srgb, var(--app-accent) 45%, #000));
+  color: #fff;
+  font-size: 22px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.avatars .wallpaper-upload .wallpaper-thumb { background: var(--app-well); color: var(--app-text-dim); }
+
 /* ------------------------------------------------------------- swatches -- */
 
 .swatches { display: flex; gap: 8px; }

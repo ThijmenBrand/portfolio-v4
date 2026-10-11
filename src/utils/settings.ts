@@ -23,6 +23,21 @@ export const WALLPAPERS: Record<string, string> = {
 /** settings.wallpaper value for the image the user uploaded to ~/.config/wallpaper. */
 export const CUSTOM_WALLPAPER = "custom";
 
+/** Preset profile pictures: an emoji on the account's usual colored circle. */
+export const AVATARS: Record<string, string> = {
+  fox: "🦊",
+  cat: "🐱",
+  owl: "🦉",
+  panda: "🐼",
+  frog: "🐸",
+  octopus: "🐙",
+  rocket: "🚀",
+  cactus: "🌵",
+};
+
+/** settings.avatar value for the image the user uploaded to ~/.config/avatar. */
+export const CUSTOM_AVATAR = "custom";
+
 export const ACCENTS: Record<string, string> = {
   blue: "#5a9cff",
   teal: "#3cc4c0",
@@ -41,6 +56,8 @@ export interface Settings {
   clockSeconds: boolean;
   dateFormat: "weekday" | "date" | "none";
   iconSize: keyof typeof ICON_SCALES;
+  /** "" shows the name's initial; else an AVATARS key or CUSTOM_AVATAR. */
+  avatar: string;
 }
 
 export const DEFAULTS: Settings = {
@@ -50,6 +67,7 @@ export const DEFAULTS: Settings = {
   clockSeconds: false,
   dateFormat: "weekday",
   iconSize: "medium",
+  avatar: "",
 };
 
 /** Point --app-accent (theme.css) at the chosen accent, in this document. */
@@ -104,6 +122,33 @@ export async function saveCustomWallpaper(os: AppInterface, file: File): Promise
   await os.fs.writeFile(`${dir}/wallpaper`, new Uint8Array(await file.arrayBuffer()));
 }
 
+/**
+ * Paints `home`'s chosen picture over `el` (which already shows the initial).
+ * Takes the home folder so the login screen, running as root, can paint every user.
+ */
+export async function paintAvatar(os: AppInterface, el: HTMLElement, home?: string): Promise<void> {
+  const { avatar } = await loadSettings(os, home);
+  if (avatar === CUSTOM_AVATAR) {
+    const bytes = await os.fs.readFile(`${await configDir(os, home)}/avatar`).catch(() => undefined);
+    if (!bytes) return;
+    // ponytail: blob URL never revoked, one per paint; fine for a handful of avatars
+    el.style.background = `url("${URL.createObjectURL(new Blob([bytes]))}") center / cover`;
+    el.textContent = "";
+  } else if (AVATARS[avatar]) {
+    el.textContent = AVATARS[avatar];
+  }
+}
+
+export async function hasCustomAvatar(os: AppInterface): Promise<boolean> {
+  return os.fs.stat(`${await configDir(os)}/avatar`).then(() => true, () => false);
+}
+
+/** Store an uploaded image as ~/.config/avatar, replacing the previous one. */
+export async function saveCustomAvatar(os: AppInterface, file: File): Promise<void> {
+  const dir = await ensureConfigDir(os);
+  await os.fs.writeFile(`${dir}/avatar`, new Uint8Array(await file.arrayBuffer()));
+}
+
 /** Until the user saves their own list: the resume, the first thing a visitor sees. */
 const DEFAULT_AUTOSTART = "/ProgramFiles/resume\n";
 
@@ -131,13 +176,14 @@ async function ensureConfigDir(os: AppInterface): Promise<string> {
   return dir;
 }
 
-async function configDir(os: AppInterface): Promise<string> {
-  return `${(await os.process.env()).HOME ?? "/"}/.config`;
+async function configDir(os: AppInterface, home?: string): Promise<string> {
+  return `${home ?? (await os.process.env()).HOME ?? "/"}/.config`;
 }
 
-export async function loadSettings(os: AppInterface): Promise<Settings> {
+/** This user's settings, or with `home` another user's (root only, for the login screen). */
+export async function loadSettings(os: AppInterface, home?: string): Promise<Settings> {
   try {
-    const text = await os.fs.readTextFile(`${await configDir(os)}/settings.json`);
+    const text = await os.fs.readTextFile(`${await configDir(os, home)}/settings.json`);
     // ponytail: merge over defaults, no per-field validation
     return { ...DEFAULTS, ...(JSON.parse(text) as Partial<Settings>) };
   } catch {

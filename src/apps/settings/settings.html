@@ -104,15 +104,17 @@
     </section>
 
     <section role="tabpanel" id="panel-account" aria-labelledby="tab-account" hidden>
-      <header><h1>Account</h1></header>
+      <header><h1>Account</h1><output class="status" aria-live="polite"></output></header>
 
       <div class="profile">
-        <span class="avatar avatar-lg" data-field="avatar" aria-hidden="true"></span>
+        <button type="button" class="avatar avatar-lg avatar-edit" data-field="avatar" data-action="avatar" aria-label="Change picture" aria-expanded="false" aria-controls="avatar-picker"></button>
         <span>
           <span class="profile-name" data-field="name"></span>
           <span class="role-badge" data-field="role"></span>
         </span>
       </div>
+
+      <div class="wallpapers avatars" id="avatar-picker" role="radiogroup" aria-label="Picture" data-field="avatars" hidden></div>
 
       <div class="group">
         <div class="row"><span class="row-label">User ID</span><span class="row-value" data-field="uid"></span></div>
