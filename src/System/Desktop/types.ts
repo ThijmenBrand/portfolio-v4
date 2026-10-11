@@ -27,6 +27,11 @@ export interface DesktopIcon {
   selected: boolean;
 }
 
+export interface Point {
+  x: number;
+  y: number;
+}
+
 export interface IconPosition {
   icon: DesktopIcon;
   x: number;
@@ -44,8 +49,11 @@ export interface DesktopCommands {
   clearSelection(): void;
   selectWithin(area: Rect): void;
   selectedIcons(): DesktopIcon[];
-  moveTo(positions: readonly IconPosition[]): void;
-  commitMove(icons: readonly DesktopIcon[]): void;
+  /** `pointer` (client coordinates) is where the drag is: over the Bin, it lights up. */
+  moveTo(positions: readonly IconPosition[], pointer?: Point): void;
+  /** Dropped on the Bin: the icons' files go there instead of to a cell. */
+  commitMove(icons: readonly DesktopIcon[], pointer?: Point): void;
+  trashSelection(): void;
   launch(icon: DesktopIcon): void;
   activateSelection(): void;
   moveFocus(

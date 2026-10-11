@@ -21,6 +21,13 @@ export function enableKeyboard(
       case "Enter":
         commands.activateSelection();
         break;
+      case "Delete":
+        commands.trashSelection();
+        break;
+      case "Backspace":
+        if (!event.metaKey && !event.ctrlKey) return;
+        commands.trashSelection();
+        break;
       case "Escape":
         commands.closeMenu();
         commands.clearSelection();

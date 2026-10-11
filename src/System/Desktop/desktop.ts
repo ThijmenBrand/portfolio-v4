@@ -1,6 +1,7 @@
 import { allApps, registry } from "../../apps/registry";
 import { isAppFile, readManifest } from "../../utils/appfile";
 import { dirname } from "../../kernel/fs/path";
+import { emptyTrash, trash, trashCount, trashDir } from "../../utils/trash";
 import { kernelError, logError } from "../../kernel/errors";
 import type { SystemInterface } from "../../kernel/syscalls/api";
 import type { Rect } from "../../kernel/types";
@@ -49,6 +50,7 @@ import type {
   DesktopIcon,
   DesktopItem,
   IconPosition,
+  Point,
 } from "./types";
 
 import desktopHTML from "./desktop.html?raw";
@@ -62,6 +64,11 @@ import "./desktop.css";
  * is logging out: login then ends whatever the session left running.
  */
 const USER_DIRS = ["Documents", "Downloads", "Pictures", "Music", "Videos"];
+
+const BIN_LID = '<path class="bin" d="M9 13h30M19 13V9a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v4" />';
+const BIN_CAN = '<path class="bin" d="M12 13l2.2 27a2 2 0 0 0 2 1.8h15.6a2 2 0 0 0 2-1.8L36 13" />';
+const BIN_EMPTY = `<svg viewBox="0 0 48 48" aria-hidden="true">${BIN_LID}${BIN_CAN}<path class="bin" d="M20 19v16M28 19v16" /></svg>`;
+const BIN_FULL = `<svg viewBox="0 0 48 48" aria-hidden="true"><path class="bin-paper" d="M15 15l4-5 6 3 5-4 4 6z" />${BIN_CAN}<path class="bin" d="M9 15h30" /></svg>`;
 
 export async function main(os: SystemInterface): Promise<void> {
   const home = (await os.process.env()).HOME ?? "/";
@@ -181,6 +188,8 @@ class Desktop implements DesktopCommands {
 
   private readonly marquee: HTMLElement;
   private readonly folder: string;
+  private readonly home: string;
+  private readonly bin: HTMLElement;
 
   private readonly icons: DesktopIcon[] = [];
   private readonly iconDisposers = new Map<DesktopIcon, () => void>();
@@ -194,6 +203,7 @@ class Desktop implements DesktopCommands {
     this.os = os;
     this.root = root;
     this.folder = folder;
+    this.home = dirname(folder);
     root.innerHTML = desktopHTML;
 
     this.surface = this.require("#desktop");
@@ -202,6 +212,64 @@ class Desktop implements DesktopCommands {
 
     this.menu = createMenu(this.surface, menuHTML, menuItemHTML);
     this.disposers.push(() => this.menu.destroy());
+    this.bin = this.createBin();
+  }
+
+  /** Not a file in ~/Desktop: a fixed icon for ~/.Trash, so scan() never sees it. */
+  private createBin(): HTMLElement {
+    const { element } = createIcon(
+      { name: "Bin", path: trashDir(this.home), label: "Bin", directory: true, svg: BIN_EMPTY },
+      appIconHTML,
+    );
+    element.classList.add("desktop-bin");
+    element.addEventListener("pointerdown", (event) => event.stopPropagation());
+    element.addEventListener("dblclick", (event) => {
+      event.stopPropagation();
+      this.openBin();
+    });
+    element.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const bounds = this.surface.getBoundingClientRect();
+      this.menu.open(event.clientX - bounds.left, event.clientY - bounds.top, [
+        { label: "Open", action: () => this.openBin() },
+        { label: "Empty Bin", action: () => void this.emptyBin().catch(logError) },
+      ]);
+    });
+    this.iconLayer.appendChild(element);
+    return element;
+  }
+
+  private openBin(): void {
+    const dir = trashDir(this.home);
+    void this.os.fs
+      .mkdir(dir)
+      .catch(() => {})
+      .then(() => this.os.process.spawn("/ProgramFiles/files", [dir]))
+      .catch(logError);
+  }
+
+  private async emptyBin(): Promise<void> {
+    if (!(await trashCount(this.os, this.home))) return;
+    if (!confirm("Empty the Bin? This can't be undone.")) return;
+    await emptyTrash(this.os, this.home);
+  }
+
+  private async renderBin(): Promise<void> {
+    const full = (await trashCount(this.os, this.home)) > 0;
+    this.bin.querySelector(".app-icon-tile")!.innerHTML = full ? BIN_FULL : BIN_EMPTY;
+    this.bin.title = full ? "Bin (has items)" : "Bin";
+  }
+
+  private overBin(pointer?: Point): boolean {
+    if (!pointer) return false;
+    const r = this.bin.getBoundingClientRect();
+    return pointer.x >= r.left && pointer.x <= r.right && pointer.y >= r.top && pointer.y <= r.bottom;
+  }
+
+  public trashSelection(): void {
+    const paths = this.selectedIcons().map((icon) => icon.item.path);
+    if (paths.length) void trash(this.os, this.home, paths).catch(logError);
   }
 
   /** Everything that needs a syscall, so the constructor can stay sync. */
@@ -212,6 +280,7 @@ class Desktop implements DesktopCommands {
 
     this.layout = await loadIconLayout(this.os);
     await this.syncIcons();
+    await this.renderBin();
 
     this.disposers.push(
       enableMarquee(this.surface, this.marquee, this),
@@ -225,6 +294,7 @@ class Desktop implements DesktopCommands {
     this.disposers.push(
       await this.os.events.subscribe(["fs.changed"], (event) => {
         if (dirname(event.path) === this.folder) this.scheduleSync();
+        if (dirname(event.path) === trashDir(this.home)) void this.renderBin().catch(logError);
       }),
     );
 
@@ -524,13 +594,20 @@ class Desktop implements DesktopCommands {
 
   // --------------------------------------------------------------- movement
 
-  public moveTo(positions: readonly IconPosition[]): void {
+  public moveTo(positions: readonly IconPosition[], pointer?: Point): void {
     for (const position of positions) {
       this.place(position.icon, position.x, position.y);
     }
+    this.bin.classList.toggle("is-drop-target", this.overBin(pointer));
   }
 
-  public commitMove(moved: readonly DesktopIcon[]): void {
+  public commitMove(moved: readonly DesktopIcon[], pointer?: Point): void {
+    this.bin.classList.remove("is-drop-target");
+    if (this.overBin(pointer)) {
+      // fs.changed takes the icons away once the files are gone.
+      void trash(this.os, this.home, moved.map((icon) => icon.item.path)).catch(logError);
+      return;
+    }
     const movedSet = new Set(moved);
     const taken = this.takenCells(movedSet);
     const columns = this.columns();
@@ -671,6 +748,7 @@ class Desktop implements DesktopCommands {
                 action: () => void this.removeShortcuts(selection).catch(logError),
               }
             : { label: "Show in Files", action: () => this.showInFiles() },
+          { label: "Move to Bin", action: () => this.trashSelection() },
         ]
       : [
           { label: "Open Desktop folder", action: () => this.showInFiles() },

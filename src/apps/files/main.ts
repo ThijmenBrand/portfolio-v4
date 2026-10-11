@@ -11,6 +11,7 @@ import { followAccent, loadSettings } from "../../utils/settings";
 import { formatSize, freeName } from "./names";
 import { PLACES } from "../../utils/places";
 import { copyTree, moveTree, removeTree } from "../../utils/tree";
+import { emptyTrash, purge, restore, trash, trashDir } from "../../utils/trash";
 import {
   defaultAppFor,
   extOf,
@@ -60,6 +61,9 @@ const ERRORS: Record<string, string> = {
   EEXIST: "An item with that name already exists.",
 };
 
+const BIN_SVG =
+  '<path d="M3.5 5.5h13M8 5.5V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5M5 5.5l.8 10.6a1 1 0 0 0 1 .9h6.4a1 1 0 0 0 1-.9L15 5.5M8.5 8.5v5.5M11.5 8.5v5.5" />';
+
 const PROGRAM_SVG =
   '<svg viewBox="0 0 48 48" aria-hidden="true"><rect class="page" x="6" y="9" width="36" height="30" rx="4" /><path class="prompt" d="m14 19 5 5-5 5M23 29h10" /></svg>';
 
@@ -72,6 +76,7 @@ const join = (dir: string, name: string): string =>
   dir === "/" ? `/${name}` : `${dir}/${name}`;
 const isInside = (path: string, dir: string): boolean =>
   path === dir || path.startsWith(dir === "/" ? "/" : `${dir}/`);
+const inBin = (): boolean => cwd === trashDir(home);
 
 function resolve(cwd: string, path: string): string {
   const parts: string[] = [];
@@ -458,10 +463,14 @@ function render(): void {
   if (!visible.length) {
     field("empty-title").textContent = query
       ? `Nothing named “${query}” here`
-      : "This folder is empty";
+      : inBin()
+        ? "The Bin is empty"
+        : "This folder is empty";
     field("empty-hint").textContent = query
       ? "Clear the filter to see everything in this folder."
-      : canWrite
+      : inBin()
+        ? "Deleted items wait here until you empty the Bin."
+        : canWrite
         ? "Drop files here to upload them, or right-click to make a folder."
         : "";
   }
@@ -489,6 +498,7 @@ function render(): void {
 
 function displayName(path: string): string {
   if (path === home) return "Home";
+  if (path === trashDir(home)) return "Bin";
   if (path === "/") return "Computer";
   return basename(path);
 }
@@ -522,7 +532,7 @@ function renderCrumbs(): void {
 
 function renderPlaces(): void {
   field("places").replaceChildren(
-    ...PLACES.map((place) => {
+    ...[...PLACES, { label: "Bin", path: "~/.Trash", svg: BIN_SVG }].map((place) => {
       const path = place.path.startsWith("~")
         ? home + place.path.slice(1)
         : place.path;
@@ -532,7 +542,11 @@ function renderPlaces(): void {
       button.title = place.label;
       button.innerHTML = `<svg viewBox="0 0 20 20" aria-hidden="true">${place.svg}</svg>`;
       button.append(place.label);
-      button.addEventListener("click", () => void navigate(path));
+      // The Bin only exists once something was deleted: make it on first visit.
+      button.addEventListener("click", () =>
+        void (path === trashDir(home) ? os.fs.mkdir(path).catch(() => {}) : Promise.resolve())
+          .then(() => navigate(path)),
+      );
       makeDropTarget(button, () => path);
       return button;
     }),
@@ -759,20 +773,53 @@ function moveInto(paths: string[], dir: string, copyOnly: boolean): void {
   });
 }
 
-async function remove(): Promise<void> {
+const describe = (paths: string[]): string =>
+  paths.length === 1 ? `“${basename(paths[0])}”` : `${paths.length} items`;
+
+/** To the Bin; in the Bin (or with `permanent`) gone for good, after a confirm. */
+async function remove(permanent = false): Promise<void> {
   const chosen = selectedItems();
   if (!chosen.length || !canWrite) return;
-  const what =
-    chosen.length === 1 ? `“${chosen[0].name}”` : `${chosen.length} items`;
-  if (!(await confirmDelete(`Delete ${what}?`))) return;
+  const paths = chosen.map((item) => item.path);
+  if (!permanent && !inBin()) return moveToBin(paths);
+  if (!(await confirmDelete(`Delete ${describe(paths)} permanently?`))) return;
   void mutate(async () => {
-    for (const item of chosen) await removeTree(os, item.path);
-    if (clipboard)
-      clipboard.paths = clipboard.paths.filter(
-        (p) => !chosen.some((item) => isInside(p, item.path)),
-      );
+    for (const item of chosen)
+      if (inBin()) await purge(os, home, item.name);
+      else await removeTree(os, item.path);
+    forgetClipboard(paths);
     return [];
   });
+}
+
+function moveToBin(paths: string[]): void {
+  void mutate(async () => {
+    await trash(os, home, paths);
+    forgetClipboard(paths);
+    toast(`Moved ${describe(paths)} to the Bin.`);
+    return [];
+  });
+}
+
+function forgetClipboard(paths: string[]): void {
+  if (clipboard)
+    clipboard.paths = clipboard.paths.filter(
+      (p) => !paths.some((path) => isInside(p, path)),
+    );
+}
+
+function putBack(): void {
+  const chosen = selectedItems();
+  void mutate(async () => {
+    for (const item of chosen) await restore(os, home, item.name);
+    toast(`Put back ${describe(chosen.map((item) => item.path))}.`);
+    return [];
+  });
+}
+
+async function emptyBin(): Promise<void> {
+  if (!(await confirmDelete("Empty the Bin?"))) return;
+  void mutate(() => emptyTrash(os, home));
 }
 
 function create(kind: "directory" | "file"): void {
@@ -990,6 +1037,23 @@ function closeMenu(): void {
 function itemMenu(): (MenuEntry | null)[] {
   const chosen = selectedItems();
   const one = chosen.length === 1 ? chosen[0] : null;
+  if (inBin())
+    return [
+      { label: "Put back", action: putBack },
+      {
+        label: "Quick Look",
+        hint: "Space",
+        action: () => void peek(one ?? undefined),
+        disabled: !one,
+      },
+      null,
+      {
+        label: "Delete permanently",
+        hint: "Del",
+        action: () => void remove(true),
+        danger: true,
+      },
+    ];
   return [
     {
       label: "Open",
@@ -1033,7 +1097,7 @@ function itemMenu(): (MenuEntry | null)[] {
     },
     null,
     {
-      label: "Delete",
+      label: "Move to Bin",
       hint: "Del",
       action: () => void remove(),
       disabled: !canWrite,
@@ -1043,6 +1107,15 @@ function itemMenu(): (MenuEntry | null)[] {
 }
 
 function folderMenu(): (MenuEntry | null)[] {
+  if (inBin())
+    return [
+      {
+        label: "Empty Bin",
+        action: () => void emptyBin(),
+        disabled: !items.some((item) => item.name !== ".info"),
+        danger: true,
+      },
+    ];
   return [
     {
       label: "New folder",
@@ -1214,6 +1287,8 @@ function makeDropTarget(node: HTMLElement, target: () => string | null): void {
   const accepts = (event: DragEvent): string | null => {
     const dir = target();
     if (!dir) return null;
+    if (dir === trashDir(home))
+      return dragging && !dragging.some((path) => isInside(dir, path)) ? dir : null;
     if (dragging)
       return dragging.some(
         (path) => isInside(dir, path) || dirname(path) === dir,
@@ -1223,11 +1298,12 @@ function makeDropTarget(node: HTMLElement, target: () => string | null): void {
     return event.dataTransfer?.types.includes("Files") ? dir : null;
   };
   node.addEventListener("dragover", (event) => {
-    if (!accepts(event)) return;
+    const dir = accepts(event);
+    if (!dir) return;
     event.preventDefault();
     event.stopPropagation();
     event.dataTransfer!.dropEffect =
-      dragging && !event.altKey ? "move" : "copy";
+      dragging && (!event.altKey || dir === trashDir(home)) ? "move" : "copy";
     node.classList.add("is-drop-target");
   });
   node.addEventListener("dragleave", () =>
@@ -1240,7 +1316,8 @@ function makeDropTarget(node: HTMLElement, target: () => string | null): void {
     event.preventDefault();
     event.stopPropagation();
     hideDropHint();
-    if (dragging) moveInto(dragging, dir, event.altKey);
+    if (dir === trashDir(home)) moveToBin(dragging!);
+    else if (dragging) moveInto(dragging, dir, event.altKey);
     else upload([...(event.dataTransfer?.files ?? [])], dir);
   });
 }
@@ -1392,6 +1469,7 @@ function bindKeys(): void {
     else if (mod && event.code === "KeyX") copy(true);
     else if (mod && event.code === "KeyV") paste();
     else if (mod && event.shiftKey && event.code === "Period") toggleHidden();
+    else if (mod && event.key === "Backspace") void remove(event.altKey);
     else if (mod) handled = false;
     else if (event.key === "ArrowDown")
       moveCursor(cursor < 0 ? 0 : cursor + cols, event.shiftKey);
@@ -1408,7 +1486,7 @@ function bindKeys(): void {
     else if (event.key === "Backspace") goUp();
     else if (event.key === " ") void peek();
     else if (event.key === "F2") rename(cursor);
-    else if (event.key === "Delete") void remove();
+    else if (event.key === "Delete") void remove(event.shiftKey);
     else if (event.key === "Escape") {
       if (query) {
         query = "";

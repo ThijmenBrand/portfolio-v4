@@ -62,6 +62,7 @@ export function enableDrag(
         x: origin.x + dx,
         y: origin.y + dy,
       })),
+      { x: event.clientX, y: event.clientY },
     );
   };
 
@@ -79,7 +80,10 @@ export function enableDrag(
     }
     dragging = false;
     for (const origin of origins) setDragging(origin.icon, false);
-    commands.commitMove(origins.map((origin) => origin.icon));
+    commands.commitMove(
+      origins.map((origin) => origin.icon),
+      { x: event.clientX, y: event.clientY },
+    );
     origins = [];
   };
 
