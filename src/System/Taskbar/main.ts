@@ -254,9 +254,28 @@ class Taskbar {
     });
   }
 
-  private async tileMenuItems({ name, exec }: AppEntry): Promise<MenuItems> {
+  private async tileMenuItems({
+    id,
+    name,
+    exec,
+  }: AppEntry): Promise<MenuItems> {
     const folder = `${(await this.os.process.env()).HOME ?? ""}/Desktop`;
     const shortcuts = await shortcutsTo(this.os, folder, exec);
+    const uninstall: MenuItems = id.startsWith("user-")
+      ? [
+          [
+            "Uninstall",
+            async () => {
+              if (!confirm(`Uninstall ${name}?`)) return;
+              await this.os.fs.unlink(exec);
+              for (const path of shortcuts) await this.os.fs.unlink(path);
+              await setInPathList(this.os, "taskbar", exec, false);
+              this.apps = await allApps(this.os);
+              await this.loadPins();
+            },
+          ],
+        ]
+      : [];
     return [
       this.pinItem(exec),
       [
@@ -271,6 +290,7 @@ class Taskbar {
             );
         },
       ],
+      ...uninstall,
     ];
   }
 
