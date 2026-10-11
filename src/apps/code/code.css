@@ -90,6 +90,76 @@
   border-right: 1px solid var(--app-border);
 }
 
+.code-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.code-view[hidden],
+.code-config-form[hidden] {
+  display: none;
+}
+
+/* ---- run and debug ---- */
+
+.code-config-play {
+  color: #6cd39a;
+}
+
+.code-config-play svg {
+  width: 12px;
+  height: 12px;
+}
+
+.code-config-detail {
+  color: var(--app-text-faint);
+  font-size: 11px;
+}
+
+.code-tree > .code-btn {
+  margin: 8px 14px;
+}
+
+.code-config-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: none;
+  padding: 10px 14px 14px;
+  border-top: 1px solid var(--app-border);
+  color: var(--app-text-dim);
+  font-size: 11px;
+}
+
+.code-config-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.code-config-form :is(input, select) {
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--app-border-hi);
+  border-radius: 3px;
+  background: var(--app-well);
+  color: var(--app-text);
+  font: 12px var(--app-mono);
+}
+
+.code-config-form :is(input, select):focus {
+  outline: none;
+  border-color: var(--app-accent);
+}
+
+.code-config-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
 .code-sidebar-head {
   display: flex;
   align-items: center;
@@ -301,6 +371,7 @@
 /* ---- main ---- */
 
 .code-main {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -308,9 +379,22 @@
   background: var(--app-well);
 }
 
+/* Top-right of the tab bar, like VS Code's Run button. */
+.code-run {
+  position: absolute;
+  top: calc((var(--code-tab) - 22px) / 2);
+  right: 8px;
+  color: #6cd39a;
+}
+
+.code-run[hidden] {
+  display: none;
+}
+
 .code-tabs {
   display: flex;
   flex: none;
+  padding-right: 36px; /* room for .code-run */
   height: var(--code-tab);
   overflow-x: auto;
   overflow-y: hidden;

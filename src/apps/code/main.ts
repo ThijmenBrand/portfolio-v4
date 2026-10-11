@@ -69,6 +69,28 @@ interface Tab {
   el: HTMLElement;
 }
 
+/** One entry of `.code/launch.json`, VS Code's launch.json made small. */
+interface LaunchConfig {
+  name?: string;
+  /** Relative to the explorer root, or absolute. */
+  program: string;
+  /** e.g. "/ProgramFiles/sh". Omitted: run the file itself (needs `#!`). */
+  interpreter?: string;
+  args?: string[];
+}
+
+const LAUNCH_FILE = ".code/launch.json";
+
+const PLAY_SVG =
+  '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M4.5 2.8v10.4a.5.5 0 0 0 .77.42l8-5.2a.5.5 0 0 0 0-.84l-8-5.2a.5.5 0 0 0-.77.42z" /></svg>';
+
+/** Single-quotes a shell word when needed; sh has no escapes inside '...'. */
+const quote = (word: string): string =>
+  /^[\w./=:+-]+$/.test(word) ? word : `'${word}'`;
+
+const message = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
 /** New file/folder name being typed inline in the tree. */
 interface Pending {
   dir: string;
@@ -145,6 +167,8 @@ class Editor {
   private title = "";
   private flashTimer = 0;
   private terminal: Terminal | null = null;
+  private launch: LaunchConfig[] = [];
+  private sidebarView: "explorer" | "run" = "explorer";
 
   public constructor(os: AppInterface, win: WindowHandle) {
     this.os = os;
@@ -233,8 +257,25 @@ class Editor {
 
   private bindChrome(): void {
     this.field("explorer-btn").addEventListener("click", () =>
-      this.toggleSidebar(),
+      this.showView("explorer"),
     );
+    this.field("run-btn").addEventListener("click", () => this.showView("run"));
+    this.field("config-add").addEventListener(
+      "click",
+      () => void this.startConfig(),
+    );
+    this.field("config-open").addEventListener(
+      "click",
+      () => void this.open(join(this.rootDir, LAUNCH_FILE), false),
+    );
+    this.field("config-cancel").addEventListener("click", () => {
+      this.field("config-form").hidden = true;
+    });
+    const form = this.field<HTMLFormElement>("config-form");
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      void this.addConfig(new FormData(form));
+    });
     this.field("root-btn").addEventListener("click", () => {
       this.selectedDir = this.rootDir;
       this.highlight();
@@ -254,6 +295,10 @@ class Editor {
     this.field("terminal-btn").addEventListener(
       "click",
       () => void this.toggleTerminal(),
+    );
+    this.field("run").addEventListener(
+      "click",
+      () => void (this.active && this.run(this.active.path)),
     );
     this.field("panel-close").addEventListener(
       "click",
@@ -311,7 +356,19 @@ class Editor {
 
   private toggleSidebar(): void {
     const hidden = this.root.classList.toggle("no-sidebar");
-    this.field("explorer-btn").classList.toggle("active", !hidden);
+    this.field(`${this.sidebarView}-btn`).classList.toggle("active", !hidden);
+  }
+
+  /** Like VS Code: clicking the open view's icon hides the sidebar. */
+  private showView(view: "explorer" | "run"): void {
+    const hidden = this.root.classList.contains("no-sidebar");
+    if (!hidden && view === this.sidebarView) return this.toggleSidebar();
+    this.field(`${this.sidebarView}-btn`).classList.remove("active");
+    this.sidebarView = view;
+    this.field("explorer-view").hidden = view !== "explorer";
+    this.field("run-view").hidden = view !== "run";
+    if (hidden) this.toggleSidebar();
+    else this.field(`${view}-btn`).classList.add("active");
   }
 
   /** The shell starts on first open and lives on while the panel is hidden. */
@@ -342,6 +399,200 @@ class Editor {
     } catch (error) {
       this.flash(`Couldn't start terminal (${errorCode(error)})`, true);
     }
+  }
+
+  private configFor(path: string | undefined): LaunchConfig | undefined {
+    return this.launch.find((c) => resolve(this.rootDir, c.program) === path);
+  }
+
+  /**
+   * A launch config wins; otherwise an open file whose first line is `#!`
+   * is runnable, like Linux.
+   */
+  private commandFor(
+    path: string,
+    config = this.configFor(path),
+  ): string | null {
+    if (config) {
+      return [config.interpreter, path, ...(config.args ?? [])]
+        .filter((part) => part !== undefined)
+        .map(quote)
+        .join(" ");
+    }
+    const tab = this.tabs.find((t) => t.path === path);
+    return tab?.state.doc.line(1).text.startsWith("#!") ? quote(path) : null;
+  }
+
+  private updateRun(): void {
+    const run = this.field("run");
+    const config = this.configFor(this.active?.path);
+    run.hidden = !this.active || this.commandFor(this.active.path) === null;
+    run.title = config
+      ? `Run '${config.name ?? basename(config.program)}'`
+      : "Run File";
+  }
+
+  /** `<root>/.code/launch.json`, re-read on every tree render (save, refresh). */
+  private async loadLaunch(): Promise<void> {
+    const path = join(this.rootDir, LAUNCH_FILE);
+    try {
+      const parsed = JSON.parse(await this.os.fs.readTextFile(path)) as {
+        configurations?: unknown;
+      };
+      if (!Array.isArray(parsed.configurations))
+        throw new Error("no configurations");
+      this.launch = (parsed.configurations as LaunchConfig[]).filter(
+        (c) => typeof c?.program === "string",
+      );
+    } catch (error) {
+      this.launch = [];
+      if (errorCode(error) !== "ENOENT")
+        this.flash(`${LAUNCH_FILE}: ${message(error)}`, true);
+    }
+    this.updateRun();
+    this.renderConfigs();
+  }
+
+  private async writeLaunch(configurations: LaunchConfig[]): Promise<void> {
+    const path = join(this.rootDir, LAUNCH_FILE);
+    const text = `${JSON.stringify({ configurations }, null, 2)}\n`;
+    try {
+      await this.os.fs.mkdir(dirname(path)).catch((error: unknown) => {
+        if (errorCode(error) !== "EEXIST") throw error;
+      });
+      await this.os.fs.writeTextFile(path, text);
+    } catch (error) {
+      this.flash(`Couldn't save ${LAUNCH_FILE} (${errorCode(error)})`, true);
+      return;
+    }
+
+    // An open, unedited launch.json follows along; an edited one is left alone.
+    const tab = this.tabs.find((t) => t.path === path);
+    if (tab && !this.isDirty(tab)) {
+      const tr = tab.state.update({
+        changes: { from: 0, to: tab.state.doc.length, insert: text },
+      });
+      if (tab === this.active) this.view.dispatch(tr);
+      else tab.state = tr.state;
+      tab.saved = tab.state.doc;
+      tab.el.classList.remove("dirty");
+      this.updateTitle();
+    }
+    await this.renderTree();
+  }
+
+  private renderConfigs(): void {
+    const list = this.field("configs");
+    if (this.launch.length === 0) {
+      const add = el("button", "code-btn primary", "Add Configuration");
+      add.addEventListener("click", () => void this.startConfig());
+      list.replaceChildren(
+        el("div", "code-tree-note", "No launch configurations yet."),
+        add,
+      );
+      return;
+    }
+
+    list.replaceChildren(
+      ...this.launch.map((config, i) => {
+        const path = resolve(this.rootDir, config.program);
+        const row = el("div", "code-row");
+        row.style.paddingLeft = "6px";
+        row.title = this.commandFor(path, config) ?? path;
+
+        const play = el("button", "code-icon-btn code-config-play");
+        play.innerHTML = PLAY_SVG;
+        play.title = "Run";
+        play.setAttribute("aria-label", `Run ${config.name ?? config.program}`);
+        play.addEventListener("click", (e) => {
+          e.stopPropagation();
+          void this.run(path, config);
+        });
+
+        const del = el("button", "code-icon-btn code-row-del", "×");
+        del.title = "Remove Configuration";
+        del.setAttribute("aria-label", del.title);
+        del.addEventListener("click", (e) => {
+          e.stopPropagation();
+          void this.writeLaunch(this.launch.filter((_, j) => j !== i));
+        });
+
+        row.addEventListener("click", () => void this.open(path));
+        row.append(
+          play,
+          el("span", "code-row-name", config.name ?? basename(config.program)),
+          el(
+            "span",
+            "code-config-detail",
+            config.interpreter ? basename(config.interpreter) : "#!",
+          ),
+          del,
+        );
+        return row;
+      }),
+    );
+  }
+
+  /** Opens the add form, prefilled for the active file. */
+  private async startConfig(): Promise<void> {
+    if (
+      this.root.classList.contains("no-sidebar") ||
+      this.sidebarView !== "run"
+    )
+      this.showView("run");
+    const form = this.field<HTMLFormElement>("config-form");
+    form.reset();
+
+    let programs: string[] = [];
+    try {
+      programs = (await this.os.fs.readdir("/ProgramFiles")).map(
+        (e) => `/ProgramFiles/${e.name}`,
+      );
+    } catch {
+      // No list: "run directly" still works.
+    }
+    const path = this.active?.path;
+    const shebang =
+      path !== undefined && this.commandFor(path, undefined) !== null;
+    const select = form.elements.namedItem("interpreter") as HTMLSelectElement;
+    select.replaceChildren(
+      new Option("Run directly (#!)", "", false, shebang),
+      ...programs.map(
+        (p) => new Option(p, p, false, !shebang && p === "/ProgramFiles/sh"),
+      ),
+    );
+
+    const program = form.elements.namedItem("program") as HTMLInputElement;
+    if (path) {
+      program.value = path.startsWith(`${this.rootDir}/`)
+        ? path.slice(this.rootDir.length + 1)
+        : path;
+    }
+    form.hidden = false;
+    (form.elements.namedItem("name") as HTMLInputElement).focus();
+  }
+
+  private async addConfig(data: FormData): Promise<void> {
+    const get = (key: string): string => String(data.get(key) ?? "").trim();
+    const config: LaunchConfig = { program: get("program") };
+    if (get("name")) config.name = get("name");
+    if (get("interpreter")) config.interpreter = get("interpreter");
+    const args = get("args").split(/\s+/).filter(Boolean);
+    if (args.length > 0) config.args = args;
+
+    this.field("config-form").hidden = true;
+    // name first in the file, like VS Code's snippets.
+    const { name, ...rest } = config;
+    await this.writeLaunch([...this.launch, name ? { name, ...rest } : rest]);
+  }
+
+  private async run(path: string, config?: LaunchConfig): Promise<void> {
+    const tab = this.tabs.find((t) => t.path === path);
+    if (tab && this.isDirty(tab) && !(await this.save(tab))) return;
+    const command = this.commandFor(path, config);
+    if (command === null) return;
+    await this.toggleTerminal(true);
+    await this.terminal?.run(command);
   }
 
   private flash(message: string, error = false): void {
@@ -396,6 +647,7 @@ class Editor {
   // ---- explorer -----------------------------------------------------------
 
   private async renderTree(): Promise<void> {
+    await this.loadLaunch();
     const rows = document.createDocumentFragment();
     await this.renderDir(this.rootDir, 0, rows);
     this.tree.replaceChildren(rows);
@@ -482,7 +734,11 @@ class Editor {
   }
 
   private async startCreate(kind: Pending["kind"]): Promise<void> {
-    if (this.root.classList.contains("no-sidebar")) this.toggleSidebar();
+    if (
+      this.root.classList.contains("no-sidebar") ||
+      this.sidebarView !== "explorer"
+    )
+      this.showView("explorer");
     if (this.selectedDir !== this.rootDir) this.expanded.add(this.selectedDir);
     this.pending = { dir: this.selectedDir, kind };
     await this.renderTree();
@@ -655,6 +911,7 @@ class Editor {
     this.highlight();
     this.updateStatus();
     this.updateTitle();
+    this.updateRun();
     this.view.focus();
   }
 
@@ -669,6 +926,7 @@ class Editor {
     if (u.docChanged) {
       tab.el.classList.toggle("dirty", this.isDirty(tab));
       this.updateTitle();
+      this.updateRun();
     }
     if (u.docChanged || u.selectionSet) this.updateCursor();
   }
@@ -730,6 +988,7 @@ class Editor {
     this.highlight();
     this.updateStatus();
     this.updateTitle();
+    this.updateRun();
   }
 
   private async quit(): Promise<void> {

@@ -38,6 +38,11 @@ export class Terminal {
   private shell: Pid = 0 as Pid;
 
   private master = -1;
+  // ponytail: sniffs sh's `<cwd> $ ` prompt; a prompt change needs this too.
+  private markPrompted!: () => void;
+  private readonly prompted = new Promise<void>(
+    (done) => (this.markPrompted = done),
+  );
   private disposed = false;
   private readonly onExit?: () => void;
 
@@ -84,6 +89,17 @@ export class Terminal {
 
   public focus(): void {
     this.input.focus();
+  }
+
+  /** Runs `line` as if typed, once the shell has shown its first prompt. */
+  public async run(line: string): Promise<void> {
+    await this.prompted;
+    this.history.push(line);
+    this.historyIndex = this.history.length;
+
+    // Raw mode: no kernel line discipline, so the terminal echoes.
+    this.append(`${line}\n`);
+    await this.send(`${line}\n`);
   }
 
   /** Master -> screen. Ends when the shell exits and its slave end closes. */
@@ -134,12 +150,7 @@ export class Terminal {
       if (event.key === "Enter") {
         const line = this.input.value;
         this.input.value = "";
-        this.history.push(line);
-        this.historyIndex = this.history.length;
-
-        // Raw mode: no kernel line discipline, so the terminal echoes.
-        this.append(`${line}\n`);
-        void this.send(`${line}\n`);
+        void this.run(line);
         return;
       }
 
@@ -194,7 +205,9 @@ export class Terminal {
   /** The shell's PATH, so `export PATH=...` changes what completes. */
   private async shellPath(): Promise<string[]> {
     try {
-      const environ = await this.os.fs.readTextFile(`/proc/${this.shell}/environ`);
+      const environ = await this.os.fs.readTextFile(
+        `/proc/${this.shell}/environ`,
+      );
       const line = environ.split("\n").find((l) => l.startsWith("PATH="));
       return (line?.slice(5) ?? "").split(":").filter(Boolean);
     } catch {
@@ -235,6 +248,7 @@ export class Terminal {
       if (segment.kind === "clear") this.clearScreen(false);
       else this.append(segment.text);
     }
+    if (chunk.endsWith("$ ")) this.markPrompted();
   }
 
   /**
