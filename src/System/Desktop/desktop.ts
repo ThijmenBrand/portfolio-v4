@@ -3,7 +3,15 @@ import { ADMIN_GID } from "../../kernel/fs/perm";
 import { kernelError, logError } from "../../kernel/errors";
 import type { SystemInterface } from "../../kernel/syscalls/api";
 import type { Rect } from "../../kernel/types";
-import { applyAccent, ICON_SCALES, loadAutostart, loadSettings, wallpaperCSS } from "../../utils/settings";
+import {
+  applyAccent,
+  ICON_SCALES,
+  loadAutostart,
+  loadPathList,
+  loadSettings,
+  setInPathList,
+  wallpaperCSS,
+} from "../../utils/settings";
 
 import {
   cellKey,
@@ -59,7 +67,11 @@ export async function main(os: SystemInterface): Promise<void> {
     void os.process.exit(0);
   });
 
-  await os.process.onSignal("SIGHUP", () => void desktop.applySettings().catch(logError));
+  // From the Settings app (settings.json) or the taskbar's app menu (~/.config/desktop).
+  await os.process.onSignal("SIGHUP", () => {
+    void desktop.applySettings().catch(logError);
+    void desktop.syncIcons().catch(logError);
+  });
 
   await os.process.onSignal("SIGCHLD", () => void reapZombies(os));
 }
@@ -117,6 +129,7 @@ class Desktop implements DesktopCommands {
   private readonly entries: AppEntry[];
 
   private readonly icons: DesktopIcon[] = [];
+  private readonly iconDisposers = new Map<DesktopIcon, () => void>();
   private readonly disposers: Array<() => void> = [];
   private focused: DesktopIcon | null = null;
 
@@ -140,7 +153,7 @@ class Desktop implements DesktopCommands {
     await this.applyWorkArea();
     await this.applySettings();
 
-    for (const entry of this.entries) this.addIcon(entry);
+    await this.syncIcons();
 
     this.disposers.push(
       enableMarquee(this.surface, this.marquee, this),
@@ -187,6 +200,8 @@ class Desktop implements DesktopCommands {
       }
     }
     this.disposers.length = 0;
+    for (const dispose of this.iconDisposers.values()) dispose();
+    this.iconDisposers.clear();
     this.icons.length = 0;
     this.focused = null;
     this.root.innerHTML = "";
@@ -224,7 +239,7 @@ class Desktop implements DesktopCommands {
     this.iconLayer.appendChild(icon.element);
     renderPosition(icon);
 
-    this.disposers.push(enableDrag(icon, this));
+    const disposeDrag = enableDrag(icon, this);
 
     const onContextMenu = (event: MouseEvent): void => {
       event.preventDefault();
@@ -240,9 +255,41 @@ class Desktop implements DesktopCommands {
     };
 
     icon.element.addEventListener("contextmenu", onContextMenu);
-    this.disposers.push(() =>
-      icon.element.removeEventListener("contextmenu", onContextMenu),
-    );
+    this.iconDisposers.set(icon, () => {
+      disposeDrag();
+      icon.element.removeEventListener("contextmenu", onContextMenu);
+    });
+  }
+
+  private removeIcon(icon: DesktopIcon): void {
+    this.iconDisposers.get(icon)?.();
+    this.iconDisposers.delete(icon);
+    icon.element.remove();
+    this.icons.splice(this.icons.indexOf(icon), 1);
+    if (this.focused === icon) this.focused = null;
+  }
+
+  /**
+   * Match the icons to ~/.config/desktop. This process owns that list; the
+   * taskbar's app menu edits it too and then sends SIGHUP.
+   */
+  public async syncIcons(): Promise<void> {
+    const wanted = new Set(await loadPathList(this.os, "desktop"));
+    for (const icon of [...this.icons]) {
+      if (!wanted.has(icon.entry.exec)) this.removeIcon(icon);
+    }
+    for (const entry of this.entries) {
+      if (wanted.has(entry.exec) && !this.icons.some((icon) => icon.entry === entry)) {
+        this.addIcon(entry);
+      }
+    }
+  }
+
+  private async removeFromDesktop(icons: readonly DesktopIcon[]): Promise<void> {
+    for (const icon of icons) {
+      await setInPathList(this.os, "desktop", icon.entry.exec, false);
+    }
+    await this.syncIcons();
   }
 
   private columns(): number {
@@ -483,6 +530,10 @@ class Desktop implements DesktopCommands {
             label:
               selection.length > 1 ? `Open ${selection.length} items` : "Open",
             action: () => this.activateSelection(),
+          },
+          {
+            label: "Remove from desktop",
+            action: () => void this.removeFromDesktop(selection).catch(logError),
           },
         ]
       : [

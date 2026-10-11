@@ -174,6 +174,7 @@ export class WindowManager implements WindowManagerInterface {
   public setMinimized(windowId: WindowId, minimized: boolean): void {
     const record = this.getWindowRecord(windowId);
     record.minimized = minimized;
+    if (minimized) this.animateMinimize(record);
 
     if (minimized && this.focusedId === windowId) {
       this.focusedId = null;
@@ -336,6 +337,35 @@ export class WindowManager implements WindowManagerInterface {
       record.frame = this.maximizedFrame();
       this.WindowChrome.applyFrameToWindow(record);
     }
+  }
+
+  /**
+   * Shrink the window into its taskbar button. The taskbar marks buttons with
+   * data-minimize-target only when the user wants this (Settings); no target
+   * or reduced motion means the window just disappears.
+   */
+  private animateMinimize(record: WindowRecord): void {
+    const target = document.querySelector(`[data-minimize-target="${record.ownerPid}"]`);
+    if (!target || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    const from = record.root.getBoundingClientRect();
+    const to = target.getBoundingClientRect();
+    const dx = to.left + to.width / 2 - (from.left + from.width / 2);
+    const dy = to.top + to.height / 2 - (from.top + from.height / 2);
+    const scale = Math.min(to.width / from.width, to.height / from.height);
+
+    // .minimizing keeps the window drawn under .minimized until the animation ends.
+    record.root.classList.add("minimizing");
+    record.root
+      .animate(
+        [
+          { transform: "none", opacity: 1 },
+          { transform: `translate(${dx}px, ${dy}px) scale(${scale})`, opacity: 0 },
+        ],
+        { duration: 280, easing: "cubic-bezier(0.4, 0, 1, 1)" },
+      )
+      .finished.catch(() => {}) // cancelled by a restore mid-flight
+      .finally(() => record.root.classList.remove("minimizing"));
   }
 
   /** Fullscreen: maximized windows cover the whole screen (topbar and dock auto-hide over them). */

@@ -183,6 +183,7 @@ async function bindForm(os: AppInterface, settings: Settings): Promise<void> {
   radio("iconSize").value = settings.iconSize;
   check("clock24h").checked = settings.clock24h;
   check("clockSeconds").checked = settings.clockSeconds;
+  check("animateMinimize").checked = settings.animateMinimize;
 
   const [preview] = fields("preview");
   const renderPreview = (): void => {
@@ -200,6 +201,7 @@ async function bindForm(os: AppInterface, settings: Settings): Promise<void> {
     settings.iconSize = radio("iconSize").value as Settings["iconSize"];
     settings.clock24h = check("clock24h").checked;
     settings.clockSeconds = check("clockSeconds").checked;
+    settings.animateMinimize = check("animateMinimize").checked;
     applyAccent(settings);
     renderPreview();
     void apply(os, settings).then(

@@ -8,6 +8,6 @@ export default {
     minWidth: 300,
     minHeight: 180,
   },
-  desktop: { name: "Admin", icon: "/assets/icons/default-app.svg" },
+  launcher: { name: "Admin", icon: "/assets/icons/default-app.svg" },
   admin: true,
 } satisfies AppManifest;

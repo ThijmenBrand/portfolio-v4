@@ -36,3 +36,15 @@ window.addEventListener(
   () => window.parent.postMessage({ t: "realm-pointerdown" }, "*"),
   true,
 );
+
+// Same for the launcher shortcut (Ctrl/Cmd+Space, see the taskbar): keys in
+// this frame never reach the kernel's document either.
+window.addEventListener(
+  "keydown",
+  (event) => {
+    if (event.code !== "Space" || !(event.ctrlKey || event.metaKey)) return;
+    event.preventDefault();
+    window.parent.postMessage({ t: "realm-launcher" }, "*");
+  },
+  true,
+);

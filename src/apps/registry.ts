@@ -15,10 +15,10 @@ const manifests = import.meta.glob<AppManifest>("./*/app.ts", {
 });
 
 export const registry: AppEntry[] = [
-  ...Object.entries(manifests).flatMap(([key, { desktop, admin }]) => {
+  ...Object.entries(manifests).flatMap(([key, { launcher, admin }]) => {
     const id = key.split("/")[1]; // "./resume/app.ts" -> "resume"
-    return desktop
-      ? [{ id, ...desktop, exec: `/ProgramFiles/${id}`, admin }]
+    return launcher
+      ? [{ id, ...launcher, exec: `/ProgramFiles/${id}`, admin }]
       : [];
   }),
   {

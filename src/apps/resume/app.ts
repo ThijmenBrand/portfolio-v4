@@ -10,5 +10,5 @@ export default {
     minWidth: 380,
     minHeight: 320,
   },
-  desktop: { name: "Resume", icon: "/assets/icons/resume.svg" },
+  launcher: { name: "Resume", icon: "/assets/icons/resume.svg" },
 } satisfies AppManifest;

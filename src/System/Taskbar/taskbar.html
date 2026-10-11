@@ -11,5 +11,22 @@
   </div>
 </div>
 <div id="taskbar" class="taskbar">
-  <div class="taskbar-tasks" id="taskbar-tasks"></div>
+  <div class="taskbar-tasks" id="taskbar-tasks">
+    <button class="task-button is-pinned" type="button" popovertarget="app-menu">
+      <svg class="task-button-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <rect x="3" y="3" width="5" height="5" rx="1.5"/><rect x="9.5" y="3" width="5" height="5" rx="1.5"/><rect x="16" y="3" width="5" height="5" rx="1.5"/>
+        <rect x="3" y="9.5" width="5" height="5" rx="1.5"/><rect x="9.5" y="9.5" width="5" height="5" rx="1.5"/><rect x="16" y="9.5" width="5" height="5" rx="1.5"/>
+        <rect x="3" y="16" width="5" height="5" rx="1.5"/><rect x="9.5" y="16" width="5" height="5" rx="1.5"/><rect x="16" y="16" width="5" height="5" rx="1.5"/>
+      </svg>
+      <span class="task-button-label">Apps</span>
+    </button>
+    <span class="taskbar-pins" id="taskbar-pins"></span>
+  </div>
+  <div class="app-menu" id="app-menu" popover>
+    <input class="app-menu-search" id="app-menu-search" type="search" placeholder="Search apps" aria-label="Search apps" autocomplete="off" />
+    <div class="app-menu-grid" id="app-menu-grid"></div>
+    <!-- inside #app-menu, so opening it keeps the app menu open (nested popovers) -->
+    <div class="session-menu context-menu" id="tile-menu" popover></div>
+  </div>
+  <div class="session-menu context-menu" id="task-menu" popover></div>
 </div>

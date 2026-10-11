@@ -56,6 +56,8 @@ export interface Settings {
   clockSeconds: boolean;
   dateFormat: "weekday" | "date" | "none";
   iconSize: keyof typeof ICON_SCALES;
+  /** Minimized windows fly into their taskbar button instead of vanishing. */
+  animateMinimize: boolean;
   /** "" shows the name's initial; else an AVATARS key or CUSTOM_AVATAR. */
   avatar: string;
 }
@@ -67,6 +69,7 @@ export const DEFAULTS: Settings = {
   clockSeconds: false,
   dateFormat: "weekday",
   iconSize: "medium",
+  animateMinimize: true,
   avatar: "",
 };
 
@@ -149,24 +152,38 @@ export async function saveCustomAvatar(os: AppInterface, file: File): Promise<vo
   await os.fs.writeFile(`${dir}/avatar`, new Uint8Array(await file.arrayBuffer()));
 }
 
-/** Until the user saves their own list: the resume, the first thing a visitor sees. */
-const DEFAULT_AUTOSTART = "/ProgramFiles/resume\n";
+/**
+ * Program lists in ~/.config, one path per line, each owned by one process:
+ * autostart (started by the desktop at login), desktop (its shortcuts) and
+ * taskbar (pinned apps). The value here stands in until the user saves their own.
+ */
+export const PATH_LISTS = {
+  /** The resume, the first thing a visitor sees. */
+  autostart: "/ProgramFiles/resume\n",
+  desktop: ["resume", "files", "terminal", "code", "settings"].map((id) => `/ProgramFiles/${id}\n`).join(""),
+  taskbar: "/ProgramFiles/files\n",
+} as const;
 
-/** Programs in ~/.config/autostart, which the desktop starts at login. */
-export async function loadAutostart(os: AppInterface): Promise<string[]> {
-  const text = await os.fs.readTextFile(`${await configDir(os)}/autostart`).catch(() => DEFAULT_AUTOSTART);
+export type PathList = keyof typeof PATH_LISTS;
+
+export async function loadPathList(os: AppInterface, name: PathList): Promise<string[]> {
+  const text = await os.fs.readTextFile(`${await configDir(os)}/${name}`).catch(() => PATH_LISTS[name]);
   return text.split("\n").map((line) => line.trim()).filter((line) => line && !line.startsWith("#"));
 }
 
 /** Add or remove one program, leaving comments and other entries as they are. */
-export async function setAutostart(os: AppInterface, path: string, enabled: boolean): Promise<void> {
-  const file = `${await ensureConfigDir(os)}/autostart`;
-  const lines = (await os.fs.readTextFile(file).catch(() => DEFAULT_AUTOSTART))
+export async function setInPathList(os: AppInterface, name: PathList, path: string, enabled: boolean): Promise<void> {
+  const file = `${await ensureConfigDir(os)}/${name}`;
+  const lines = (await os.fs.readTextFile(file).catch(() => PATH_LISTS[name]))
     .split("\n")
     .filter((line) => line.trim() && line.trim() !== path);
   if (enabled) lines.push(path);
   await os.fs.writeTextFile(file, lines.map((line) => line + "\n").join(""));
 }
+
+export const loadAutostart = (os: AppInterface): Promise<string[]> => loadPathList(os, "autostart");
+export const setAutostart = (os: AppInterface, path: string, enabled: boolean): Promise<void> =>
+  setInPathList(os, "autostart", path, enabled);
 
 async function ensureConfigDir(os: AppInterface): Promise<string> {
   const dir = await configDir(os);

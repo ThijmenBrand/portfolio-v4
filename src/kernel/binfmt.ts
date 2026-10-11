@@ -23,7 +23,8 @@ export type FileEntry = Flags &
 export interface AppManifest {
   window: WindowOptions;
   url?: string;
-  desktop?: { name: string; icon: string };
+  /** Shown in the taskbar's app menu (and pinnable to the desktop or dock). */
+  launcher?: { name: string; icon: string };
   admin?: boolean;
 }
 

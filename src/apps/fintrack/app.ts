@@ -10,5 +10,5 @@ export default {
     minHeight: 360,
   },
   admin: true,
-  desktop: { name: "Fintrack", icon: "/assets/icons/fintrack.svg" },
+  launcher: { name: "Fintrack", icon: "/assets/icons/fintrack.svg" },
 } satisfies AppManifest;

@@ -154,6 +154,11 @@
     display: none;
 }
 
+.window.minimized.minimizing {
+    display: flex;
+    pointer-events: none;
+}
+
 /* Iframe apps (src/kernel/proc/realm.ts): fill the content area exactly. */
 .app-frame {
     display: block;

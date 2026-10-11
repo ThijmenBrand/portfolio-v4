@@ -171,6 +171,10 @@ export function executeIframe(
     if (event.source !== iframe.contentWindow) return;
     const data = event.data as { t?: unknown } | null;
     if (data?.t === "realm-pointerdown") ctx.windows.focusWindow(record.id);
+    // Replay the launcher shortcut on our document, where the taskbar listens.
+    if (data?.t === "realm-launcher") {
+      document.dispatchEvent(new KeyboardEvent("keydown", { code: "Space", ctrlKey: true }));
+    }
   };
   globalThis.addEventListener("message", onMessage);
 

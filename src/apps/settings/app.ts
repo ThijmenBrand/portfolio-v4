@@ -8,5 +8,5 @@ export default {
     minWidth: 520,
     minHeight: 360,
   },
-  desktop: { name: "Settings", icon: "/assets/icons/settings.svg" },
+  launcher: { name: "Settings", icon: "/assets/icons/settings.svg" },
 } satisfies AppManifest;

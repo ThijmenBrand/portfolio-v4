@@ -79,6 +79,10 @@ export class WindowChrome implements WindowChromeInterface {
 
     root.classList.toggle("maximized", windowRecord.state === "maximized");
     root.classList.toggle("minimized", windowRecord.minimized);
+    // Restored while still flying into the taskbar: snap back.
+    if (!windowRecord.minimized && root.classList.contains("minimizing")) {
+      root.getAnimations().forEach((animation) => animation.cancel());
+    }
     root.classList.toggle("focused", isFocused);
   }
 

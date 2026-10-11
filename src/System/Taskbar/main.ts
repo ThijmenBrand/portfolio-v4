@@ -3,14 +3,21 @@ import type { Pid, WindowId } from "../../kernel/types";
 
 import taskbarHtml from "./taskbar.html?raw";
 import taskbarButtonHtml from "./taskbar-button.html?raw";
+import appTileHtml from "./app-tile.html?raw";
 import "./taskbar.css";
 import { kernelError, logError } from "../../kernel/errors";
 import {
   htmlStringToTemplate,
   selectElementFromTemplate,
 } from "../../utils/html";
-import { registry } from "../../apps/registry";
-import { clockFormat, loadSettings } from "../../utils/settings";
+import { registry, type AppEntry } from "../../apps/registry";
+import { ADMIN_GID } from "../../kernel/fs/perm";
+import {
+  clockFormat,
+  loadPathList,
+  loadSettings,
+  setInPathList,
+} from "../../utils/settings";
 
 const DEFAULT_ICON = "/assets/icons/default-app.svg";
 const SETTINGS = "/ProgramFiles/settings";
@@ -32,6 +39,8 @@ interface TaskGroup {
   count: HTMLElement;
 }
 
+type MenuItems = Array<[label: string, action: () => Promise<void>]>;
+
 export async function main(os: SystemInterface): Promise<void> {
   const taskbar = new Taskbar(os, await os.display.taskbar());
   await taskbar.start();
@@ -42,11 +51,17 @@ class Taskbar {
   private readonly root: HTMLElement;
   private readonly taskList: HTMLElement;
   private readonly bar: HTMLElement;
+  private readonly pinList: HTMLElement;
 
   private readonly groups = new Map<Pid, TaskGroup>();
   private readonly paths = new Map<Pid, string>();
   private focusedPid: Pid | null = null;
   private clockTimer: ReturnType<typeof setInterval> | undefined;
+  private animateMinimize = true;
+
+  /** Exec paths pinned to the dock: ~/.config/taskbar, which this process owns. */
+  private pins: string[] = [];
+  private readonly pinButtons = new Map<string, HTMLElement>();
 
   constructor(os: SystemInterface, root: HTMLElement) {
     this.os = os;
@@ -60,12 +75,25 @@ class Taskbar {
     const bar = this.root.querySelector<HTMLElement>("#taskbar");
     if (!bar) throw kernelError("ENODEV", "Taskbar element not found");
     this.bar = bar;
+
+    this.pinList = this.require("#taskbar-pins");
+  }
+
+  private require<T extends HTMLElement>(selector: string): T {
+    const element = this.root.querySelector<T>(selector);
+    if (!element) throw kernelError("ENODEV", `Taskbar element ${selector} not found`);
+    return element;
   }
 
   /** Everything that needs a syscall, so the constructor can stay sync. */
   public async start(): Promise<void> {
     await this.os.display.reserveStrut("bottom", this.bar.offsetHeight || 48);
     await this.startTopbar();
+
+    // Cosmetic, like the desktop: exec of an admin app fails anyway (EACCES).
+    const { gid } = await this.os.process.ids();
+    this.startAppMenu(registry.filter((app) => !app.admin || gid === ADMIN_GID));
+    await this.loadPins();
 
     await this.seed();
     await this.subscribe();
@@ -94,7 +122,9 @@ class Taskbar {
     await this.os.display.reserveStrut("top", topbar.offsetHeight || 28);
     user.textContent = (await this.os.process.env()).USER ?? "user";
 
-    let format = clockFormat(await loadSettings(this.os));
+    const initial = await loadSettings(this.os);
+    let format = clockFormat(initial);
+    this.animateMinimize = initial.animateMinimize;
     const tick = (): void => {
       const now = new Date();
       clock.textContent = format.format(now);
@@ -109,6 +139,8 @@ class Taskbar {
         .then((settings) => {
           format = clockFormat(settings);
           tick();
+          this.animateMinimize = settings.animateMinimize;
+          for (const pid of this.groups.keys()) this.renderGroup(pid);
         })
         .catch(logError);
     });
@@ -122,14 +154,154 @@ class Taskbar {
     this.root.querySelector("#session-settings")?.addEventListener("click", () => openSettings([]));
 
     logout.addEventListener("click", () => {
-      void this.os.process
-        .list()
-        .then((processes) => {
-          const self = processes.find((proc) => proc.pid === this.os.process.pid);
-          if (self) return this.os.process.kill(self.parentPid, "SIGTERM");
-        })
-        .catch(logError);
+      void this.signalDesktop("SIGTERM").catch(logError);
     });
+  }
+
+  /** Our parent is the desktop: it started us from its autostart. */
+  private async signalDesktop(signal: "SIGTERM" | "SIGHUP"): Promise<void> {
+    const processes = await this.os.process.list();
+    const self = processes.find((proc) => proc.pid === this.os.process.pid);
+    if (self) await this.os.process.kill(self.parentPid, signal);
+  }
+
+  // --------------------------------------------------------------- app menu
+
+  private startAppMenu(apps: AppEntry[]): void {
+    const menu = this.require("#app-menu");
+    const search = this.require<HTMLInputElement>("#app-menu-search");
+    const tileMenu = this.require("#tile-menu");
+
+    const tiles = apps.map((entry) => {
+      const tile = htmlStringToTemplate(appTileHtml);
+      const icon = selectElementFromTemplate<HTMLImageElement>(tile, "#app-tile-icon");
+      icon.src = entry.icon;
+      selectElementFromTemplate(tile, "#app-tile-label").textContent = entry.name;
+
+      tile.addEventListener("click", () => {
+        menu.hidePopover();
+        void this.os.process.spawn(entry.exec).catch(logError);
+      });
+      tile.addEventListener("contextmenu", (event) => {
+        event.preventDefault();
+        void this.tileMenuItems(entry.exec)
+          .then((items) => this.showMenu(tileMenu, event, items))
+          .catch(logError);
+      });
+      return { entry, tile };
+    });
+    this.require("#app-menu-grid").replaceChildren(...tiles.map(({ tile }) => tile));
+
+    search.addEventListener("input", () => {
+      const query = search.value.trim().toLowerCase();
+      for (const { entry, tile } of tiles) {
+        tile.hidden = !entry.name.toLowerCase().includes(query);
+      }
+    });
+    search.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      // Hiding the popover moves focus back to the Apps button; without this,
+      // the same keypress would then click it and open the menu again.
+      event.preventDefault();
+      tiles.find(({ tile }) => !tile.hidden)?.tile.click();
+    });
+
+    // Ctrl/Cmd+Space. App frames forward it (iframe-entry.ts → realm.ts).
+    document.addEventListener("keydown", (event) => {
+      if (event.code !== "Space" || !(event.ctrlKey || event.metaKey)) return;
+      // ponytail: never removed; a killed taskbar's menu is detached, so it just no-ops
+      if (!menu.isConnected) return;
+      event.preventDefault();
+      menu.togglePopover();
+    });
+
+    menu.addEventListener("toggle", (event) => {
+      if ((event as ToggleEvent).newState !== "open") return;
+      search.value = "";
+      search.dispatchEvent(new Event("input"));
+      search.focus();
+    });
+  }
+
+  private async tileMenuItems(exec: string): Promise<MenuItems> {
+    const onDesktop = (await loadPathList(this.os, "desktop")).includes(exec);
+    return [
+      this.pinItem(exec),
+      [
+        onDesktop ? "Remove from desktop" : "Add to desktop",
+        async () => {
+          // The desktop owns this list; edit it, then tell it to re-read (as Settings does).
+          await setInPathList(this.os, "desktop", exec, !onDesktop);
+          await this.signalDesktop("SIGHUP");
+        },
+      ],
+    ];
+  }
+
+  /** A popover menu at the pointer, opening upward from it. */
+  private showMenu(menu: HTMLElement, event: MouseEvent, items: MenuItems): void {
+    menu.replaceChildren(
+      ...items.map(([label, action]) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = label;
+        button.addEventListener("click", () => {
+          menu.hidePopover();
+          void action().catch(logError);
+        });
+        return button;
+      }),
+    );
+    // ponytail: fixed 180px clamp for the right edge, measure the menu if items get long
+    menu.style.inset = `auto auto ${innerHeight - event.clientY}px ${Math.min(event.clientX, innerWidth - 180)}px`;
+    if (!menu.matches(":popover-open")) menu.showPopover();
+  }
+
+  // ------------------------------------------------------------------- pins
+
+  private pinItem(exec: string): MenuItems[number] {
+    const pinned = this.pins.includes(exec);
+    return [
+      pinned ? "Unpin from taskbar" : "Pin to taskbar",
+      async () => {
+        await setInPathList(this.os, "taskbar", exec, !pinned);
+        await this.loadPins();
+      },
+    ];
+  }
+
+  private async loadPins(): Promise<void> {
+    this.pins = await loadPathList(this.os, "taskbar");
+    this.pinButtons.clear();
+    this.pinList.replaceChildren(
+      ...this.pins.flatMap((exec) => {
+        const entry = registry.find((app) => app.exec === exec);
+        if (!entry) return [];
+
+        const button = htmlStringToTemplate(taskbarButtonHtml);
+        button.classList.add("is-pinned");
+        selectElementFromTemplate<HTMLImageElement>(button, "#task-button-icon").src = entry.icon;
+        selectElementFromTemplate(button, "#task-button-label").textContent = entry.name;
+        button.addEventListener("click", () => {
+          void this.os.process.spawn(exec).catch(logError);
+        });
+        button.addEventListener("contextmenu", (event) => {
+          event.preventDefault();
+          this.showMenu(this.require("#task-menu"), event, [this.pinItem(exec)]);
+        });
+        this.pinButtons.set(exec, button);
+        return [button];
+      }),
+    );
+    // replaceChildren also dropped running buttons that sat next to their pin.
+    for (const pid of this.groups.keys()) this.renderGroup(pid);
+    for (const exec of this.pinButtons.keys()) this.refreshPin(exec);
+  }
+
+  /** A pin hides while its app runs: the running button takes its slot. */
+  private refreshPin(exec: string): void {
+    const pin = this.pinButtons.get(exec);
+    if (pin) pin.hidden = [...this.groups.values()].some((group) => group.path === exec);
   }
 
   private async seed(): Promise<void> {
@@ -208,6 +380,7 @@ class Taskbar {
       this.groups.delete(pid);
       this.paths.delete(pid);
       if (this.focusedPid === pid) this.focusedPid = null;
+      this.refreshPin(group.path);
       return;
     }
 
@@ -271,6 +444,12 @@ class Taskbar {
     button.addEventListener("click", () => {
       void this.activate(pid).catch(logError);
     });
+    button.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      const path = this.groups.get(pid)?.path ?? "";
+      if (!registry.some((app) => app.exec === path)) return;
+      this.showMenu(this.require("#task-menu"), event, [this.pinItem(path)]);
+    });
     this.taskList.appendChild(button);
     this.groups.set(pid, group);
     return group;
@@ -294,6 +473,15 @@ class Taskbar {
       "is-minimized",
       windows.every((win) => win.minimized),
     );
+    // The window manager flies minimized windows into this button; no target = instant.
+    if (this.animateMinimize) group.button.dataset.minimizeTarget = String(pid);
+    else delete group.button.dataset.minimizeTarget;
+
+    // Pinned apps run in their pin's slot; the rest line up after the pins.
+    const pin = this.pinButtons.get(group.path);
+    if (pin && group.button.parentElement !== this.pinList) pin.after(group.button);
+    if (!pin && group.button.parentElement !== this.taskList) this.taskList.append(group.button);
+    this.refreshPin(group.path);
   }
 
   /**
