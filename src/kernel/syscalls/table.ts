@@ -21,6 +21,8 @@ import type {
   WindowOptions,
 } from "../windows/types";
 import { apiSyscalls, type ApiRequest, type ApiResponse } from "./api-fetch";
+import type { DialogOptions } from "../dialog/list";
+import { dialogSyscalls } from "./dialog";
 import { displaySyscalls } from "./display";
 import { eventsSyscalls } from "./events";
 import { fdSyscalls } from "./fd";
@@ -122,6 +124,7 @@ export interface SyscallTable {
   openExternal(callerPid: Pid, url: string): Promise<void>;
   getLocation(callerPid: Pid): Promise<LocationInfo>;
   apiFetch(callerPid: Pid, path: string, request?: ApiRequest): Promise<ApiResponse>;
+  openDialog(callerPid: Pid, options: DialogOptions): Promise<string | null>;
 }
 
 export function createSyscallTable(ctx: KernelContext): SyscallTable {
@@ -135,5 +138,6 @@ export function createSyscallTable(ctx: KernelContext): SyscallTable {
     ...fdSyscalls(ctx),
     ...shellSyscalls(ctx),
     ...apiSyscalls(ctx),
+    ...dialogSyscalls(ctx),
   };
 }

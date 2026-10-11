@@ -142,6 +142,8 @@ export const WIRE_CALLS = {
   "shell.location": "getLocation",
 
   "api.fetch": "apiFetch",
+
+  "dialog.open": "openDialog",
 } as const satisfies Record<WirePath, keyof SyscallTable | null>;
 
 /** The AppInterface member a wire path names, e.g. Member<"io.read">. */

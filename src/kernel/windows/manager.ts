@@ -339,6 +339,22 @@ export class WindowManager implements WindowManagerInterface {
     }
   }
 
+  public attachSheet(windowId: WindowId, el: HTMLElement): () => void {
+    const record = this.getWindowRecord(windowId);
+    const sheet = document.createElement("div");
+    sheet.className = "window-sheet";
+    sheet.append(el);
+    record.bodyEl.append(sheet);
+    if (this.focusedId === windowId) this.focusContent(record);
+    else this.focusWindow(windowId);
+
+    return () => {
+      sheet.remove();
+      if (this.focusedId === windowId && this.windows.has(windowId))
+        this.focusContent(record);
+    };
+  }
+
   /**
    * Shrink the window into its taskbar button. The taskbar marks buttons with
    * data-minimize-target only when the user wants this (Settings); no target
@@ -381,6 +397,10 @@ export class WindowManager implements WindowManagerInterface {
    * window is already focused.)
    */
   private focusContent(record: WindowRecord): void {
+    const sheet = record.bodyEl.querySelector<HTMLElement>(
+      ".window-sheet > *",
+    );
+    if (sheet) return sheet.focus();
     const frame = record.bodyEl.querySelector("iframe");
     if (frame && document.activeElement !== frame) frame.focus();
   }

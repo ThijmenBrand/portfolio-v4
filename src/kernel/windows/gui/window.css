@@ -20,6 +20,7 @@
 }
 
 #window-content {
+    position: relative;
     flex: 1;
     min-height: 0;
     overflow: auto;
@@ -178,6 +179,17 @@
 /* The window body under a loading iframe app: dark, not .window's white. */
 #window-content:has(> .app-frame) {
     background: #1a1a1e;
+}
+
+/* A modal sheet over the window's content (manager.attachSheet): it covers
+   the app, so the app gets no clicks until the sheet is gone. */
+.window-sheet {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    background: rgba(0, 0, 0, 0.35);
 }
 
 /* While dragging/resizing, iframes must not swallow the mouse (interactions/shield.ts). */

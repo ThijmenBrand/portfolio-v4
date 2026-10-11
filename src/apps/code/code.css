@@ -227,6 +227,30 @@
   height: 16px;
 }
 
+/* No folder open: the explorer is just a prompt to open one. */
+.code-empty-folder {
+  display: none;
+  padding: 10px 14px;
+  color: var(--app-text-dim);
+}
+
+.code-empty-folder p {
+  margin: 0 0 10px;
+}
+
+.code-empty-folder .code-btn {
+  width: 100%;
+}
+
+.code.no-folder .code-empty-folder {
+  display: block;
+}
+
+.code.no-folder [data-field="explorer-view"] .code-section,
+.code.no-folder [data-field="tree"] {
+  display: none;
+}
+
 .code-tree {
   flex: 1;
   min-height: 0;
@@ -549,6 +573,10 @@
 
 .code-welcome p {
   margin: 0 0 22px;
+}
+
+.code-welcome-open {
+  margin-bottom: 22px;
 }
 
 .code-shortcuts {

@@ -1,0 +1,290 @@
+/* The file/folder picker (dialog.open). Mounted into a window's .window-sheet,
+   or floating over the window layer for apps without a window. */
+
+.picker {
+    display: flex;
+    flex-direction: column;
+    width: min(680px, calc(100% - 32px));
+    height: min(460px, calc(100% - 32px));
+    border: 1px solid var(--app-border-hi);
+    border-radius: 10px;
+    background: var(--app-surface);
+    box-shadow: var(--app-shadow);
+    color: var(--app-text);
+    font: 13px/1.4 var(--app-sans);
+    outline: none;
+}
+
+.picker.floating {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    z-index: 100000;
+    width: 680px;
+    height: 460px;
+    transform: translate(-50%, -50%);
+    /* the window layer is pointer-events: none */
+    pointer-events: auto;
+}
+
+.picker-head {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px 14px 10px;
+    border-bottom: 1px solid var(--app-border);
+}
+
+.picker-title {
+    font-weight: 600;
+}
+
+.picker-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.picker-crumbs {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px;
+    color: var(--app-text-dim);
+}
+
+.picker-crumbs button {
+    padding: 1px 5px;
+    border: none;
+    border-radius: var(--app-radius-sm);
+    background: none;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
+.picker-crumbs button:hover,
+.picker-crumbs button:last-child {
+    color: var(--app-text);
+}
+
+.picker-crumbs button:hover {
+    background: var(--app-surface-hi);
+}
+
+.picker-icon {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: var(--app-control);
+    height: var(--app-control);
+    border: 1px solid var(--app-border-hi);
+    border-radius: var(--app-radius);
+    background: var(--app-surface-hi);
+    color: var(--app-text-dim);
+    cursor: pointer;
+}
+
+.picker-icon:hover {
+    color: var(--app-text);
+}
+
+.picker-icon svg {
+    width: 16px;
+    height: 16px;
+}
+
+.picker-search,
+.picker-name {
+    height: var(--app-control);
+    padding: 0 10px;
+    border: 1px solid var(--app-border-hi);
+    border-radius: var(--app-radius);
+    background: var(--app-well);
+    color: var(--app-text);
+    font: inherit;
+    outline: none;
+}
+
+.picker-search {
+    flex: none;
+    width: 180px;
+}
+
+.picker-name {
+    flex: 1;
+    min-width: 0;
+    height: calc(var(--app-row) - 6px);
+    padding: 0 6px;
+}
+
+.picker-search:focus,
+.picker-name:focus {
+    border-color: var(--app-accent);
+}
+
+.picker-body {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 160px minmax(0, 1fr);
+}
+
+.picker-places {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px;
+    overflow: auto;
+    border-right: 1px solid var(--app-border);
+}
+
+.picker-places button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: none;
+    height: 28px;
+    padding: 0 8px;
+    border: none;
+    border-radius: var(--app-radius-sm);
+    background: none;
+    color: var(--app-text-dim);
+    font: inherit;
+    text-align: left;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.picker-places svg {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.4;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.picker-places button:hover {
+    background: var(--app-surface-hi);
+    color: var(--app-text);
+}
+
+.picker-places button[aria-current] {
+    background: var(--app-accent-soft);
+    color: var(--app-text);
+}
+
+.picker-places button[aria-current] svg {
+    color: var(--app-accent);
+}
+
+.picker-list {
+    min-height: 0;
+    overflow: auto;
+    padding: 4px;
+    background: var(--app-well);
+}
+
+.picker-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: var(--app-row);
+    padding: 0 10px;
+    border-radius: var(--app-radius-sm);
+    cursor: default;
+    user-select: none;
+}
+
+.picker-row:hover {
+    background: var(--app-surface-hi);
+}
+
+.picker-row.selected {
+    background: var(--app-accent-soft);
+}
+
+.picker-row svg {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    color: var(--app-text-dim);
+}
+
+.picker-row.dir svg {
+    color: var(--app-accent);
+}
+
+.picker-row small {
+    margin-left: auto;
+    padding-left: 12px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: var(--app-text-faint);
+}
+
+.picker-row span {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.picker-note {
+    padding: 16px;
+    color: var(--app-text-faint);
+    text-align: center;
+}
+
+.picker-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 10px 14px;
+    border-top: 1px solid var(--app-border);
+}
+
+.picker-btn {
+    height: var(--app-control);
+    padding: 0 14px;
+    border: 1px solid var(--app-border-hi);
+    border-radius: var(--app-radius);
+    background: var(--app-surface-hi);
+    color: var(--app-text);
+    font: inherit;
+    cursor: pointer;
+}
+
+.picker-btn.primary {
+    border-color: transparent;
+    background: var(--app-accent);
+    color: #fff;
+}
+
+.picker-btn:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+.picker-btn:focus-visible,
+.picker-icon:focus-visible,
+.picker-places button:focus-visible,
+.picker-crumbs button:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 1px;
+}
+
+@media (max-width: 560px) {
+    .picker-body {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .picker-places {
+        display: none;
+    }
+}

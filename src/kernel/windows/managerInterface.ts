@@ -14,4 +14,5 @@ export interface WindowManagerInterface {
   focusWindow(windowId: WindowId): void;
   setMinimized(windowId: WindowId, minimized: boolean): void;
   reflowMaximized(): void;
+  attachSheet(windowId: WindowId, el: HTMLElement): () => void;
 }

@@ -1,3 +1,4 @@
+import type { DialogOptions } from "../dialog/list";
 import type { EventHandler, EventType } from "../events/types";
 import type { DirEntry, Stat, StatResult } from "../fs/types";
 import type { FdInfo, OpenFlags, PipeFds, Whence } from "../io/openfile";
@@ -73,6 +74,9 @@ export interface AppInterface {
   };
   api: {
     fetch(path: string, request?: ApiRequest): Promise<ApiResponse>;
+  };
+  dialog: {
+    open(options: DialogOptions): Promise<string | null>;
   };
   fs: {
     readFile(path: string): Promise<Bytes>;
@@ -167,6 +171,9 @@ export function bindSyscalls(target: SyscallTable, pid: Pid): SystemInterface {
     },
     api: {
       fetch: (path, request) => target.apiFetch(pid, path, request),
+    },
+    dialog: {
+      open: (options) => target.openDialog(pid, options),
     },
     fs: {
       readFile: (path) => target.readFile(pid, path),

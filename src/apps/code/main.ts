@@ -158,8 +158,8 @@ class Editor {
   private readonly view: EditorView;
   private readonly shared: Extension;
 
-  private rootDir = "/home";
-  private selectedDir = "/home";
+  private rootDir: string | null = null;
+  private selectedDir = "/";
   private readonly expanded = new Set<string>();
   private pending: Pending | null = null;
 
@@ -236,22 +236,41 @@ class Editor {
   }
 
   public async start(args: string[]): Promise<void> {
-    const env = await this.os.process.env();
-    this.rootDir = env.HOME ?? "/home";
     const [arg] = args;
-    if (arg !== undefined) {
-      const path = resolve(await this.os.process.cwd(), arg);
-      const dir = dirname(path);
-      if (dir !== this.rootDir && !dir.startsWith(`${this.rootDir}/`))
-        this.rootDir = dir;
-      // Reveal the file: expand every folder between the root and it.
-      for (let d = dir; d.length > this.rootDir.length; d = dirname(d))
-        this.expanded.add(d);
-      await this.open(path, false);
+    if (arg === undefined) return this.renderTree();
+    const path = resolve(await this.os.process.cwd(), arg);
+    let isDir = false;
+    try {
+      isDir = (await this.os.fs.stat(path)).kind === "directory";
+    } catch {
+      // Missing: open() shows an empty buffer and saving creates it.
     }
-    this.selectedDir = this.active ? dirname(this.active.path) : this.rootDir;
-    this.field("root-name").textContent = basename(this.rootDir) || "/";
+    if (isDir) return this.openFolder(path);
+    await this.open(path, false);
     await this.renderTree();
+  }
+
+  private async openFolder(dir: string): Promise<void> {
+    this.rootDir = dir;
+    this.selectedDir = dir;
+    this.expanded.clear();
+    this.pending = null;
+    this.field("root-name").textContent = basename(dir) || "/";
+    this.root.classList.remove("no-folder");
+    await this.renderTree();
+  }
+
+  private async promptOpenFolder(): Promise<void> {
+    let dir: string | null;
+    try {
+      dir = await this.os.dialog.open({
+        kind: "directory",
+        startIn: this.rootDir ?? undefined,
+      });
+    } catch (error) {
+      return this.flash(`Couldn't open folder (${errorCode(error)})`, true);
+    }
+    if (dir !== null) await this.openFolder(dir);
   }
 
   // ---- chrome -------------------------------------------------------------
@@ -265,10 +284,15 @@ class Editor {
       "click",
       () => void this.startConfig(),
     );
-    this.field("config-open").addEventListener(
-      "click",
-      () => void this.open(join(this.rootDir, LAUNCH_FILE), false),
-    );
+    this.field("config-open").addEventListener("click", () => {
+      if (this.rootDir === null) return this.flash("Open a folder first");
+      void this.open(join(this.rootDir, LAUNCH_FILE), false);
+    });
+    for (const name of ["open-folder", "open-folder-btn", "welcome-open"])
+      this.field(name).addEventListener(
+        "click",
+        () => void this.promptOpenFolder(),
+      );
     this.field("config-cancel").addEventListener("click", () => {
       this.field("config-form").hidden = true;
     });
@@ -289,7 +313,7 @@ class Editor {
       }
     });
     this.field("root-btn").addEventListener("click", () => {
-      this.selectedDir = this.rootDir;
+      this.selectedDir = this.rootDir ?? "/";
       this.highlight();
     });
     this.field("new-file").addEventListener(
@@ -330,6 +354,7 @@ class Editor {
         if (mod && e.code === "KeyS")
           void (this.active && this.save(this.active));
         else if (mod && e.code === "KeyB") this.toggleSidebar();
+        else if (mod && e.code === "KeyO") void this.promptOpenFolder();
         // Ctrl on every platform, like VS Code.
         else if (e.ctrlKey && e.code === "Backquote")
           void this.toggleTerminal();
@@ -406,7 +431,7 @@ class Editor {
     this.terminal = terminal;
     try {
       // The shell inherits our cwd: start it in the explorer's root.
-      await this.os.process.chdir(this.rootDir);
+      if (this.rootDir !== null) await this.os.process.chdir(this.rootDir);
       await terminal.start();
     } catch (error) {
       this.flash(`Couldn't start terminal (${errorCode(error)})`, true);
@@ -414,7 +439,9 @@ class Editor {
   }
 
   private configFor(path: string | undefined): LaunchConfig | undefined {
-    return this.launch.find((c) => resolve(this.rootDir, c.program) === path);
+    const root = this.rootDir;
+    if (root === null) return undefined;
+    return this.launch.find((c) => resolve(root, c.program) === path);
   }
 
   /**
@@ -446,6 +473,11 @@ class Editor {
 
   /** `<root>/.code/launch.json`, re-read on every tree render (save, refresh). */
   private async loadLaunch(): Promise<void> {
+    if (this.rootDir === null) {
+      this.launch = [];
+      this.updateRun();
+      return this.renderConfigs();
+    }
     const path = join(this.rootDir, LAUNCH_FILE);
     try {
       const parsed = JSON.parse(await this.os.fs.readTextFile(path)) as {
@@ -466,6 +498,7 @@ class Editor {
   }
 
   private async writeLaunch(configurations: LaunchConfig[]): Promise<void> {
+    if (this.rootDir === null) return this.flash("Open a folder first");
     const path = join(this.rootDir, LAUNCH_FILE);
     const text = `${JSON.stringify({ configurations }, null, 2)}\n`;
     try {
@@ -495,6 +528,16 @@ class Editor {
 
   private renderConfigs(): void {
     const list = this.field("configs");
+    const root = this.rootDir;
+    if (root === null) {
+      const open = el("button", "code-btn primary", "Open Folder");
+      open.addEventListener("click", () => void this.promptOpenFolder());
+      list.replaceChildren(
+        el("div", "code-tree-note", "Open a folder to add launch configurations."),
+        open,
+      );
+      return;
+    }
     if (this.launch.length === 0) {
       const add = el("button", "code-btn primary", "Add Configuration");
       add.addEventListener("click", () => void this.startConfig());
@@ -507,7 +550,7 @@ class Editor {
 
     list.replaceChildren(
       ...this.launch.map((config, i) => {
-        const path = resolve(this.rootDir, config.program);
+        const path = resolve(root, config.program);
         const row = el("div", "code-row");
         row.style.paddingLeft = "6px";
         row.title = this.commandFor(path, config) ?? path;
@@ -547,6 +590,8 @@ class Editor {
 
   /** Opens the add form, prefilled for the active file. */
   private async startConfig(): Promise<void> {
+    const root = this.rootDir;
+    if (root === null) return this.flash("Open a folder first");
     if (
       this.root.classList.contains("no-sidebar") ||
       this.sidebarView !== "run"
@@ -576,8 +621,8 @@ class Editor {
 
     const program = form.elements.namedItem("program") as HTMLInputElement;
     if (path) {
-      program.value = path.startsWith(`${this.rootDir}/`)
-        ? path.slice(this.rootDir.length + 1)
+      program.value = path.startsWith(`${root}/`)
+        ? path.slice(root.length + 1)
         : path;
     }
     form.hidden = false;
@@ -660,6 +705,7 @@ class Editor {
 
   private async renderTree(): Promise<void> {
     await this.loadLaunch();
+    if (this.rootDir === null) return;
     const rows = document.createDocumentFragment();
     await this.renderDir(this.rootDir, 0, rows);
     this.tree.replaceChildren(rows);
@@ -746,6 +792,7 @@ class Editor {
   }
 
   private async startCreate(kind: Pending["kind"]): Promise<void> {
+    if (this.rootDir === null) return;
     if (
       this.root.classList.contains("no-sidebar") ||
       this.sidebarView !== "explorer"
