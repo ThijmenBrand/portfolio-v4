@@ -33,6 +33,11 @@ export const registry: AppEntry[] = [
 
 const DEFAULT_ICON = "/assets/icons/default-app.svg";
 
+/** Windowless programs that live in the topbar: offered as startup items, not in the app menu. */
+export const menubarApps: AppEntry[] = [
+  { id: "timer", name: "Timer (menu bar)", icon: DEFAULT_ICON, exec: "/ProgramFiles/timer" },
+];
+
 /**
  * The user's installed apps: every *.js in ~/.local/share/apps, named and
  * iconed by its //@app manifest (read as data, never run). Unreadable or

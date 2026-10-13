@@ -104,6 +104,7 @@ class Taskbar {
 
     await this.seed();
     await this.subscribe();
+    await this.startStatusItems();
 
     await this.os.process.onSignal("SIGTERM", () => {
       clearInterval(this.clockTimer);
@@ -339,6 +340,62 @@ class Taskbar {
     // ponytail: fixed 180px clamp for the right edge, measure the menu if items get long
     menu.style.inset = `auto auto ${innerHeight - event.clientY}px ${Math.min(event.clientX, innerWidth - 180)}px`;
     if (!menu.matches(":popover-open")) menu.showPopover();
+  }
+
+  // ------------------------------------------------------------ status items
+
+  /** Apps' topbar icons (macOS menu bar extras). Untrusted: icons render as <img>, text as textContent. */
+  private async startStatusItems(): Promise<void> {
+    const bar = this.require("#topbar-status");
+    const menu = this.require("#status-menu");
+    const activate = (id: number, menuId: string): void => {
+      void this.os.display.activateStatusItem(id, menuId).catch(logError);
+    };
+
+    const render = async (): Promise<void> => {
+      const items = await this.os.display.listStatusItems();
+      bar.replaceChildren(
+        ...items.map((item) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "topbar-status-item";
+          button.title = item.title;
+          button.setAttribute("aria-label", item.title);
+          const icon = document.createElement("img");
+          icon.alt = "";
+          icon.src = `data:image/svg+xml,${encodeURIComponent(item.icon)}`;
+          button.append(icon);
+          if (item.label) button.append(item.label);
+
+          button.addEventListener("click", () => {
+            if (!item.menu?.length) return activate(item.id, "click");
+            menu.replaceChildren(
+              ...item.menu.map((entry) => {
+                if ("separator" in entry) return document.createElement("hr");
+                const row = document.createElement("button");
+                row.type = "button";
+                row.textContent = `${entry.checked ? "✓ " : ""}${entry.label}`;
+                row.disabled = entry.disabled === true;
+                row.addEventListener("click", () => {
+                  menu.hidePopover();
+                  activate(item.id, entry.id);
+                });
+                return row;
+              }),
+            );
+            const rect = button.getBoundingClientRect();
+            menu.style.inset = `${rect.bottom + 4}px auto auto ${Math.min(rect.left, innerWidth - 180)}px`;
+            menu.showPopover();
+          });
+          return button;
+        }),
+      );
+    };
+
+    await render();
+    await this.os.events.subscribe(["display.statusChanged"], () => {
+      void render().catch(logError);
+    });
   }
 
   // ------------------------------------------------------------------- pins

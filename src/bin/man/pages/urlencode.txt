@@ -1,0 +1,4 @@
+urlencode [-d] [-a] [text...]
+  Percent-encode text (encodeURIComponent), from the arguments or stdin.
+  -a  encode a whole URL, keeping : / ? # & = (encodeURI)
+  -d  decode instead; + counts as a space

@@ -1,0 +1,4 @@
+json [-m] [-i N] [file...]
+  Pretty-print JSON (2-space indent), or minify with -m. -i N sets the indent.
+  Invalid JSON prints "line L col C: reason" on stderr and exits 1, so
+  `json f.json > /dev/null` validates.

@@ -92,6 +92,9 @@ export type WirePath = Exclude<Paths<AppInterface>, RuntimeLocal>;
 
 export const WIRE_CALLS = {
   "display.workArea": "getWorkArea",
+  "display.addStatusItem": "addStatusItem",
+  "display.updateStatusItem": "updateStatusItem",
+  "display.removeStatusItem": "removeStatusItem",
 
   // Over the wire this claims the window made at exec (iframe processes).
   "windows.create": "claimWindow",

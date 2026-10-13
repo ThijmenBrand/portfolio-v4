@@ -1,0 +1,2 @@
+uuid [-n N] [-7]
+  Print N (default 1) random version 4 UUIDs, or time-ordered version 7 with -7.

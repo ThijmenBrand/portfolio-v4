@@ -261,6 +261,27 @@
   font-variant-numeric: tabular-nums;
 }
 
+.topbar-status { display: flex; align-items: center; gap: 2px; margin-right: 6px; }
+.topbar-status:empty { display: none; }
+.topbar-status-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.topbar-status-item img { width: 16px; height: 16px; }
+.topbar-status-item:hover,
+.topbar-status-item:focus-visible { background: rgba(255, 255, 255, 0.12); }
+.session-menu button:disabled { opacity: 0.4; cursor: default; background: transparent; }
+
 .topbar-user {
   height: 20px;
   padding: 0 8px;

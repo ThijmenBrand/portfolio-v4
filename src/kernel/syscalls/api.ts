@@ -26,12 +26,19 @@ import type {
 import type { ApiRequest, ApiResponse } from "./api-fetch";
 import type { NetRequest, NetResponse } from "./net";
 import type { Ids, SpawnOptions } from "./process";
+import type { StatusItemInfo, StatusItemSpec } from "./status";
 import type { SyscallTable } from "./table";
 import type { WindowHandleCommands } from "./window";
 
 export interface AppInterface {
   display: {
     workArea(): Promise<Rect>;
+    addStatusItem(
+      spec: StatusItemSpec,
+      onSelect: (id: string) => void,
+    ): Promise<number>;
+    updateStatusItem(id: number, patch: Partial<StatusItemSpec>): Promise<void>;
+    removeStatusItem(id: number): Promise<void>;
   };
   windows: {
     create(options: WindowOptions): Promise<WindowHandle>;
@@ -137,6 +144,8 @@ export interface SystemInterface extends AppInterface {
     taskbar(): Promise<HTMLElement>;
     reserveStrut(edge: StrutEdge, size: number): Promise<number>;
     releaseStrut(resourceId: number): Promise<void>;
+    listStatusItems(): Promise<StatusItemInfo[]>;
+    activateStatusItem(id: number, menuId: string): Promise<void>;
   };
   windows: Omit<AppInterface["windows"], "create"> & {
     create(options: WindowOptions): Promise<ElementWindowHandle>;
@@ -151,6 +160,13 @@ export function bindSyscalls(target: SyscallTable, pid: Pid): SystemInterface {
       workArea: () => target.getWorkArea(pid),
       reserveStrut: (edge, size) => target.reserveStrut(pid, edge, size),
       releaseStrut: (resourceId) => target.releaseStrut(pid, resourceId),
+      addStatusItem: (spec, onSelect) =>
+        target.addStatusItem(pid, spec, onSelect),
+      updateStatusItem: (id, patch) => target.updateStatusItem(pid, id, patch),
+      removeStatusItem: (id) => target.removeStatusItem(pid, id),
+      listStatusItems: () => target.listStatusItems(pid),
+      activateStatusItem: (id, menuId) =>
+        target.activateStatusItem(pid, id, menuId),
     },
     windows: {
       create: (options) => target.createWindow(pid, options),

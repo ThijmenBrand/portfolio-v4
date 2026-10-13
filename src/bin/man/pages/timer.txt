@@ -1,0 +1,4 @@
+timer
+  Start a countdown timer that lives only in the top bar, like a macOS menu
+  bar extra. It detaches from the shell, so closing the terminal keeps it.
+  Click the icon to pick 5, 15 or 25 minutes, stop the timer, or quit.

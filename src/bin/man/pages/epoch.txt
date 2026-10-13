@@ -1,0 +1,4 @@
+epoch [time]
+  Show a time as unix seconds, milliseconds, ISO 8601, local time and
+  relative to now. time is "now" (default), unix seconds or ms, or any
+  ISO date: epoch 1700000000, epoch 2024-01-01T12:00Z.

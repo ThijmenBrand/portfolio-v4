@@ -24,7 +24,7 @@ import {
   type Settings,
 } from "../../utils/settings";
 import { defaultAppFor, FILE_APPS, FILE_TYPES } from "../../utils/filetypes";
-import { allApps, registry } from "../registry";
+import { allApps, menubarApps, registry } from "../registry";
 import settingsHTML from "./settings.html?raw";
 import "../../ui/theme.css";
 import "./settings.css";
@@ -35,7 +35,7 @@ const RELOAD_ON_HUP = [
   "/System/desktop",
   "/System/Taskbar",
   "/System/wallpaper",
-  ...["about", "admin", "aliases", "code", "files", "resume", "terminal"].map((id) => `/ProgramFiles/${id}`),
+  ...["about", "admin", "aliases", "code", "devtools", "files", "resume", "terminal"].map((id) => `/ProgramFiles/${id}`),
 ];
 const DESKTOP = "/System/desktop";
 const MAX_UPLOAD = 20 * 1024 * 1024;
@@ -62,7 +62,8 @@ async function bindPathList(os: AppInterface, list: PathList, field: string): Pr
   const { gid } = await os.process.ids();
   const enabled = new Set(await loadPathList(os, list));
   const [group] = fields(field);
-  for (const app of (await allApps(os)).filter((app) => !app.admin || gid === ADMIN_GID)) {
+  const apps = [...(await allApps(os)), ...(list === "autostart" ? menubarApps : [])];
+  for (const app of apps.filter((app) => !app.admin || gid === ADMIN_GID)) {
     const row = document.createElement("label");
     row.className = "row";
     row.innerHTML = `<span class="row-label"></span><input type="checkbox" role="switch" />`;

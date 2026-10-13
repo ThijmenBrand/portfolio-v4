@@ -28,6 +28,11 @@ export function buildAppInterface(client: WireClient, pid: Pid): AppInterface {
   return {
     display: {
       workArea: () => call("display.workArea"),
+      addStatusItem: (spec, onSelect) =>
+        call("display.addStatusItem", spec, onSelect),
+      updateStatusItem: (id, patch) =>
+        call("display.updateStatusItem", id, patch),
+      removeStatusItem: (id) => call("display.removeStatusItem", id),
     },
 
     windows: {

@@ -1,0 +1,92 @@
+<nav class="tabs" role="tablist" aria-label="Tools">
+  <button type="button" role="tab" id="tab-json" aria-controls="panel-json">JSON</button>
+  <button type="button" role="tab" id="tab-base64" aria-controls="panel-base64">Base64</button>
+  <button type="button" role="tab" id="tab-jwt" aria-controls="panel-jwt">JWT</button>
+  <button type="button" role="tab" id="tab-url" aria-controls="panel-url">URL</button>
+  <button type="button" role="tab" id="tab-uuid" aria-controls="panel-uuid">UUID</button>
+  <button type="button" role="tab" id="tab-time" aria-controls="panel-time">Timestamp</button>
+</nav>
+
+<section role="tabpanel" id="panel-json" aria-labelledby="tab-json" hidden>
+  <textarea data-in spellcheck="false" aria-label="JSON input" placeholder='{"paste": "JSON here"}'></textarea>
+  <div class="row">
+    <select name="indent" aria-label="Indent">
+      <option value="2">2 spaces</option>
+      <option value="4">4 spaces</option>
+      <option value="0">Minified</option>
+    </select>
+    <span class="status" data-status role="status"></span>
+    <span class="spacer"></span>
+    <button type="button" data-copy>Copy</button>
+  </div>
+  <pre data-out></pre>
+</section>
+
+<section role="tabpanel" id="panel-base64" aria-labelledby="tab-base64" hidden>
+  <textarea data-in spellcheck="false" aria-label="Base64 input" placeholder="Text to encode, or base64 to decode"></textarea>
+  <div class="row">
+    <span class="segmented">
+      <label><input type="radio" name="mode" value="encode" checked />Encode</label>
+      <label><input type="radio" name="mode" value="decode" />Decode</label>
+    </span>
+    <label class="check"><input type="checkbox" name="url" />URL-safe</label>
+    <span class="status" data-status role="status"></span>
+    <span class="spacer"></span>
+    <button type="button" data-copy>Copy</button>
+  </div>
+  <pre data-out></pre>
+</section>
+
+<section role="tabpanel" id="panel-jwt" aria-labelledby="tab-jwt" hidden>
+  <textarea data-in class="short" spellcheck="false" aria-label="JWT" placeholder="eyJhbGciOi…"></textarea>
+  <div class="row">
+    <span class="status" data-status role="status"></span>
+    <span class="spacer"></span>
+    <span class="muted">Signature is not verified</span>
+  </div>
+  <div class="scroll" data-jwt hidden>
+    <h2>Header</h2>
+    <pre data-field="header"></pre>
+    <h2>Payload</h2>
+    <pre data-field="payload"></pre>
+    <table data-field="times"></table>
+  </div>
+</section>
+
+<section role="tabpanel" id="panel-url" aria-labelledby="tab-url" hidden>
+  <textarea data-in spellcheck="false" aria-label="URL input" placeholder="Text to encode, or %-encoded text to decode"></textarea>
+  <div class="row">
+    <span class="segmented">
+      <label><input type="radio" name="mode" value="encode" checked />Encode</label>
+      <label><input type="radio" name="mode" value="decode" />Decode</label>
+    </span>
+    <label class="check"><input type="checkbox" name="whole" />Whole URL</label>
+    <span class="status" data-status role="status"></span>
+    <span class="spacer"></span>
+    <button type="button" data-copy>Copy</button>
+  </div>
+  <pre data-out></pre>
+</section>
+
+<section role="tabpanel" id="panel-uuid" aria-labelledby="tab-uuid" hidden>
+  <div class="row">
+    <select name="version" aria-label="Version">
+      <option value="4">v4 (random)</option>
+      <option value="7">v7 (time-ordered)</option>
+    </select>
+    <label class="check">Count <input type="number" name="count" value="5" min="1" max="1000" /></label>
+    <button type="button" class="primary" data-action="generate">Generate</button>
+    <span class="spacer"></span>
+    <button type="button" data-copy>Copy</button>
+  </div>
+  <pre data-out></pre>
+</section>
+
+<section role="tabpanel" id="panel-time" aria-labelledby="tab-time" hidden>
+  <div class="row">
+    <input data-in class="grow" spellcheck="false" aria-label="Time" placeholder="now, 1700000000, 1700000000000 or 2024-01-01T12:00Z" />
+    <button type="button" data-action="now">Now</button>
+  </div>
+  <span class="status" data-status role="status"></span>
+  <table data-field="rows"></table>
+</section>

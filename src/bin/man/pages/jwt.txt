@@ -1,0 +1,4 @@
+jwt [token]
+  Decode a JSON Web Token (from the argument or stdin) and print its header,
+  payload, and exp/nbf/iat as dates. Says EXPIRED when exp has passed.
+  The signature is NOT verified.

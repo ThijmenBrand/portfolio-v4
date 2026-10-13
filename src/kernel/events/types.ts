@@ -52,6 +52,10 @@ type display_work_area_changed = {
   area: Rect;
 };
 
+type display_status_changed = {
+  type: "display.statusChanged";
+};
+
 export type KernelEvent =
   | process_spawned
   | process_exited
@@ -61,6 +65,7 @@ export type KernelEvent =
   | window_focused
   | window_minimized
   | display_work_area_changed
+  | display_status_changed
   | fs_changed;
 
 export type EventType = KernelEvent["type"];

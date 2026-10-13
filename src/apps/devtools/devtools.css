@@ -1,0 +1,93 @@
+body {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  padding: 0;
+}
+
+/* ----------------------------------------------------------------- tabs -- */
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  padding: 8px 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  border-bottom: 1px solid var(--app-border);
+  background: var(--app-surface);
+}
+
+.tabs [role="tab"] {
+  flex: none;
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--app-radius);
+  background: none;
+  color: var(--app-text-dim);
+}
+.tabs [role="tab"]:hover { background: var(--app-surface-hi); color: var(--app-text); }
+.tabs [role="tab"][aria-selected="true"] { background: var(--app-accent-soft); color: var(--app-text); }
+
+/* ---------------------------------------------------------------- panel -- */
+
+[role="tabpanel"] {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  overflow: auto;
+}
+[role="tabpanel"][hidden] { display: none; }
+
+textarea[data-in], pre[data-out] {
+  flex: 1;
+  min-height: 80px;
+  margin: 0;
+  font-family: var(--app-mono);
+  font-size: 12px;
+  resize: none;
+}
+textarea.short { flex: 0 0 90px; word-break: break-all; }
+pre { white-space: pre-wrap; word-break: break-all; user-select: text; }
+
+.row { flex-wrap: wrap; }
+.grow { flex: 1; min-width: 0; font-family: var(--app-mono); }
+.check { display: inline-flex; align-items: center; gap: 6px; }
+.check input[type="number"] { width: 72px; }
+
+.status { color: var(--app-text-dim); }
+.status.error { color: var(--app-danger); }
+
+/* Two radios that look like one control. */
+.segmented {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--app-border-hi);
+  border-radius: var(--app-radius);
+  background: var(--app-well);
+}
+.segmented label {
+  display: grid;
+  place-items: center;
+  height: 21px;
+  padding: 0 10px;
+  border-radius: var(--app-radius-sm);
+  color: var(--app-text-dim);
+}
+.segmented input { position: absolute; opacity: 0; pointer-events: none; }
+.segmented label:has(:checked) { background: var(--app-surface-hi); color: var(--app-text); }
+.segmented label:has(:focus-visible) { outline: 2px solid var(--app-accent); }
+
+/* ------------------------------------------------------------ jwt, time -- */
+
+.scroll { display: grid; gap: 4px; }
+h2 { margin: 6px 0 2px; font-size: 12px; font-weight: 600; color: var(--app-text-dim); }
+.scroll pre { margin: 0; }
+
+th { width: 1%; white-space: nowrap; }
+.mono { font-family: var(--app-mono); font-size: 12px; word-break: break-all; user-select: text; }
+td.copy { width: 1%; text-align: right; }
+td.copy:empty { display: none; }

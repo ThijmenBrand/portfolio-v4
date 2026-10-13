@@ -32,6 +32,7 @@ import { displaySyscalls } from "./display";
 import { eventsSyscalls } from "./events";
 import { fdSyscalls } from "./fd";
 import { shellSyscalls } from "./shell";
+import type { StatusItemInfo, StatusItemSpec } from "./status";
 import { fsSyscalls } from "./fs";
 import { netSyscalls, type NetRequest, type NetResponse } from "./net";
 import { processSyscalls, type Ids, type SpawnOptions } from "./process";
@@ -75,6 +76,19 @@ export interface SyscallTable {
   getWorkArea(callerPid: Pid): Promise<Rect>;
   reserveStrut(callerPid: Pid, edge: StrutEdge, size: number): Promise<number>;
   releaseStrut(callerPid: Pid, resourceId: number): Promise<void>;
+  addStatusItem(
+    callerPid: Pid,
+    spec: StatusItemSpec,
+    onSelect: (id: string) => void,
+  ): Promise<number>;
+  updateStatusItem(
+    callerPid: Pid,
+    id: number,
+    patch: Partial<StatusItemSpec>,
+  ): Promise<void>;
+  removeStatusItem(callerPid: Pid, id: number): Promise<void>;
+  listStatusItems(callerPid: Pid): Promise<StatusItemInfo[]>;
+  activateStatusItem(callerPid: Pid, id: number, menuId: string): Promise<void>;
   list(callerPid: Pid): Promise<ProcessInfo[]>;
   getSignal(callerPid: Pid): ProcessSignal;
   onSignal(

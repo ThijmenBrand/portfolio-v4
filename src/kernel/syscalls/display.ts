@@ -1,4 +1,11 @@
 import { releaseStrut, reserveStrut } from "./struts";
+import {
+  activateStatusItem,
+  addStatusItem,
+  listStatusItems,
+  removeStatusItem,
+  updateStatusItem,
+} from "./status";
 import type { KernelContext, Pid, StrutEdge } from "../types";
 import { alive, requirePrivilege } from "./guards";
 import type { SyscallTable } from "./table";
@@ -12,6 +19,11 @@ export function displaySyscalls(
   | "getWorkArea"
   | "reserveStrut"
   | "releaseStrut"
+  | "addStatusItem"
+  | "updateStatusItem"
+  | "removeStatusItem"
+  | "listStatusItems"
+  | "activateStatusItem"
 > {
   return {
     getDisplayRoot: alive(ctx, (pid: Pid) => {
@@ -33,5 +45,24 @@ export function displaySyscalls(
     releaseStrut: alive(ctx, (pid: Pid, resourceId: number) =>
       releaseStrut(ctx, pid, resourceId),
     ),
+    addStatusItem: alive(
+      ctx,
+      (pid: Pid, spec: unknown, onSelect: (id: string) => void) =>
+        addStatusItem(ctx, pid, spec, onSelect),
+    ),
+    updateStatusItem: alive(ctx, (pid: Pid, id: number, patch: unknown) =>
+      updateStatusItem(ctx, pid, id, patch),
+    ),
+    removeStatusItem: alive(ctx, (pid: Pid, id: number) =>
+      removeStatusItem(ctx, pid, id),
+    ),
+    listStatusItems: alive(ctx, (pid: Pid) => {
+      requirePrivilege(ctx, pid, "listStatusItems");
+      return listStatusItems(ctx);
+    }),
+    activateStatusItem: alive(ctx, (pid: Pid, id: number, menuId: string) => {
+      requirePrivilege(ctx, pid, "activateStatusItem");
+      activateStatusItem(ctx, id, menuId);
+    }),
   };
 }

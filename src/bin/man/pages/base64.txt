@@ -1,0 +1,4 @@
+base64 [-d] [-u] [file...]
+  Encode to base64, or decode with -d. -u uses the url-safe alphabet without
+  padding. Decoding accepts either alphabet. Trailing newlines are encoded:
+  echo -n hi | base64.

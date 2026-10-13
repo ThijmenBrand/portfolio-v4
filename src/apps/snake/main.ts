@@ -7,6 +7,7 @@ import "./snake.css";
 
 const SHORT_SIDE = 18; // cells along the window's shorter side; the longer side gets as many as fit
 const TICK_MS = 110;
+const STATUS_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="9.5" r="5.5" fill="#e5383b"/><path d="M8 4 9 1.5" stroke="#5b3a1e" stroke-width="1.2" fill="none"/><ellipse cx="10.5" cy="2.8" rx="2" ry="1" fill="#3fa34d"/></svg>`;
 
 type Point = { x: number; y: number };
 
@@ -50,7 +51,18 @@ export async function main(os: AppInterface): Promise<void> {
 
   const set = (field: string, text: string) => {
     document.querySelector(`[data-field="${field}"]`)!.textContent = text;
+    if (field === "score")
+      void os.display.updateStatusItem(statusItem, { label: text }).catch(() => {});
   };
+
+  // Topbar icon with the live score; clicking it pauses/resumes and brings the window back.
+  const statusItem = await os.display.addStatusItem(
+    { icon: STATUS_ICON, title: "Snake", label: "0" },
+    () => {
+      void os.windows.focus(handle.id);
+      if (state === "running" || state === "paused") togglePause();
+    },
+  );
 
   function placeFood(): void {
     const free: Point[] = [];
@@ -211,6 +223,17 @@ export async function main(os: AppInterface): Promise<void> {
   const start = () => { timer = setInterval(step, TICK_MS); };
   const stop = () => clearInterval(timer);
 
+  function togglePause(): void {
+    state = state === "running" ? "paused" : "running";
+    if (state === "paused") {
+      stop();
+      show("Paused", "Press P or Space to resume.");
+    } else {
+      start();
+      overlay.hidden = true;
+    }
+  }
+
   document.addEventListener("keydown", (event) => {
     const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
     const turn = KEYS[key];
@@ -226,14 +249,7 @@ export async function main(os: AppInterface): Promise<void> {
       overlay.hidden = true;
       start();
     } else if (key === "p" && (state === "running" || state === "paused")) {
-      state = state === "running" ? "paused" : "running";
-      if (state === "paused") {
-        stop();
-        show("Paused", "Press P or Space to resume.");
-      } else {
-        start();
-        overlay.hidden = true;
-      }
+      togglePause();
     }
   });
 
