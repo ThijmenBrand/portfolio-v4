@@ -103,6 +103,19 @@ assert.equal(
   "traversal",
 );
 
+// TOTP: RFC 6238 SHA1 vector (secret "12345678901234567890", T=59 s → 287082).
+const { totpVerifier } = await import("./totp.ts");
+const RFC = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
+assert.equal(totpVerifier(RFC)("287082", 59_000), true, "rfc vector");
+assert.equal(totpVerifier(RFC)("287082", 59_000 + 30_000), true, "one step late");
+assert.equal(totpVerifier(RFC)("287082", 59_000 + 60_000), false, "two steps late");
+assert.equal(totpVerifier(RFC)("287082", 59_000 - 60_000), false, "two steps early");
+assert.equal(totpVerifier(RFC)("287083", 59_000), false, "wrong code");
+assert.equal(totpVerifier(RFC)("", 59_000), false, "no code");
+const once = totpVerifier(RFC);
+assert.equal(once("287082", 59_000), true);
+assert.equal(once("287082", 60_000), false, "replay");
+
 const { isPrivate } = await import("./net.ts");
 for (const a of [
   "10.0.0.1",

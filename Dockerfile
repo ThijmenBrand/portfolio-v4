@@ -15,6 +15,9 @@ RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
 COPY . .
 # `pnpm build` = tsc (type check, including the wire-safety checks, and server/) + vite build.
 RUN pnpm build
+# The API's one dependency. pnpm's node_modules/otpauth is a symlink, so copy it
+# dereferenced; its Node build imports only node:crypto.
+RUN cp -rL node_modules/otpauth /otpauth
 
 # --- caddy binary ---------------------------------------------------------------
 # The official image sets the cap_net_bind_service file capability on the binary
@@ -28,7 +31,7 @@ RUN cp /usr/bin/caddy /caddy
 # Caddy as an unprivileged user, listening on 8080. Config and site files stay
 # root-owned: the server can read them but never modify them.
 # Node base for the API: it runs the .ts sources directly (type stripping) and
-# uses only the stdlib, so no build output and no node_modules.
+# uses the stdlib plus otpauth, so no build output and one package in node_modules.
 FROM node:${NODE_VERSION}-alpine AS runner
 COPY --from=caddy /caddy /usr/bin/caddy
 COPY deploy/web/Caddyfile /etc/caddy/Caddyfile
@@ -36,6 +39,7 @@ COPY --from=build /app/dist /srv
 # package.json for "type": "module"; hash.ts is also the CLI for OWNER_PASSWORD_HASH.
 COPY package.json /app/
 COPY server/*.ts /app/server/
+COPY --from=build /otpauth /app/node_modules/otpauth
 # The root filesystem is read-only at runtime; Caddy's (unused) state goes to /tmp.
 ENV XDG_CONFIG_HOME=/tmp/caddy-config XDG_DATA_HOME=/tmp/caddy-data
 USER 65532:65532

@@ -1,5 +1,5 @@
-// The portfolio's API: owner login + private routes. Node stdlib only, run
-// directly by Node (type stripping, no build step):
+// The portfolio's API: owner login + private routes. Node stdlib plus otpauth,
+// run directly by Node (type stripping, no build step):
 //   node server/main.ts            (dev: pnpm dev:api, behind Vite's /api proxy)
 // In production only the container's Caddy reaches it (deploy/web/Caddyfile).
 import {
@@ -16,6 +16,7 @@ import {
   requireSession,
   signSession,
   verifyPassword,
+  verifyTotp,
 } from "./auth.ts";
 import { netFetch } from "./net.ts";
 import { callSimpleLogin, slRoute } from "./simplelogin.ts";
@@ -121,12 +122,14 @@ async function handle(
       !loginAllowed("global", LOGIN_ATTEMPTS_GLOBAL)
     )
       throw new HttpError(429, "too many attempts, try again later");
-    const { username, password } = await readJson(req);
-    if (typeof username !== "string" || typeof password !== "string")
+    const { username, password, code = "" } = await readJson(req);
+    if (typeof username !== "string" || typeof password !== "string" || typeof code !== "string")
       throw new HttpError(400, "username and password required");
     // Always run scrypt, so a wrong username takes as long as a wrong password.
+    // The code is checked last and fails the same way, so a right password with
+    // a wrong code reveals nothing (and doesn't burn the code).
     const passwordOk = await verifyPassword(password);
-    if (!passwordOk || username !== OWNER_USERNAME)
+    if (!passwordOk || username !== OWNER_USERNAME || !verifyTotp(code))
       throw new HttpError(401, "invalid credentials");
     attempts.delete(client); // the limit is for guessing, not for logging in often
     setSession(res, signSession(username), SESSION_MAX_AGE);

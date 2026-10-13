@@ -129,7 +129,8 @@
   outline: none;
 }
 
-.login-field[data-field="name"] {
+.login-field[data-field="name"],
+.login-field[data-field="code"] {
   margin-bottom: 8px;
 }
 

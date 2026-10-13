@@ -12,10 +12,11 @@ The script starts the new image, waits for its healthcheck and keeps the last
 good one; an unhealthy image is rolled back automatically.
 
 ```
-server/                         the API (Node, stdlib only, run as .ts): owner login, /api/private/*
+server/                         the API (Node, stdlib + otpauth, run as .ts): owner login, /api/private/*
 ├── main.ts                     routes, CSRF + body limit, login rate limit
 ├── auth.ts                     password check, signed session cookie
 ├── hash.ts                     password on stdin → OWNER_PASSWORD_HASH
+├── totp.ts                     authenticator codes; CLI → OWNER_TOTP_SECRET + otpauth:// URI
 └── selftest.ts                 `node server/selftest.ts`
 deploy/
 ├── web/Caddyfile               Caddy inside the container (CSP, CORS on /assets/, caching, /api/* → api)
@@ -70,13 +71,20 @@ cat > api.env <<EOF
 OWNER_USERNAME=thijmen
 OWNER_PASSWORD_HASH=$(printf '%s' "$PW" | node server/hash.ts)
 SESSION_SECRET=$(openssl rand -hex 32)
+$(node server/totp.ts thijmen | tee /dev/stderr | head -1)
 PUBLIC_ORIGIN=https://thijmenbrand.nl
 SIMPLELOGIN_API_KEY=<key from SimpleLogin → Settings → API Keys>
 EOF
 ```
 
+The `otpauth://` line printed above goes into your authenticator app (type the
+secret, or scan `qrencode -t ansiutf8 '<uri>'`); after that, the owner login
+asks for its 6-digit code. Lost the phone: put a new `node server/totp.ts`
+secret in `api.env` and recreate the api. Without `OWNER_TOTP_SECRET` the API
+logs a warning and logs in with the password alone.
+
 `NODE_ENV` and `PORT` come from `docker-compose.yml`. After changing the file
-(a new password or a new `SESSION_SECRET` signs out every session), recreate
+(a new password, TOTP secret or `SESSION_SECRET` signs out every session), recreate
 the api with `sudo portfolio-deploy deploy "$(cat /srv/portfolio/current)"`.
 
 ### Reverse proxy + TLS

@@ -2,13 +2,14 @@
 // and a signed session cookie.
 //
 // ponytail: stateless sessions. Logout only clears the cookie; a stolen cookie
-// stays valid until it expires (12 hours). A new password or SESSION_SECRET
+// stays valid until it expires (12 hours). A new password, TOTP secret or SESSION_SECRET
 // kills every session at once (both key the HMAC); add a server-side session
 // store if single sessions ever need revoking.
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import { isIP } from "node:net";
 import { scryptKey } from "./hash.ts";
+import { totpVerifier } from "./totp.ts";
 
 export class HttpError extends Error {
   status: number;
@@ -34,6 +35,13 @@ if (!salt?.length || hash?.length !== 64) {
 const SESSION_SECRET = env("SESSION_SECRET");
 if (SESSION_SECRET.length < 32) throw new Error("SESSION_SECRET must be at least 32 characters");
 
+// Second factor: required when set. Unset (dev without setup) skips it, loudly.
+const OWNER_TOTP_SECRET = process.env.OWNER_TOTP_SECRET ?? "";
+const checkTotp = OWNER_TOTP_SECRET ? totpVerifier(OWNER_TOTP_SECRET) : undefined;
+if (!checkTotp) console.warn("OWNER_TOTP_SECRET not set: 2FA disabled (node server/totp.ts)");
+/** True if the code is valid, or if 2FA isn't configured. */
+export const verifyTotp = (code: string) => checkTotp?.(code) ?? true;
+
 export const SESSION_MAX_AGE = 12 * 60 * 60; // seconds
 
 // One scrypt at a time: each takes 16 MiB, and a few in parallel would push the
@@ -58,8 +66,9 @@ export function rateKey(ip: string): string {
   return `${groups.slice(0, 4).map((g) => g.replace(/^0+(?=.)/, "")).join(":")}::/64`;
 }
 
-// The password hash keys the HMAC too, so a new password signs out every session.
-const SESSION_KEY = `${SESSION_SECRET}:${OWNER_PASSWORD_HASH}`;
+// The password hash and TOTP secret key the HMAC too, so changing either signs
+// out every session.
+const SESSION_KEY = `${SESSION_SECRET}:${OWNER_PASSWORD_HASH}:${OWNER_TOTP_SECRET}`;
 const sign = (payload: string) =>
   createHmac("sha256", SESSION_KEY).update(payload).digest("base64url");
 

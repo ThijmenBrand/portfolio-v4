@@ -26,7 +26,8 @@ import "../../ui/theme.css";
  *
  * Local users (guest, useradd; never root) are checked against /etc/shadow, in the
  * browser. Any other name is the owner: the backend checks the password and
- * sets a session cookie, and the owner becomes a local admin-group user.
+ * sets a session cookie, and the owner becomes a local admin-group user. The owner
+ * also gives an authenticator code (2FA), checked by the backend.
  */
 export async function main(os: SystemInterface): Promise<void> {
   await seedUsers(os);
@@ -132,7 +133,7 @@ async function ownerFromSession(os: SystemInterface, root: HTMLElement): Promise
 }
 
 /** Resolves with the user once their password checks out. */
-async function login(os: SystemInterface, name: string, password: string): Promise<User> {
+async function login(os: SystemInterface, name: string, password: string, code: string): Promise<User> {
   const local = userByName(await readUsers(os), name);
   // Root has no desktop session; same message as a bad password, no hint it exists.
   if (local?.uid === 0) throw new Error("Wrong user name or password.");
@@ -145,7 +146,7 @@ async function login(os: SystemInterface, name: string, password: string): Promi
   const response = await os.api
     .fetch("/api/auth/login", {
       method: "POST",
-      body: JSON.stringify({ username: name, password }),
+      body: JSON.stringify({ username: name, password, code }),
     })
     .catch(() => ({ status: 0, body: "" }));
   if (response.status === 204) {
@@ -154,7 +155,7 @@ async function login(os: SystemInterface, name: string, password: string): Promi
   }
   if (response.status === 429) throw new Error("Too many attempts. Try again later.");
   if (response.status >= 500) throw new Error("Login service unavailable.");
-  throw new Error("Wrong user name or password.");
+  throw new Error("Wrong user name, password or code.");
 }
 
 /** Shown for "Other user", where the owner types their name. */
@@ -204,6 +205,7 @@ async function prompt(os: SystemInterface, root: HTMLElement): Promise<User> {
   const form = field<HTMLFormElement>("form");
   const name = field<HTMLInputElement>("name");
   const password = field<HTMLInputElement>("password");
+  const code = field<HTMLInputElement>("code");
   const error = field("error");
   const users = field("users");
   const avatar = field("avatar");
@@ -227,8 +229,9 @@ async function prompt(os: SystemInterface, root: HTMLElement): Promise<User> {
   const select = (choice: string | undefined) => {
     paintAvatar(os, avatar, userOf(choice));
     title.textContent = choice ?? "Other user";
-    name.hidden = choice !== undefined;
+    name.hidden = code.hidden = choice !== undefined;
     name.value = choice ?? "";
+    code.value = "";
     password.value = "";
     error.textContent = "";
     // No password set: one click on the arrow is enough.
@@ -260,7 +263,7 @@ async function prompt(os: SystemInterface, root: HTMLElement): Promise<User> {
       submit.disabled = true;
       error.textContent = "";
       form.classList.remove("is-wrong");
-      login(os, name.value.trim(), password.value)
+      login(os, name.value.trim(), password.value, code.value.trim())
         .then(async (user) => {
           clearInterval(clock);
           shell.classList.add("is-leaving");
@@ -272,7 +275,7 @@ async function prompt(os: SystemInterface, root: HTMLElement): Promise<User> {
           error.textContent = failure.message;
           void form.offsetWidth; // restart the shake on repeat failures
           form.classList.add("is-wrong");
-          password.value = "";
+          password.value = code.value = "";
           password.focus();
         })
         .finally(() => (submit.disabled = false));
