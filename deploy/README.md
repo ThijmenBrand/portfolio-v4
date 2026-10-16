@@ -59,6 +59,50 @@ sudo chmod 440 /etc/sudoers.d/portfolio-deploy && sudo visudo -c
 restrict,command="/usr/local/bin/portfolio-deploy-ssh" ssh-ed25519 AAAA…(portfolio-deploy.pub)… portfolio-deploy
 ```
 
+### Keeping the server half in sync
+
+Two files live on the server and are installed **by hand** (steps 2 above):
+`/srv/portfolio/docker-compose.yml` and `/usr/local/sbin/portfolio-deploy`. CI
+only builds the image and asks the server to deploy it — it never writes those
+files, and deliberately so: the compose file is run by root, and `docker compose`
+can mount anything and run privileged containers, so a deploy key that could
+write it would be root-equivalent. That is the same reason `deploy` is not in
+the `docker` group.
+
+The cost of that split is drift. A commit that changes the image *and* those
+files leaves the server a version behind until someone remembers, and the new
+image then fails for a reason nothing says out loud — cloud sync added the
+`/data` volume, the installed compose file had none, and the api spent 60s
+failing its healthcheck on an unwritable database before rolling back.
+
+So every image carries the copies it was built with at `/app/deploy/`, and
+`portfolio-deploy deploy` compares them against what is installed **before** it
+touches the running deployment. On a mismatch it prints a diff, exits 3 and
+changes nothing:
+
+```
+[portfolio-deploy] stale server config: /srv/portfolio/docker-compose.yml differs from the copy in ghcr.io/…
+[portfolio-deploy]   @@ -33,7 +33,14 @@
+[portfolio-deploy]   +      CLOUD_DB: /data/cloud.db
+[portfolio-deploy]   +    volumes:
+[portfolio-deploy]   +      - cloud-data:/data
+[portfolio-deploy] install both files from a checkout of the deployed commit (deploy/README.md), then deploy again
+```
+
+To clear it, install both files from a checkout of the commit being deployed
+(`git checkout <sha>`, then the two `install` lines from step 2) and re-run the
+deploy — from GitHub, Actions → deploy → *Run workflow*, so it deploys the new
+digest rather than the one you rolled back to.
+
+`sudo portfolio-deploy status` runs the same comparison and reports it without
+failing, so you can check for drift without waiting for a deploy. `rollback`
+skips it on purpose: the previous image expects the previous config, and a
+rollback has to work even when the server half is mid-update.
+
+The check can only catch drift once a *checking* script is installed, and only
+against images built after `/app/deploy/` shipped — older images are reported
+as unverifiable and deploy as before.
+
 ### API secrets
 
 `/srv/portfolio/api.env` (root:root, 600; compose reads it as root) holds the
@@ -162,9 +206,13 @@ reviewers there if you want to approve each deploy by hand.
 ## By hand, on the server
 
 ```sh
-sudo portfolio-deploy status
+sudo portfolio-deploy status      # current image, config drift, container state
 sudo portfolio-deploy rollback
 ```
+
+Exit codes from `deploy`: 2 = the image isn't one of this repo's digests,
+3 = the server half is stale (nothing was changed), 1 = the new image came up
+unhealthy and was rolled back.
 
 ## Checking a deploy
 

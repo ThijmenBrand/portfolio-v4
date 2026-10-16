@@ -40,6 +40,11 @@ COPY --from=build /app/dist /srv
 COPY package.json /app/
 COPY server/*.ts /app/server/
 COPY --from=build /otpauth /app/node_modules/otpauth
+# The server-side half of a deploy, which deploy/README.md installs by hand:
+# carried along so portfolio-deploy can compare the server's copies against the
+# ones this image was built with, and refuse a stale server instead of failing
+# its healthcheck. Inert here -- nothing in the image reads or runs them.
+COPY deploy/docker-compose.yml deploy/server/portfolio-deploy /app/deploy/
 # The root filesystem is read-only at runtime; Caddy's (unused) state goes to /tmp.
 ENV XDG_CONFIG_HOME=/tmp/caddy-config XDG_DATA_HOME=/tmp/caddy-data
 USER 65532:65532
