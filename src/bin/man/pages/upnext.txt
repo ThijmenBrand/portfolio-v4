@@ -1,0 +1,8 @@
+upnext
+  Show the next event from your subscribed calendars in the top bar, like a
+  macOS menu bar extra. It detaches from the shell, so closing the terminal
+  keeps it. Click the icon for the next fortnight's events, or to open the
+  Calendar app.
+
+  Read-only: it shows what Calendar has already fetched and never syncs on
+  its own. Subscribe to calendars in the Calendar app (see `man calendar`).

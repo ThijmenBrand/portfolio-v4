@@ -157,6 +157,7 @@ export interface SyscallTable {
   getLocation(callerPid: Pid): Promise<LocationInfo>;
   download(callerPid: Pid, path: string): Promise<void>;
   apiFetch(callerPid: Pid, path: string, request?: ApiRequest): Promise<ApiResponse>;
+  setSessionUser(callerPid: Pid, uid: number | undefined): Promise<void>;
   netFetch(callerPid: Pid, url: string, request?: NetRequest): Promise<NetResponse>;
   openDialog(callerPid: Pid, options: DialogOptions): Promise<string | null>;
   clipboardWrite(callerPid: Pid, text: string): Promise<void>;

@@ -15,6 +15,12 @@ export interface Mount {
   path: string;
   driver: FileSystemDriver;
   readonly: boolean;
+  /**
+   * Served by the backend rather than by this browser. Such a mount reaches
+   * the owner's private API, so the VFS keeps filesystem code off it and
+   * gives it fixed permissions (fs/perm.ts remoteAttr).
+   */
+  remote?: boolean;
 }
 
 export interface DirEntry {

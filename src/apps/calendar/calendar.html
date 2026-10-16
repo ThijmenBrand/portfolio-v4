@@ -1,0 +1,156 @@
+<main class="cal">
+  <header class="top">
+    <button type="button" class="button" data-action="today">Today</button>
+    <div class="step" role="group" aria-label="Move">
+      <button type="button" class="icon-button" data-action="prev" aria-label="Previous">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3L5 8l5 5" /></svg>
+      </button>
+      <button type="button" class="icon-button" data-action="next" aria-label="Next">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3l5 5-5 5" /></svg>
+      </button>
+    </div>
+    <h1 class="title" data-field="title" aria-live="polite"></h1>
+    <div class="views" role="group" aria-label="View">
+      <button type="button" class="view" data-action="view-month" aria-pressed="true">
+        <span class="long">Month</span><span class="short">M</span>
+      </button>
+      <button type="button" class="view" data-action="view-week" aria-pressed="false">
+        <span class="long">Week</span><span class="short">W</span>
+      </button>
+      <button type="button" class="view" data-action="view-agenda" aria-pressed="false">
+        <span class="long">Agenda</span><span class="short">A</span>
+      </button>
+    </div>
+    <button type="button" class="icon-button" data-action="refresh" aria-label="Refresh calendars" title="Refresh calendars">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.8-4.1M13 1.5V5H9.5" /></svg>
+    </button>
+    <button type="button" class="icon-button sheet-toggle" data-action="sources" aria-label="Calendars" title="Calendars">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4h11M2.5 8h11M2.5 12h11" /></svg>
+    </button>
+  </header>
+
+  <div class="body">
+    <aside class="side" data-field="side">
+      <h2 class="side-head">Calendars</h2>
+      <ul class="sources" data-field="sources"></ul>
+      <button type="button" class="link add" data-action="add">+ Add calendar</button>
+    </aside>
+
+    <section class="stage" data-field="stage">
+      <section class="empty" data-field="empty" hidden>
+        <h2>Your calendars, side by side</h2>
+        <p>Subscribe to a calendar link, or import an <code>.ics</code> file. Everything stays read-only.</p>
+        <div class="empty-actions">
+          <button type="button" class="button primary" data-action="add-link">Add a link</button>
+          <button type="button" class="button" data-action="add-file">Import a file</button>
+        </div>
+      </section>
+
+      <div class="month" data-field="month" role="grid" aria-label="Month" hidden></div>
+      <div class="week" data-field="week" aria-label="Week" hidden></div>
+      <div class="agenda" data-field="agenda" aria-label="Agenda" hidden></div>
+    </section>
+  </div>
+
+  <footer class="bar">
+    <p class="keys">
+      <span><kbd>T</kbd> today</span>
+      <span><kbd>&larr;</kbd><kbd>&rarr;</kbd> move</span>
+      <span><kbd>M</kbd><kbd>W</kbd><kbd>A</kbd> view</span>
+      <span><kbd>R</kbd> refresh</span>
+    </p>
+    <output class="status" aria-live="polite" data-field="status">
+      <span data-field="status-text"></span>
+      <button type="button" class="link" data-action="undo" hidden>Undo</button>
+    </output>
+  </footer>
+</main>
+
+<template id="source-row">
+  <li class="source">
+    <span class="swatch" aria-hidden="true"></span>
+    <div class="source-main">
+      <span class="source-name" data-field="name"></span>
+      <span class="source-note" data-field="note"></span>
+    </div>
+    <input type="checkbox" role="switch" class="toggle" data-action="toggle" />
+    <button type="button" class="icon-button row-menu" data-action="menu" aria-label="Calendar options">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="3.5" cy="8" r="1.2" /><circle cx="8" cy="8" r="1.2" /><circle cx="12.5" cy="8" r="1.2" /></svg>
+    </button>
+  </li>
+</template>
+
+<template id="source-editor">
+  <li class="editor">
+    <div class="kinds" role="group" aria-label="Calendar source">
+      <button type="button" class="kind" data-action="kind-url" aria-pressed="true">Link</button>
+      <button type="button" class="kind" data-action="kind-file" aria-pressed="false">File</button>
+    </div>
+
+    <div class="editor-fields">
+      <label class="field url-only">
+        <span>Address</span>
+        <input type="url" name="url" placeholder="example.com/calendar.ics" spellcheck="false" autocapitalize="off" />
+      </label>
+      <div class="field file-only" hidden>
+        <span>File</span>
+        <button type="button" class="button pick" data-action="pick">Choose file…</button>
+      </div>
+      <label class="field">
+        <span>Name</span>
+        <input type="text" name="name" placeholder="Calendar" maxlength="60" />
+      </label>
+      <div class="field">
+        <span>Colour</span>
+        <div class="hues" role="group" aria-label="Colour" data-field="hues"></div>
+      </div>
+    </div>
+
+    <p class="editor-error" role="alert" data-field="error" hidden></p>
+    <div class="editor-actions">
+      <button type="button" class="link danger" data-action="remove" hidden>Remove</button>
+      <span class="spacer"></span>
+      <button type="button" class="button" data-action="cancel">Cancel</button>
+      <button type="button" class="button primary" data-action="save">Add</button>
+    </div>
+  </li>
+</template>
+
+<template id="week-chrome">
+  <div class="week-head">
+    <div class="week-gutter-head"></div>
+    <div class="week-days" data-field="week-days"></div>
+  </div>
+  <div class="week-allday-row">
+    <div class="week-gutter-head allday-label">all&#8209;day</div>
+    <div class="week-allday" data-field="week-allday"></div>
+  </div>
+  <div class="week-scroll" data-field="week-scroll">
+    <div class="week-grid">
+      <div class="week-gutter" data-field="week-gutter"></div>
+      <div class="week-cols" data-field="week-cols">
+        <div class="week-rules" data-field="week-rules" aria-hidden="true"></div>
+        <div class="week-now" data-field="week-now" hidden></div>
+        <div class="week-events" data-field="week-events"></div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<dialog class="detail" data-field="detail">
+  <div class="detail-bar" data-field="detail-bar" aria-hidden="true"></div>
+  <h2 data-field="detail-title"></h2>
+  <p class="detail-when" data-field="detail-when"></p>
+  <p class="detail-where" data-field="detail-where" hidden></p>
+  <p class="detail-desc" data-field="detail-desc" hidden></p>
+  <p class="detail-source">
+    <span class="swatch" data-field="detail-swatch" aria-hidden="true"></span>
+    <span data-field="detail-calendar"></span>
+  </p>
+  <div class="detail-actions">
+    <button type="button" class="link" data-action="copy">Copy</button>
+    <button type="button" class="link" data-action="open-link" hidden>Open link</button>
+    <span class="spacer"></span>
+    <button type="button" class="button" data-action="close-detail">Close</button>
+  </div>
+</dialog>

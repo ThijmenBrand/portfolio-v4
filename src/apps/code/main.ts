@@ -9,7 +9,8 @@ import { errorCode } from "../../bin/lib/input";
 import { Terminal } from "../terminal/main";
 
 import { basicSetup } from "codemirror";
-import { EditorView, type ViewUpdate } from "@codemirror/view";
+import { indentWithTab } from "@codemirror/commands";
+import { EditorView, keymap, type ViewUpdate } from "@codemirror/view";
 import {
   EditorState,
   Prec,
@@ -116,6 +117,21 @@ type View = "explorer" | "search" | "run";
 const SEARCH_SKIP = new Set([".git", "node_modules", "dist"]);
 const SEARCH_LIMIT = 2000;
 
+/** Quick Open: files indexed per folder, and rows shown per query. */
+const INDEX_LIMIT = 5000;
+const PALETTE_LIMIT = 50;
+
+/**
+ * Drag payloads. `dataTransfer.getData` is blocked until the drop, but
+ * `types` is readable during dragover, so the type alone says "this is ours"
+ * and the dragged path is kept in a field.
+ */
+const DRAG_PATH = "application/x-code-path";
+const DRAG_TAB = "application/x-code-tab";
+
+/** How long a drag has to rest on a closed folder before it springs open. */
+const SPRING_MS = 650;
+
 const PLAY_SVG =
   '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M4.5 2.8v10.4a.5.5 0 0 0 .77.42l8-5.2a.5.5 0 0 0 0-.84l-8-5.2a.5.5 0 0 0-.77.42z" /></svg>';
 
@@ -125,6 +141,43 @@ const quote = (word: string): string =>
 
 const message = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
+
+/** One subsequence pass from `from`; characters at or past `base` score more. */
+function subsequence(
+  hay: string,
+  query: string,
+  from: number,
+  base: number,
+): number | null {
+  let at = from;
+  let points = 0;
+  for (const ch of query) {
+    const i = hay.indexOf(ch, at);
+    if (i < 0) return null;
+    points += (i === at ? 6 : 0) + (i >= base ? 4 : 0) - Math.min(i - at, 8);
+    at = i + 1;
+  }
+  return points;
+}
+
+/**
+ * Quick Open ranking: every query character must appear in order. Runs of
+ * adjacent characters and hits in the file name beat hits in the folders,
+ * and a shorter path breaks the tie. `null` means no match.
+ *
+ * Greedy matching can be led astray by a stray letter in a folder name
+ * ("main" finding the m of "terminal"), so the file name gets its own pass
+ * and the better of the two wins.
+ */
+function score(path: string, query: string): number | null {
+  const hay = path.toLowerCase();
+  const base = path.lastIndexOf("/") + 1;
+  const best = Math.max(
+    subsequence(hay, query, 0, base) ?? -Infinity,
+    (base > 0 ? subsequence(hay, query, base, base) : null) ?? -Infinity,
+  );
+  return best === -Infinity ? null : best - path.length / 40;
+}
 
 /** New file/folder name being typed inline in the tree. */
 interface Pending {
@@ -210,6 +263,14 @@ class Editor {
   private renaming: string | null = null;
   private clipboard: { path: string; cut: boolean } | null = null;
   private readonly menu: HTMLElement;
+  /** The explorer row being dragged, while a drag is in flight. */
+  private drag: { path: string; dir: boolean; readonly: boolean } | null = null;
+  /** The tab being dragged, while a tab reorder is in flight. */
+  private dragTab: string | null = null;
+  /** Folder the current drop would land in; drives the highlight and spring. */
+  private dropDir: string | null = null;
+  private springTimer = 0;
+  private palette: { el: HTMLElement; close: () => void } | null = null;
 
   private tabs: Tab[] = [];
   private active: Tab | null = null;
@@ -245,6 +306,9 @@ class Editor {
 
     this.shared = [
       basicSetup,
+      // basicSetup leaves Tab alone so it can still move focus; a code editor
+      // wants it to indent, and Ctrl-m (Shift-Alt-m on Mac) frees it again.
+      keymap.of([indentWithTab]),
       oneDark,
       Prec.highest(
         EditorView.theme(
@@ -429,6 +493,18 @@ class Editor {
       void this.renderTree();
     });
     this.bindMenu();
+    this.bindDrag();
+
+    // The tab strip only scrolls sideways; a plain wheel should still move it.
+    this.tabsEl.addEventListener(
+      "wheel",
+      (e) => {
+        if (e.deltaX !== 0 || e.deltaY === 0) return;
+        e.preventDefault();
+        this.tabsEl.scrollLeft += e.deltaY;
+      },
+      { passive: false },
+    );
 
     // Capture phase: beats CodeMirror and the browser's own Save dialog.
     window.addEventListener(
@@ -437,6 +513,7 @@ class Editor {
         const mod = IS_MAC ? e.metaKey : e.ctrlKey;
         let handled = true;
         if (mod && e.shiftKey && e.code === "KeyF") this.openSearch();
+        else if (mod && e.code === "KeyP") void this.openPalette();
         else if (mod && e.code === "KeyS")
           void (this.active && this.save(this.active));
         else if (mod && e.code === "KeyB") this.toggleSidebar();
@@ -475,6 +552,12 @@ class Editor {
       resizer.addEventListener("pointermove", move);
       resizer.addEventListener("pointerup", up, { once: true });
     });
+  }
+
+  /** Shows `view` in the sidebar, opening the sidebar when it is hidden. */
+  private ensureView(view: View): void {
+    if (this.root.classList.contains("no-sidebar") || this.sidebarView !== view)
+      this.showView(view);
   }
 
   private toggleSidebar(): void {
@@ -683,11 +766,7 @@ class Editor {
   private async startConfig(): Promise<void> {
     const root = this.rootDir;
     if (root === null) return this.flash("Open a folder first");
-    if (
-      this.root.classList.contains("no-sidebar") ||
-      this.sidebarView !== "run"
-    )
-      this.showView("run");
+    this.ensureView("run");
     const form = this.field<HTMLFormElement>("config-form");
     form.reset();
 
@@ -796,11 +875,7 @@ class Editor {
 
   /** Opens the search view (never toggles it closed) and focuses the query. */
   private openSearch(): void {
-    if (
-      this.root.classList.contains("no-sidebar") ||
-      this.sidebarView !== "search"
-    )
-      this.showView("search");
+    this.ensureView("search");
     const input = this.field<HTMLInputElement>("search-input");
     const selected = this.active
       ? this.view.state.sliceDoc(
@@ -1159,6 +1234,259 @@ class Editor {
     this.selectedDir = remap(this.selectedDir);
   }
 
+  // ---- drag and drop ------------------------------------------------------
+
+  private bindDrag(): void {
+    // The tree, the root header and the editor are all drop targets; a drop on
+    // a file row lands in the folder that holds it, like VS Code.
+    this.bindDropTarget(this.tree, (e) => {
+      const row = (e.target as HTMLElement).closest<HTMLElement>(
+        ".code-row[data-path]",
+      );
+      const path = row?.dataset.path;
+      if (path === undefined) return this.rootDir;
+      return row?.dataset.dir === "true" ? path : dirname(path);
+    });
+    this.bindDropTarget(this.field("root-btn"), () => this.rootDir);
+
+    // Dropping a file on the tabs or the editor opens it. The editor listens
+    // in the capture phase and stops the event there, so CodeMirror never sees
+    // the drop and pastes the dragged path into the buffer.
+    for (const node of [this.tabsEl, this.editorHost]) {
+      const capture = node === this.editorHost;
+      const opens = (e: DragEvent): boolean => {
+        if (!e.dataTransfer?.types.includes(DRAG_PATH)) return false;
+        if (this.drag?.dir !== false) return false;
+        e.preventDefault();
+        if (capture) e.stopPropagation();
+        return true;
+      };
+      node.addEventListener(
+        "dragover",
+        (e) => {
+          if (opens(e)) e.dataTransfer!.dropEffect = "link";
+        },
+        capture,
+      );
+      node.addEventListener(
+        "drop",
+        (e) => {
+          const path = this.drag?.path;
+          if (!opens(e) || path === undefined) return;
+          // stopPropagation above keeps the document cleanup from running.
+          this.endDrag();
+          void this.open(path);
+        },
+        capture,
+      );
+    }
+
+    this.bindTabDrag();
+
+    // A spring-loaded folder re-renders the tree mid-drag, so the dragged row
+    // can be gone by the time its own dragend would fire. Clean up globally.
+    for (const type of ["dragend", "drop"] as const)
+      document.addEventListener(type, () => this.endDrag());
+  }
+
+  /** Clears every trace of a finished drag, however it ended. */
+  private endDrag(): void {
+    this.drag = null;
+    this.dragTab = null;
+    this.clearDrop();
+    for (const node of this.root.querySelectorAll(".dragging"))
+      node.classList.remove("dragging");
+  }
+
+  /** Marks one explorer row as a drag source. */
+  private makeDraggable(
+    row: HTMLElement,
+    path: string,
+    dir: boolean,
+    readonly: boolean,
+  ): void {
+    row.draggable = true;
+    row.addEventListener("dragstart", (e) => {
+      this.drag = { path, dir, readonly };
+      if (e.dataTransfer === null) return;
+      e.dataTransfer.setData(DRAG_PATH, path);
+      // Dropping outside the app (the terminal, a text field) pastes the path.
+      e.dataTransfer.setData("text/plain", path);
+      // "all": move and copy into the tree, link onto the tabs and the editor.
+      e.dataTransfer.effectAllowed = "all";
+      row.classList.add("dragging");
+    });
+  }
+
+  /** A folder is a valid drop unless the move would be a no-op or a cycle. */
+  private canDrop(dir: string | null, copy: boolean): dir is string {
+    const from = this.drag?.path;
+    if (dir === null || from === undefined) return false;
+    if (isInside(dir, from)) return false;
+    return copy || dirname(from) !== dir;
+  }
+
+  /** Alt copies instead of moving, and a read-only source can only be copied. */
+  private isCopy(e: DragEvent): boolean {
+    return e.altKey || this.drag?.readonly === true;
+  }
+
+  private bindDropTarget(
+    node: HTMLElement,
+    dirFor: (e: DragEvent) => string | null,
+  ): void {
+    node.addEventListener("dragover", (e) => {
+      if (!e.dataTransfer?.types.includes(DRAG_PATH)) return;
+      const dir = dirFor(e);
+      if (!this.canDrop(dir, this.isCopy(e))) return this.clearDrop();
+      e.preventDefault();
+      e.dataTransfer.dropEffect = this.isCopy(e) ? "copy" : "move";
+      this.markDrop(dir, node === this.tree ? null : node);
+    });
+    node.addEventListener("dragleave", (e) => {
+      if (!node.contains(e.relatedTarget as Node)) this.clearDrop();
+    });
+    node.addEventListener("drop", (e) => {
+      if (!e.dataTransfer?.types.includes(DRAG_PATH)) return;
+      const dir = dirFor(e);
+      const copy = this.isCopy(e);
+      const from = this.drag?.path;
+      this.clearDrop();
+      if (!this.canDrop(dir, copy) || from === undefined) return;
+      e.preventDefault();
+      void this.dropInto(from, dir, copy);
+    });
+  }
+
+  /** Lights up the receiving folder and arms the spring-loaded open. */
+  private markDrop(dir: string, node: HTMLElement | null): void {
+    for (const row of this.root.querySelectorAll(".drop-into"))
+      row.classList.remove("drop-into");
+    const row =
+      node ??
+      this.tree.querySelector<HTMLElement>(
+        `.code-row[data-path="${CSS.escape(dir)}"]`,
+      );
+    (row ?? this.tree).classList.add("drop-into");
+    if (dir === this.dropDir) return;
+    this.dropDir = dir;
+    clearTimeout(this.springTimer);
+    // Resting on a closed folder opens it, so you can drop into a deep path.
+    if (row !== null && row !== node && !this.expanded.has(dir)) {
+      this.springTimer = window.setTimeout(() => {
+        this.expanded.add(dir);
+        void this.renderTree();
+      }, SPRING_MS);
+    }
+  }
+
+  private clearDrop(): void {
+    clearTimeout(this.springTimer);
+    this.dropDir = null;
+    for (const row of this.root.querySelectorAll(".drop-into"))
+      row.classList.remove("drop-into");
+    this.tree.classList.remove("drop-into");
+  }
+
+  private async dropInto(
+    from: string,
+    dir: string,
+    copy: boolean,
+  ): Promise<void> {
+    try {
+      const taken = new Set((await this.os.fs.readdir(dir)).map((e) => e.name));
+      const to = join(dir, freeName(basename(from), taken));
+      if (copy) {
+        await copyTree(this.os, from, to);
+      } else {
+        await moveTree(this.os, from, to);
+        this.moved(from, to);
+      }
+      if (dir !== this.rootDir) this.expanded.add(dir);
+      this.flash(
+        `${copy ? "Copied" : "Moved"} ${basename(from)} to ${basename(dir) || "/"}`,
+      );
+    } catch (error) {
+      this.flash(
+        `Couldn't ${copy ? "copy" : "move"} ${basename(from)} (${errorCode(error)})`,
+        true,
+      );
+    }
+    await this.renderTree();
+  }
+
+  /** Tabs reorder as you drag, so the drop itself has nothing left to do. */
+  private bindTabDrag(): void {
+    this.tabsEl.addEventListener("dragover", (e) => {
+      if (this.dragTab === null || !e.dataTransfer?.types.includes(DRAG_TAB))
+        return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      const over = (e.target as HTMLElement).closest<HTMLElement>(".code-tab");
+      const tab = this.tabs.find((t) => t.path === this.dragTab);
+      if (!over || !tab || over === tab.el) return;
+      const box = over.getBoundingClientRect();
+      const after = e.clientX > box.left + box.width / 2;
+      over.insertAdjacentElement(after ? "afterend" : "beforebegin", tab.el);
+      const order = [...this.tabsEl.children];
+      this.tabs.sort((a, b) => order.indexOf(a.el) - order.indexOf(b.el));
+    });
+    // Without this the browser plays a "drag failed" animation back to the tab.
+    this.tabsEl.addEventListener("drop", (e) => {
+      if (this.dragTab !== null) e.preventDefault();
+    });
+  }
+
+  private tabMenu(path: string): (MenuEntry | null)[] {
+    const others = this.tabs.filter((t) => t.path !== path);
+    return [
+      { label: "Close", action: () => void this.closeTabAt(path) },
+      {
+        label: "Close Others",
+        action: () => void this.closeMany(others),
+        disabled: others.length === 0,
+      },
+      { label: "Close All", action: () => void this.closeMany([...this.tabs]) },
+      null,
+      {
+        label: "Copy Path",
+        action: () =>
+          void this.os.clipboard
+            .writeText(path)
+            .catch(() => this.flash("Couldn't copy to clipboard", true)),
+      },
+      {
+        label: "Reveal in Explorer",
+        action: () => void this.revealInTree(path),
+        disabled: this.rootDir === null || !isInside(path, this.rootDir),
+      },
+    ];
+  }
+
+  /** Closes in order; a Cancel at any save prompt leaves the rest open. */
+  private async closeMany(tabs: Tab[]): Promise<void> {
+    for (const tab of tabs) if (!(await this.closeTab(tab))) return;
+  }
+
+  /** Expands the explorer down to `path` and scrolls its row into view. */
+  private async revealInTree(path: string): Promise<void> {
+    const root = this.rootDir;
+    if (root === null || !isInside(path, root))
+      return this.flash("Not inside the open folder");
+    for (
+      let dir = dirname(path);
+      dir !== root && isInside(dir, root);
+      dir = dirname(dir)
+    )
+      this.expanded.add(dir);
+    this.selectedDir = dirname(path);
+    this.ensureView("explorer");
+    await this.renderTree();
+    this.tree
+      .querySelector<HTMLElement>(`.code-row[data-path="${CSS.escape(path)}"]`)
+      ?.scrollIntoView({ block: "nearest" });
+  }
+
   // ---- explorer -----------------------------------------------------------
 
   private async renderTree(): Promise<void> {
@@ -1166,7 +1494,10 @@ class Editor {
     if (this.rootDir === null) return;
     const rows = document.createDocumentFragment();
     await this.renderDir(this.rootDir, 0, rows);
+    // Kept across the re-render a save, refresh or spring-loaded drag triggers.
+    const scroll = this.tree.scrollTop;
     this.tree.replaceChildren(rows);
+    this.tree.scrollTop = scroll;
     this.highlight();
     this.tree.querySelector<HTMLInputElement>(".code-row-input")?.focus();
   }
@@ -1227,6 +1558,7 @@ class Editor {
         continue;
       }
       row.append(el("span", "code-row-name", entry.name));
+      this.makeDraggable(row, path, isDir, entry.readonly);
 
       if (!entry.readonly) {
         const del = el("button", "code-icon-btn code-row-del", "×");
@@ -1292,11 +1624,7 @@ class Editor {
 
   private async startCreate(kind: Pending["kind"]): Promise<void> {
     if (this.rootDir === null) return;
-    if (
-      this.root.classList.contains("no-sidebar") ||
-      this.sidebarView !== "explorer"
-    )
-      this.showView("explorer");
+    this.ensureView("explorer");
     if (this.selectedDir !== this.rootDir) this.expanded.add(this.selectedDir);
     this.pending = { dir: this.selectedDir, kind };
     await this.renderTree();
@@ -1375,6 +1703,136 @@ class Editor {
     if (this.clipboard && isInside(this.clipboard.path, path))
       this.clipboard = null;
     await this.renderTree();
+  }
+
+  // ---- quick open ---------------------------------------------------------
+
+  /**
+   * Ctrl/Cmd+P: type part of a path, open the file. The folder is walked once
+   * per opening rather than kept in sync, which is cheap at these sizes.
+   */
+  private async openPalette(): Promise<void> {
+    const root = this.rootDir;
+    if (this.palette) return this.palette.close();
+    if (root === null) return this.flash("Open a folder first");
+
+    const backdrop = el("div", "code-modal-backdrop");
+    const box = el("div", "code-modal code-palette");
+    box.setAttribute("role", "dialog");
+    box.setAttribute("aria-modal", "true");
+    const input = el("input", "code-palette-input");
+    input.placeholder = "Go to file by name";
+    input.spellcheck = false;
+    input.setAttribute("aria-label", "Go to file");
+    const list = el("div", "code-palette-list");
+    list.setAttribute("role", "listbox");
+    list.replaceChildren(el("div", "code-tree-note", "Indexing\u2026"));
+    box.append(input, list);
+    backdrop.append(box);
+    this.root.append(backdrop);
+    const close = (): void => {
+      backdrop.remove();
+      this.palette = null;
+      if (this.active) this.view.focus();
+    };
+    this.palette = { el: backdrop, close };
+    input.focus();
+    backdrop.addEventListener("mousedown", (e) => {
+      if (e.target === backdrop) close();
+    });
+
+    const files = await this.indexFiles(root);
+    // Closed, or reopened, while the walk was running.
+    if (this.palette?.el !== backdrop) return;
+
+    let rows: HTMLElement[] = [];
+    let at = 0;
+    const select = (i: number): void => {
+      if (rows.length === 0) return;
+      at = (i + rows.length) % rows.length;
+      rows.forEach((row, j) => row.classList.toggle("active", j === at));
+      rows[at].scrollIntoView({ block: "nearest" });
+    };
+    const render = (): void => {
+      const query = input.value.toLowerCase().replace(/\s+/g, "");
+      const hits =
+        query === ""
+          ? files.slice(0, PALETTE_LIMIT)
+          : files
+              .flatMap((path) => {
+                const points = score(path.slice(root.length + 1), query);
+                return points === null ? [] : [{ path, points }];
+              })
+              .sort((a, b) => b.points - a.points)
+              .slice(0, PALETTE_LIMIT)
+              .map((hit) => hit.path);
+      rows = hits.map((path) => {
+        const rel = path.slice(root.length + 1);
+        const slash = rel.lastIndexOf("/");
+        const row = el("div", "code-row");
+        row.dataset.path = path;
+        row.setAttribute("role", "option");
+        row.style.paddingLeft = "10px";
+        row.title = path;
+        row.append(
+          badge(path),
+          el("span", "code-row-name", basename(path)),
+          el("span", "code-config-detail", slash < 0 ? "" : rel.slice(0, slash)),
+        );
+        // mousedown, not click: the input would blur first and close us.
+        row.addEventListener("mousedown", (e) => {
+          e.preventDefault();
+          close();
+          void this.open(path);
+        });
+        return row;
+      });
+      list.replaceChildren(
+        ...(rows.length > 0
+          ? rows
+          : [el("div", "code-tree-note", "No matching files.")]),
+      );
+      select(0);
+    };
+    input.addEventListener("input", render);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") close();
+      else if (e.key === "ArrowDown") select(at + 1);
+      else if (e.key === "ArrowUp") select(at - 1);
+      else if (e.key === "Enter") {
+        const path = rows[at]?.dataset.path;
+        close();
+        if (path !== undefined) void this.open(path);
+      } else return;
+      e.preventDefault();
+      e.stopPropagation();
+    });
+    render();
+  }
+
+  /** Every file under `root`, depth-first, skipping the heavy folders. */
+  private async indexFiles(root: string): Promise<string[]> {
+    const out: string[] = [];
+    const walk = async (dir: string): Promise<void> => {
+      let entries: DirEntry[];
+      try {
+        entries = await this.os.fs.readdir(dir);
+      } catch {
+        return;
+      }
+      entries.sort((a, b) => a.name.localeCompare(b.name));
+      for (const entry of entries) {
+        if (out.length >= INDEX_LIMIT) return;
+        const path = join(dir, entry.name);
+        if (entry.kind === "directory") {
+          if (!SEARCH_SKIP.has(entry.name)) await walk(path);
+        } else {
+          out.push(path);
+        }
+      }
+    };
+    await walk(root);
+    return out;
   }
 
   // ---- tabs & editing -----------------------------------------------------
@@ -1468,6 +1926,17 @@ class Editor {
     node.addEventListener("click", () => {
       const tab = this.tabs.find((t) => t.path === path);
       if (tab) this.activate(tab);
+    });
+    node.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      this.openMenu(e.clientX, e.clientY, this.tabMenu(path));
+    });
+    node.draggable = true;
+    node.addEventListener("dragstart", (e) => {
+      this.dragTab = path;
+      e.dataTransfer?.setData(DRAG_TAB, path);
+      if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+      node.classList.add("dragging");
     });
     return node;
   }

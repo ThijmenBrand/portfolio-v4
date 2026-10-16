@@ -13,9 +13,16 @@ import { totpVerifier } from "./totp.ts";
 
 export class HttpError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  /**
+   * Optional kernel error code (ENOENT, ENOTDIR, ...) for callers that map a
+   * failure onto a filesystem error rather than onto HTTP. The status alone
+   * can't carry it: several of them share one status.
+   */
+  code?: string;
+  constructor(status: number, message: string, code?: string) {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
 

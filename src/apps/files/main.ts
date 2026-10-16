@@ -59,6 +59,12 @@ const ERRORS: Record<string, string> = {
   ENOENT: "That item no longer exists. The folder was refreshed.",
   ENOTEMPTY: "That folder isn't empty.",
   EEXIST: "An item with that name already exists.",
+  // Cloud storage (/mnt/cloud) is on the server, so it can fail in ways no
+  // local folder does.
+  EIO: "Can't reach the server. Cloud storage is unavailable right now.",
+  EBUSY: "Something else changed this first. Refresh and try again.",
+  ENOSPC: "There's no room left in cloud storage.",
+  EFBIG: "That file is too large for cloud storage.",
 };
 
 const BIN_SVG =

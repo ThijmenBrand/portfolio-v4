@@ -35,7 +35,7 @@ const RELOAD_ON_HUP = [
   "/System/desktop",
   "/System/Taskbar",
   "/System/wallpaper",
-  ...["about", "admin", "aliases", "code", "devtools", "files", "resume", "terminal"].map((id) => `/ProgramFiles/${id}`),
+  ...["about", "admin", "aliases", "calendar", "code", "devtools", "files", "resume", "terminal", "upnext"].map((id) => `/ProgramFiles/${id}`),
 ];
 const DESKTOP = "/System/desktop";
 const MAX_UPLOAD = 20 * 1024 * 1024;

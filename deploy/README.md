@@ -83,9 +83,40 @@ asks for its 6-digit code. Lost the phone: put a new `node server/totp.ts`
 secret in `api.env` and recreate the api. Without `OWNER_TOTP_SECRET` the API
 logs a warning and logs in with the password alone.
 
-`NODE_ENV` and `PORT` come from `docker-compose.yml`. After changing the file
-(a new password, TOTP secret or `SESSION_SECRET` signs out every session), recreate
+`NODE_ENV`, `PORT` and `CLOUD_DB` come from `docker-compose.yml`. After changing the
+file (a new password, TOTP secret or `SESSION_SECRET` signs out every session), recreate
 the api with `sudo portfolio-deploy deploy "$(cat /srv/portfolio/current)"`.
+
+### Cloud storage (`/mnt/cloud`)
+
+The owner's synced files live in one SQLite database on the `portfolio_cloud-data`
+volume, at `/data/cloud.db` inside the api container. **This is the only server-side
+state that isn't an environment variable, so it is the only thing that needs backing
+up.** Everything else can be rebuilt from the repo and `api.env`.
+
+The deploy script creates the volume and chowns it to the container's user on every
+deploy; the container can't do that itself (it runs as 65532 with `cap_drop: ALL`),
+and without it SQLite can't open the file.
+
+```sh
+# Back up (consistent while the api is running: SQLite's own .backup, via WAL)
+docker run --rm -v portfolio_cloud-data:/data -v "$PWD:/out" \
+  ghcr.io/thijmenbrand/portfolio-v4@"$(cut -d@ -f2 /srv/portfolio/current)" \
+  node -e 'const{DatabaseSync}=require("node:sqlite");new DatabaseSync("/data/cloud.db",{readOnly:true}).exec("VACUUM INTO \'/out/cloud-backup.db\'")'
+
+# Restore: stop the api, copy the file back, start it again
+sudo portfolio-deploy status           # note the current image
+docker compose --project-name portfolio -f /srv/portfolio/docker-compose.yml stop api
+docker run --rm -v portfolio_cloud-data:/data -v "$PWD:/in" --user 0:0 --entrypoint sh \
+  "$(cat /srv/portfolio/current)" -c 'cp /in/cloud-backup.db /data/cloud.db && rm -f /data/cloud.db-wal /data/cloud.db-shm && chown 65532:65532 /data/cloud.db'
+sudo portfolio-deploy deploy "$(cat /srv/portfolio/current)"
+```
+
+Limits are compiled in (`server/fsstore.ts`): 1 MiB per file, 32 MiB in total, 5000
+entries. Past any of them the OS reports "no space left" rather than failing quietly.
+
+Node may print an `ExperimentalWarning` for `node:sqlite` on Node 24. That is the
+module's status, not a fault.
 
 ### Reverse proxy + TLS
 

@@ -24,8 +24,19 @@ import {
   walk,
 } from "./mount";
 import { basename, dirname, isValidName, normalize, split } from "./path";
-import { defaultAttr, permits, R, ROOT, W, X, type Attr, type Cred } from "./perm";
+import {
+  defaultAttr,
+  permits,
+  R,
+  remoteAttr,
+  ROOT,
+  W,
+  X,
+  type Attr,
+  type Cred,
+} from "./perm";
 import type { DirEntry, Mount, Node, NodeKind, StatResult } from "./types";
+import { MountedFile } from "./mountedFile.ts";
 import { VfsFile } from "./vfsFile.ts";
 
 /**
@@ -54,6 +65,30 @@ export class VFS {
   private static readonly CHUNK_SIZE = 64 * 1024; // 64KB
   private static readonly MAX_SIZE = 64 * 1024 * 1024; // 64MB
 
+  /** Stand-in timestamp for mount points, which have no entry of their own. */
+  private readonly bootedAt = Date.now();
+
+  /**
+   * The real uid the backend session belongs to, set by login. Undefined
+   * means nobody is signed in.
+   *
+   * It lives here because a remote mount IS the session: the browser holds
+   * one cookie, so any program the kernel fetches for borrows whoever is
+   * signed in. The mode bits can't express that -- root passes every mode
+   * check, and root is a well-known password away (bin/lib/users.ts seeds it
+   * deliberately, so visitors can play with su).
+   */
+  private sessionUid?: number;
+
+  /** Kernel-only: login records who signed in, and clears it on the way out. */
+  public setSessionUid(uid: number | undefined): void {
+    this.sessionUid = uid;
+  }
+
+  public get session(): number | undefined {
+    return this.sessionUid;
+  }
+
   public mount(mount: Mount): void {
     const mountPath = normalize(mount.path);
     if (mountAt(this.mounts, mountPath)) {
@@ -66,6 +101,36 @@ export class VFS {
     return this.mounts;
   }
 
+  /** Whether `path` is served by the backend rather than by this browser. */
+  public isRemote(path: string): boolean {
+    return findMount(this.mounts, normalize(path)).remote === true;
+  }
+
+  /**
+   * The mount serving `path`, refused to code that came out of the
+   * filesystem. A remote mount is the owner's private API wearing a
+   * directory's clothes, and user-installed apps are kept off that API
+   * (syscalls/api-fetch.ts); reading it as a file would be the same thing by
+   * another route.
+   *
+   * Deliberately ahead of every euid-0 shortcut: `untrusted` is inherited by
+   * every child, but euid 0 is one setuid `su` away, so a root check first
+   * would wave this through.
+   */
+  private mountFor(path: string, cred: Cred): Mount {
+    const mount = findMount(this.mounts, path);
+    if (!mount.remote) return mount;
+    // Both checks sit ahead of every euid-0 shortcut, deliberately.
+    if (cred.untrusted) throw eacces(path);
+    // The session's own files, and only while that session is the one here.
+    // Real uid, not effective: sudo keeps it (still the owner), su replaces
+    // it (no longer the owner), which is exactly the distinction that
+    // matters.
+    if (this.sessionUid === undefined || cred.uid !== this.sessionUid)
+      throw eacces(path);
+    return mount;
+  }
+
   /**
    * returns the stat for a given path
    * @param path string
@@ -74,7 +139,7 @@ export class VFS {
   public async stat(path: string, cred: Cred = ROOT): Promise<StatResult> {
     const normalized = normalize(path);
     this.assertSearch(normalized, cred);
-    const { mount, node } = await this.resolve(normalized);
+    const { mount, node } = await this.resolve(normalized, cred);
     const stat = await mount.driver.stat(node);
     const readonly = mount.readonly;
     return { ...stat, readonly, ...this.attr(normalized, stat.kind) };
@@ -84,14 +149,14 @@ export class VFS {
   public async access(path: string, cred: Cred, want: number): Promise<void> {
     const normalized = normalize(path);
     this.assertSearch(normalized, cred);
-    const { node } = await this.resolve(normalized);
+    const { node } = await this.resolve(normalized, cred);
     this.assertAccess(normalized, node.kind, cred, want);
   }
 
   public async readdir(path: string, cred: Cred = ROOT): Promise<DirEntry[]> {
     const dir = normalize(path);
     this.assertSearch(dir, cred);
-    const { mount, node } = await this.resolve(dir);
+    const { mount, node } = await this.resolve(dir, cred);
     if (node.kind !== "directory") throw enotdir(dir);
     this.assertAccess(dir, node.kind, cred, R);
 
@@ -125,13 +190,13 @@ export class VFS {
     if (flags.truncate && !flags.write)
       throw einval(`open: O_TRUNC without write: ${normalized}`);
 
-    const mount = findMount(this.mounts, normalized);
+    const mount = this.mountFor(normalized, cred);
     if (flags.write) this.assertWritable(mount, normalized);
     this.assertSearch(normalized, cred);
 
     const { node, created } = flags.create
       ? await this.openCreate(mount, normalized, cred)
-      : { node: (await this.resolve(normalized)).node, created: false };
+      : { node: (await this.resolve(normalized, cred)).node, created: false };
 
     if (node.kind !== "file") throw eisdir(normalized);
     // A file we just made is ours to open, whatever its mode says.
@@ -141,15 +206,16 @@ export class VFS {
     }
     if (flags.truncate) await mount.driver.truncate(node, 0);
 
-    return (
+    // The wrapper, not VfsFile, carries these: a driver that supplies its own
+    // open() would otherwise skip the change hook entirely, so writes to it
+    // would never reach anything watching the filesystem.
+    const file =
       (await mount.driver.open?.(node, normalized)) ??
-      new VfsFile(
-        mount,
-        node,
-        normalized,
-        flags.write ? () => this.onChange(normalized) : undefined,
-      )
-    );
+      new VfsFile(mount, node, normalized);
+    return new MountedFile(file, {
+      remote: mount.remote === true,
+      onWritten: flags.write ? () => this.onChange(normalized) : undefined,
+    });
   }
 
   public async readFile(
@@ -190,7 +256,7 @@ export class VFS {
     // /home and /home/me instead of failing with EBUSY / EACCES.
     const at = findMount(this.mounts, normalized);
     if (relativeSegments(at, normalized).length === 0) throw eexist(normalized);
-    const { mount, parent, name } = await this.resolveParent(normalized);
+    const { mount, parent, name } = await this.resolveParent(normalized, cred);
     if (await mount.driver.lookup(parent, name)) throw eexist(normalized);
     this.assertWritable(mount, normalized);
     this.assertCanModifyParent(normalized, cred);
@@ -210,7 +276,7 @@ export class VFS {
 
   public async unlink(path: string, cred: Cred = ROOT): Promise<void> {
     const normalized = normalize(path);
-    const { mount, parent, name } = await this.resolveParent(normalized);
+    const { mount, parent, name } = await this.resolveParent(normalized, cred);
     this.assertWritable(mount, normalized);
     this.assertCanModifyParent(normalized, cred);
 
@@ -222,7 +288,7 @@ export class VFS {
 
   public async rmdir(path: string, cred: Cred = ROOT): Promise<void> {
     const normalized = normalize(path);
-    const { mount, parent, name } = await this.resolveParent(normalized);
+    const { mount, parent, name } = await this.resolveParent(normalized, cred);
     this.assertWritable(mount, normalized);
     this.assertCanModifyParent(normalized, cred);
 
@@ -244,14 +310,14 @@ export class VFS {
     // nobody falls back to copying a whole mount.
     if (this.mounts.some((m) => m.path === src || m.path.startsWith(`${src}/`)))
       throw ebusy(src);
-    const mount = findMount(this.mounts, src);
+    const mount = this.mountFor(src, cred);
     this.assertWritable(mount, src);
-    if (findMount(this.mounts, dst) !== mount) throw exdev(dst);
+    if (this.mountFor(dst, cred) !== mount) throw exdev(dst);
     this.assertCanModifyParent(src, cred);
     this.assertCanModifyParent(dst, cred);
 
-    const a = await this.resolveParent(src);
-    const b = await this.resolveParent(dst);
+    const a = await this.resolveParent(src, cred);
+    const b = await this.resolveParent(dst, cred);
     const node = await mount.driver.lookup(a.parent, a.name);
     if (!node) throw enoent(src);
     if (src === dst) return;
@@ -282,6 +348,7 @@ export class VFS {
     const normalized = normalize(path);
     const { mount, node } = await this.resolveChecked(normalized, cred);
     this.assertWritable(mount, normalized);
+    if (mount.remote) throw epermPath(normalized); // fixed, see remoteAttr
     const current = this.attr(normalized, node.kind);
     if (cred.euid !== 0 && cred.euid !== current.uid) throw epermPath(normalized);
     this.setAttr(normalized, { ...current, mode: mode & 0o777 });
@@ -298,6 +365,7 @@ export class VFS {
     const normalized = normalize(path);
     const { mount, node } = await this.resolveChecked(normalized, cred);
     this.assertWritable(mount, normalized);
+    if (mount.remote) throw epermPath(normalized); // fixed, see remoteAttr
     if (cred.euid !== 0) throw epermPath(normalized);
     this.setAttr(normalized, { ...this.attr(normalized, node.kind), uid, gid });
     this.onChange(normalized);
@@ -307,6 +375,13 @@ export class VFS {
   public mayList(dir: string, cred: Cred): boolean {
     const normalized = normalize(dir);
     try {
+      // No resolve() here by design, so mountFor never runs: check directly,
+      // or an untrusted app would learn the owner's remote file names from
+      // fs.changed events (proc/subscribe.ts).
+      if (this.isRemote(normalized)) {
+        if (cred.untrusted) return false;
+        if (this.sessionUid === undefined || cred.uid !== this.sessionUid) return false;
+      }
       this.assertSearch(normalized, cred);
       this.assertAccess(normalized, "directory", cred, R);
       return true;
@@ -320,7 +395,11 @@ export class VFS {
    * mounts at boot (program files) or when loading saved attributes.
    */
   public setAttr(path: string, attr: Attr): void {
-    this.attrs.set(normalize(path), { ...attr });
+    const normalized = normalize(path);
+    // A remote mount's attributes are computed, not kept: storing them would
+    // put per-browser state in front of shared files.
+    if (this.isRemote(normalized)) return;
+    this.attrs.set(normalized, { ...attr });
     this.onAttrsChange();
   }
 
@@ -348,9 +427,12 @@ export class VFS {
    * @throws enoent
    * @throws enotdir
    */
-  public async resolve(path: string): Promise<{ mount: Mount; node: Node }> {
+  public async resolve(
+    path: string,
+    cred: Cred = ROOT,
+  ): Promise<{ mount: Mount; node: Node }> {
     const normalized = normalize(path);
-    const mount = findMount(this.mounts, normalized);
+    const mount = this.mountFor(normalized, cred);
     const segments = relativeSegments(mount, normalized);
     const node = await walk(mount, segments, normalized);
 
@@ -359,9 +441,10 @@ export class VFS {
 
   public async resolveParent(
     path: string,
+    cred: Cred = ROOT,
   ): Promise<{ mount: Mount; parent: Node; name: string }> {
     const normalized = normalize(path);
-    const mount = findMount(this.mounts, normalized);
+    const mount = this.mountFor(normalized, cred);
     const segments = relativeSegments(mount, normalized);
 
     if (normalized === "/") throw einval("Root has no parent");
@@ -378,7 +461,7 @@ export class VFS {
     path: string,
     cred: Cred,
   ): Promise<{ node: Node; created: boolean }> {
-    const { parent, name } = await this.resolveParent(path);
+    const { parent, name } = await this.resolveParent(path, cred);
     const existing = await mount.driver.lookup(parent, name);
     if (existing) return { node: existing, created: false };
 
@@ -399,7 +482,7 @@ export class VFS {
     cred: Cred,
   ): Promise<{ mount: Mount; node: Node }> {
     this.assertSearch(path, cred);
-    return this.resolve(path);
+    return this.resolve(path, cred);
   }
 
   /**
@@ -408,6 +491,9 @@ export class VFS {
    * back (or before users existed) end up belonging to the home's owner.
    */
   private attr(path: string, kind: NodeKind): Attr {
+    // Fixed, never stored: see remoteAttr. This is also the gate itself, and
+    // it applies at every depth rather than only at the mount point.
+    if (this.isRemote(path)) return remoteAttr(kind);
     const own = this.attrs.get(path);
     if (own) return own;
     const fallback = defaultAttr(kind);
@@ -485,6 +571,21 @@ export class VFS {
       const covering = mountAt(this.mounts, childPath);
       const source = covering ?? parent.mount;
 
+      // A remote mount point describes itself: its permissions are fixed, so
+      // listing the directory above it costs no request (and tells a caller
+      // who may not enter nothing it couldn't already see).
+      if (covering?.remote) {
+        return {
+          name,
+          kind: "directory",
+          size: 0,
+          createdAt: this.bootedAt,
+          modifiedAt: this.bootedAt,
+          readonly: covering.readonly,
+          ...remoteAttr("directory"),
+        };
+      }
+
       const node = covering
         ? await covering.driver.root()
         : await parent.mount.driver.lookup(parent.node, name);
@@ -535,10 +636,15 @@ export class VFS {
     return result;
   }
 
+  /**
+   * Worth dropping one entry over rather than failing the whole listing: it
+   * went away while we looked at it, or -- on a server-backed mount -- the
+   * network blinked. One unreachable file shouldn't make a folder unopenable.
+   */
   private static isTransient(error: unknown): boolean {
     return (
       error instanceof KernelError &&
-      (error.code === "ENOENT" || error.code === "ESRCH")
+      (error.code === "ENOENT" || error.code === "ESRCH" || error.code === "EIO")
     );
   }
 }

@@ -50,6 +50,9 @@ export async function main(os: SystemInterface): Promise<void> {
  * local user, and root may call the API with the owner's cookie.
  */
 async function signOut(os: SystemInterface, root: HTMLElement): Promise<void> {
+  // First, so nothing can spend the session while it is being ended. Login
+  // itself is privileged and keeps its own reach either way.
+  await os.api.bindSession(undefined);
   for (;;) {
     const response = await os.api
       .fetch("/api/auth/logout", { method: "POST" })
@@ -109,11 +112,20 @@ async function runSession(os: SystemInterface, user: User): Promise<void> {
   (await os.display.taskbar()).replaceChildren();
 }
 
-/** The local account for the backend's user, made on first login. */
+/**
+ * The local account for the backend's user, made on first login, and the one
+ * place the session is tied to a uid. Everything private is gated on that:
+ * the browser holds one cookie, so without it any program could spend the
+ * owner's session (root most of all, whose password is public on purpose).
+ */
 async function ownerAccount(os: SystemInterface, name: string): Promise<User | undefined> {
   const existing = userByName(await readUsers(os), name);
-  if (existing) return existing.gid === ADMIN_GID ? existing : undefined;
-  return addUser(os, name, ADMIN_GID);
+  const owner =
+    existing && existing.gid !== ADMIN_GID
+      ? undefined
+      : (existing ?? (await addUser(os, name, ADMIN_GID)));
+  if (owner) await os.api.bindSession(owner.uid);
+  return owner;
 }
 
 async function ownerFromSession(os: SystemInterface, root: HTMLElement): Promise<User | undefined> {

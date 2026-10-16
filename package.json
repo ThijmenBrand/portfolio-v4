@@ -8,7 +8,7 @@
     "build": "tsc && tsc -p server && vite build",
     "dev:api": "node --watch --env-file=.env server/main.ts",
     "preview": "vite preview",
-    "check": "node src/bin/sh/syntax.check.ts && node src/bin/lib/tools.check.ts && node src/bin/lib/dev.check.ts && node src/apps/shortcuts/schedule.check.ts"
+    "check": "node server/selftest.ts && node --import ./scripts/ts-resolve.js src/kernel/fs/remote.check.ts && node src/bin/sh/syntax.check.ts && node src/bin/lib/tools.check.ts && node src/bin/lib/dev.check.ts && node src/apps/shortcuts/schedule.check.ts && node src/apps/calendar/ics.check.ts && node src/apps/calendar/layout.check.ts"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",
@@ -17,6 +17,7 @@
   },
   "packageManager": "pnpm@11.21.0+sha512.521705bce689924eac72f5a3587122f362689ef6571e55ba80076fd637c11132ecffada26fad4ea79c485bfddbfd3d5a2a5b05805a77e893de71ec8a6cca3bb1",
   "dependencies": {
+    "@codemirror/commands": "^6.11.1",
     "@codemirror/lang-css": "^6.3.1",
     "@codemirror/lang-html": "^6.4.12",
     "@codemirror/lang-javascript": "^6.2.5",

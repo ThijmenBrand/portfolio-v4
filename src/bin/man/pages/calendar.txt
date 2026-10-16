@@ -1,0 +1,17 @@
+calendar [file.ics]
+  Your subscribed calendars, in a month, week or agenda view. Read-only:
+  Calendar shows other people's feeds, it does not create events.
+
+  Two kinds of source, both added from the sidebar:
+    link   an https .ics address. webcal:// links are accepted too.
+    file   an .ics file from this machine, chosen with the file picker.
+  Given an .ics path on the command line, that file is imported on startup.
+
+  Each calendar's last body is cached under ~/.config/calendar/, so the views
+  draw instantly on launch and keep working with no network. Subscriptions
+  themselves live in ~/.config/calendar.json.
+
+  Keys: T today, arrows move, M/W/A switch view, R refresh, Esc close.
+  Event chips are reachable by pointer; the grid itself takes one tab stop.
+
+  See also: upnext, for the same calendars in the top bar.

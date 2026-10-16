@@ -4,6 +4,7 @@ import { EventBus } from "./events/bus";
 import { MemFS } from "./fs/drivers/memfs";
 import { opfsAvailable, OpfsFS } from "./fs/drivers/opfs";
 import { ProcFS } from "./fs/drivers/procfs";
+import { RemoteFS } from "./fs/drivers/remotefs";
 import { debounce, loadMeta, migrateLegacyHome, saveMeta } from "./fs/meta";
 import { basename, dirname } from "./fs/path";
 import { ADMIN_GID } from "./fs/perm";
@@ -49,7 +50,9 @@ export function createKernel(screen: HTMLElement): {
               ? "opfs"
               : driver instanceof ProcFS
                 ? "proc"
-                : "mem",
+                : driver instanceof RemoteFS
+                  ? "remote"
+                  : "mem",
         })),
     }),
     readonly: true,
@@ -126,6 +129,18 @@ export function createKernel(screen: HTMLElement): {
       await mountPrograms(fs);
       await fs.mkdir("/tmp");
       fs.setAttr("/tmp", { uid: 0, gid: 0, mode: 0o777 });
+      // The owner's files on the server, the same in every browser. Mounted
+      // whether or not anyone is signed in: its permissions are fixed and
+      // admin-only (fs/perm.ts remoteAttr), and the backend checks the
+      // session on every request, so an empty-handed visitor gets nowhere.
+      await fs.mkdir("/mnt");
+      fs.setAttr("/mnt", { uid: 0, gid: 0, mode: 0o755 });
+      fs.mount({
+        path: "/mnt/cloud",
+        driver: new RemoteFS("/api/private/fs"),
+        readonly: false,
+        remote: true,
+      });
       if (persistent) {
         await migrateLegacyHome("guest");
         fs.loadAttrs(await loadMeta());

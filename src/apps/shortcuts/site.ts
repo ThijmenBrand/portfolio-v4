@@ -34,13 +34,6 @@ export function guessName(url: URL): string {
   return label[0].toUpperCase() + label.slice(1);
 }
 
-/** A stable hue per site, so the same site always gets the same colour. */
-export function hueOf(text: string): number {
-  let hash = 0;
-  for (const char of text) hash = (hash * 31 + char.codePointAt(0)!) >>> 0;
-  return hash % 360;
-}
-
-export function initialOf(name: string): string {
-  return (name.match(/[\p{L}\p{N}]/u)?.[0] ?? "?").toUpperCase();
-}
+// A stable hue and letter per site. They live in utils so the Calendar's
+// subscription swatches can colour themselves the same way.
+export { hueOf, initialOf } from "../../utils/hue";

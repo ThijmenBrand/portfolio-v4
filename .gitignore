@@ -23,3 +23,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local cloud filesystem database (CLOUD_DB in .env.example)
+cloud.db
+cloud.db-wal
+cloud.db-shm

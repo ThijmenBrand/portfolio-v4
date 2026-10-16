@@ -24,6 +24,9 @@ The portfolio is a functioning OS, not a mock-up: apps are real sandboxed proces
 ## Capabilities and Constraints
 - **Shortcuts app** (added 2026-10): each user's own list of website shortcuts, stored in their `~/.config`. Clicking opens the site in a new browser tab. Primary use is a quick launcher: 5–20 sites opened daily, so speed and recognisability matter more than organisation.
 - Site favicons cannot be loaded (CSP); site identity must be generated locally.
+- **Calendar app** (added 2026-10): subscribed calendars only — an https `.ics` link, or an `.ics` file imported from the VFS. It never creates events. Each feed's raw body is cached in `~/.config/calendar/` so the month, week and agenda views draw instantly and offline; the `upnext` menu bar extra shows the next event from the same cache.
+  - Syncing a link runs through `os.net.fetch`, which the kernel gates on the admin group and the backend gates on an owner session. The UI reports that refusal as an ordinary "Couldn't reach that calendar." and must never reveal that an owner account exists: no code may branch on `os.process.ids()` to hide or disable the link field, and every failed link offers the same `.ics` import as a way through. Importing a file works for every user.
+  - Recurring events support a deliberate subset of RFC 5545 (`FREQ` daily/weekly/monthly/yearly, `INTERVAL`, `BYDAY` with ordinals, `BYMONTH`, `BYMONTHDAY`, `COUNT`, `UNTIL`, `WKST`, `EXDATE`, `RDATE`, `RECURRENCE-ID`). `BYSETPOS` and friends are out, which is what keeps occurrence generation ascending and the windowed walk correct.
 
 ## Brand Commitments
 - The OS's existing dark app theme (`src/ui/theme.css`) and user-chosen accent color are shared by every app.

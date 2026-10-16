@@ -32,7 +32,11 @@ export async function main(os: AppInterface, args: string[]): Promise<void> {
       return os.process.exit(1);
     }
     const password = await askPassword(os, `[sudo] password for ${name}: `);
-    if (!(await verify(os, name, gid, password))) {
+    // The owner is checked by the backend, which has 2FA on; a local user is
+    // checked against /etc/shadow and has no second factor to give.
+    const code =
+      gid === ADMIN_GID ? await askPassword(os, "[sudo] authenticator code: ") : "";
+    if (!(await verify(os, name, gid, password, code))) {
       await print(os, 2, "sudo: Authentication failure\n");
       return os.process.exit(1);
     }
@@ -61,14 +65,17 @@ async function verify(
   name: string,
   gid: number,
   password: string,
+  code: string,
 ): Promise<boolean> {
   if (gid !== ADMIN_GID) {
     return verifyPassword((await readShadow(os)).get(name) ?? "!", password);
   }
+  // Without the code this always failed once 2FA was switched on -- and each
+  // attempt still spent one of five per-address login tries.
   const response = await os.api
     .fetch("/api/auth/login", {
       method: "POST",
-      body: JSON.stringify({ username: name, password }),
+      body: JSON.stringify({ username: name, password, code }),
     })
     .catch(() => ({ status: 0 }));
   return response.status === 204;

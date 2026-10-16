@@ -22,20 +22,22 @@ export const IMAGE_TYPES: Record<string, string> = {
 const CODE = "/ProgramFiles/code";
 const PREVIEW = "/ProgramFiles/preview";
 const READER = "/ProgramFiles/reader";
+const CALENDAR = "/ProgramFiles/calendar";
 
 /** Apps that open a file passed as their first argument; the choices in Settings. */
-export const FILE_APPS = [CODE, PREVIEW, READER];
+export const FILE_APPS = [CODE, PREVIEW, READER, CALENDAR];
 
 /** Extension -> built-in default app. Anything unlisted opens in Code. */
 const DEFAULT_APPS: Record<string, string> = {
   ...Object.fromEntries(Object.keys(IMAGE_TYPES).map((ext) => [ext, PREVIEW])),
   md: READER,
   pdf: READER,
+  ics: CALENDAR,
 };
 
 /** Extensions Settings lets the user pick a default app for, by section. */
 export const FILE_TYPES: Record<string, string[]> = {
-  Documents: ["txt", "md", "pdf"],
+  Documents: ["txt", "md", "pdf", "ics"],
   Code: ["json", "html", "css", "js", "ts", "py", "sh"],
   Images: Object.keys(IMAGE_TYPES),
 };

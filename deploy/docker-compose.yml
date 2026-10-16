@@ -33,7 +33,14 @@ services:
     environment:
       NODE_ENV: production
       PORT: "8787"
+      CLOUD_DB: /data/cloud.db
     read_only: true
+    volumes:
+      # The owner's synced files (/mnt/cloud). The only server-side state
+      # that isn't an environment variable, so the only thing to back up.
+      - cloud-data:/data
+    tmpfs:
+      - /tmp                     # SQLite wants somewhere to write temporaries
     user: "65532:65532"
     cap_drop: [ALL]
     security_opt:
@@ -48,3 +55,8 @@ services:
       timeout: 5s
       start_period: 10s
       retries: 3
+
+volumes:
+  # Created on first start, root-owned; the deploy script chowns it to the
+  # container's user, which can't do it itself (cap_drop: ALL).
+  cloud-data:

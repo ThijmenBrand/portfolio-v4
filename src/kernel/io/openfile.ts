@@ -4,6 +4,12 @@ import type { PtyEnd } from "./pty";
 
 export interface OpenFile {
   readonly description: string;
+  /**
+   * Backed by the server rather than by this browser. Set by the VFS, not by
+   * drivers; absent on pipes and ptys. Descriptors outlive the path check
+   * that opened them, so this is what proc/fd.ts tests before each use.
+   */
+  readonly remote?: boolean;
   read(offset: number, length: number, signal?: AbortSignal): Promise<Bytes>;
   write(offset: number, data: Bytes, signal?: AbortSignal): Promise<number>;
   stat(): Promise<Stat>;

@@ -1,4 +1,4 @@
-import { ebadf, einval, enotty, eperm, espipe, logError } from "../errors";
+import { eacces, ebadf, einval, enotty, eperm, espipe, logError } from "../errors";
 import { resolveFrom } from "../fs/path";
 import type { Stat } from "../fs/types";
 import type {
@@ -12,7 +12,7 @@ import { createPipe } from "../io/pipe";
 import { createPty, PtyEnd, type Termios, type Tty, type Winsize } from "../io/pty";
 import { signalGroup } from "./signals";
 import { requireAlive } from "../syscalls/guards";
-import type { Bytes, KernelContext, Pid } from "../types";
+import type { Bytes, KernelContext, Pid, Process } from "../types";
 
 // ponytail: 64 KiB tail of fd 1/2, so apps without a terminal still leave a trace.
 const LOG_LIMIT = 64 * 1024;
@@ -30,12 +30,28 @@ function withOffset<T>(
   return run;
 }
 
+/**
+ * A descriptor outlives the path check that opened it, and it changes hands:
+ * the shell opens a redirect target with its own credentials and hands the fd
+ * to the child (bin/sh), and spawn copies the whole table by default
+ * (proc/fdTable.ts). So code out of the filesystem can hold a descriptor for
+ * a server-backed file it could never have opened itself -- `node evil.js <
+ * /mnt/cloud/secret` needs no permission of its own. Hence: every use is
+ * checked, not only the open.
+ */
+function assertUsable(proc: Process, ofd: OpenFileDescription): void {
+  if (ofd.file.remote && proc.untrusted) throw eacces(ofd.file.description);
+}
+
 function description(
   ctx: KernelContext,
   pid: Pid,
   fd: number,
 ): OpenFileDescription {
-  return requireAlive(ctx, pid).files.get(fd);
+  const proc = requireAlive(ctx, pid);
+  const ofd = proc.files.get(fd);
+  assertUsable(proc, ofd);
+  return ofd;
 }
 
 export async function openFd(
@@ -71,6 +87,7 @@ export async function readFd(
 ): Promise<Bytes> {
   const proc = requireAlive(ctx, pid);
   const ofd = proc.files.get(fd);
+  assertUsable(proc, ofd);
 
   if (!ofd.flags.read) throw ebadf(`fd ${fd} is not open for reading`);
   if (length < 0) throw einval(`Invalid read length: ${length}`);
@@ -97,6 +114,7 @@ export async function writeFd(
   // Before get(): a desktop-launched app has no fd 1/2, and that throws EBADF.
   if (fd === 1 || fd === 2) proc.log = (proc.log + decoder.decode(data)).slice(-LOG_LIMIT);
   const ofd = proc.files.get(fd);
+  assertUsable(proc, ofd);
 
   if (!ofd.flags.write) throw ebadf(`fd ${fd} is not open for writing`);
   if (data.length === 0) return 0;

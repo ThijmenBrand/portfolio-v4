@@ -139,6 +139,13 @@ export interface AppInterface {
 }
 
 export interface SystemInterface extends AppInterface {
+  api: AppInterface["api"] & {
+    /**
+     * Record who the backend session belongs to, by real uid, or clear it
+     * with undefined. Login's to call: everything private is gated on it.
+     */
+    bindSession(uid: number | undefined): Promise<void>;
+  };
   display: AppInterface["display"] & {
     root(): Promise<HTMLElement>;
     taskbar(): Promise<HTMLElement>;
@@ -215,6 +222,7 @@ export function bindSyscalls(target: SyscallTable, pid: Pid): SystemInterface {
     },
     api: {
       fetch: (path, request) => target.apiFetch(pid, path, request),
+      bindSession: (uid) => target.setSessionUser(pid, uid),
     },
     net: {
       fetch: (url, request) => target.netFetch(pid, url, request),

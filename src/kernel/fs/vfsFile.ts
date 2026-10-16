@@ -11,18 +11,10 @@ export class VfsFile implements OpenFile {
   private readonly node: Node;
   private readonly path: string;
 
-  private readonly onWritten?: () => void;
-
-  public constructor(
-    mount: Mount,
-    node: Node,
-    path: string,
-    onWritten?: () => void,
-  ) {
+  public constructor(mount: Mount, node: Node, path: string) {
     this.mount = mount;
     this.node = node;
     this.path = path;
-    this.onWritten = onWritten;
   }
 
   public async read(offset: number, length: number): Promise<Bytes> {
@@ -41,9 +33,7 @@ export class VfsFile implements OpenFile {
   }
 
   public async close(): Promise<void> {
-    if (this.closed) return;
     this.closed = true;
-    this.onWritten?.();
   }
 
   public get description(): string {

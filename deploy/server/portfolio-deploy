@@ -15,6 +15,8 @@ set -euo pipefail
 
 APP_DIR=/srv/portfolio
 COMPOSE=(docker compose --project-name portfolio -f "$APP_DIR/docker-compose.yml")
+# compose names it <project>_<volume>; holds the owner's synced files.
+DATA_VOLUME=portfolio_cloud-data
 # Only images built by this repo's pipeline, pinned by digest.
 IMAGE_PATTERN='^ghcr\.io/thijmenbrand/portfolio-v4@sha256:[a-f0-9]{64}$'
 
@@ -24,7 +26,19 @@ action="${argv[0]:-}"
 
 log() { printf '[portfolio-deploy] %s\n' "$*"; }
 
+# The api writes its SQLite file to a named volume (/data). Docker creates
+# that volume root-owned, and the container runs as 65532 with every
+# capability dropped, so it can't fix the ownership itself -- it would just
+# fail to open the database. Do it here, from the same image, as root.
+# Idempotent: safe to repeat on every deploy and rollback.
+ensure_data() {  # ensure_data <image>
+  docker volume create "$DATA_VOLUME" >/dev/null
+  docker run --rm --user 0:0 --entrypoint chown \
+    -v "$DATA_VOLUME:/data" "$1" 65532:65532 /data
+}
+
 start() {  # start <image>; returns non-zero if it doesn't become healthy
+  ensure_data "$1"
   IMAGE="$1" "${COMPOSE[@]}" up -d --wait --wait-timeout 60
 }
 
