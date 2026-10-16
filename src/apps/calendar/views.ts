@@ -4,7 +4,7 @@
 // Everything that originates in a feed goes in through textContent. These
 // bodies come off the internet and are never trusted as markup.
 import { columnLayout, minutesInto, packLanes, type Span } from "./layout.ts";
-import type { Occurrence } from "./query.ts";
+import { occKey, type Occurrence } from "./query.ts";
 
 export const WEEK_START = 1; // ponytail: Monday, not derived from the locale
 const CHIP_H = 18;
@@ -25,7 +25,7 @@ export interface ViewContext {
   focused: Date;
   /** How many day columns the week view draws: 7, or 3 on a phone. */
   weekDays: number;
-  openDetail(occurrence: Occurrence, anchor: HTMLElement): void;
+  openDetail(occurrence: Occurrence): void;
   openDay(day: Date): void;
   focusDay(day: Date): void;
 }
@@ -88,6 +88,19 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
+/**
+ * Wire a chip, box or row to its occurrence. The data-occ tag is how main.ts
+ * finds this element again once the view has been rebuilt under an open
+ * popover -- a resize does exactly that.
+ */
+function opens(node: HTMLElement, occurrence: Occurrence, ctx: ViewContext): void {
+  node.dataset.occ = occKey(occurrence);
+  node.addEventListener("click", (event) => {
+    event.stopPropagation();
+    ctx.openDetail(occurrence);
+  });
+}
+
 function chipFor(occurrence: Occurrence, ctx: ViewContext, withTime: boolean): HTMLButtonElement {
   const chip = el("button", "chip");
   chip.type = "button";
@@ -103,10 +116,7 @@ function chipFor(occurrence: Occurrence, ctx: ViewContext, withTime: boolean): H
   title.textContent = occurrence.event.summary || "(no title)";
   chip.append(title);
   chip.title = `${occurrence.event.summary || "(no title)"} — ${occurrence.sourceName}`;
-  chip.addEventListener("click", (event) => {
-    event.stopPropagation();
-    ctx.openDetail(occurrence, chip);
-  });
+  opens(chip, occurrence, ctx);
   return chip;
 }
 
@@ -337,10 +347,7 @@ export function renderWeek(
       const when = el("span");
       when.textContent = ctx.time(occurrence.start);
       box.append(title, when);
-      box.addEventListener("click", (event) => {
-        event.stopPropagation();
-        ctx.openDetail(occurrence, box);
-      });
+      opens(box, occurrence, ctx);
       frag.append(box);
     });
 
@@ -438,7 +445,7 @@ export function renderAgenda(
       }
 
       row.append(when, el("span", "rule"), what);
-      row.addEventListener("click", () => ctx.openDetail(occurrence, row));
+      opens(row, occurrence, ctx);
       item.append(row);
       list.append(item);
     }

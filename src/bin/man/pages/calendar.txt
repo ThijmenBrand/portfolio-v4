@@ -9,7 +9,10 @@ calendar [file.ics]
 
   Each calendar's last body is cached under ~/.config/calendar/, so the views
   draw instantly on launch and keep working with no network. Subscriptions
-  themselves live in ~/.config/calendar.json.
+  themselves live in ~/.config/calendar.json, and in cloud storage as
+  /mnt/cloud/calendar/subscriptions.json where that mount will have you -- in
+  which case every browser you sign in to shows the same list. The sidebar
+  says which of the two you are looking at.
 
   Keys: T today, arrows move, M/W/A switch view, R refresh, Esc close.
   Event chips are reachable by pointer; the grid itself takes one tab stop.

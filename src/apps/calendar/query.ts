@@ -19,6 +19,13 @@ export interface Occurrence extends Instance {
   hue: number;
 }
 
+/**
+ * Identifies one drawn occurrence across a re-render, so the popover can find
+ * the chip it belongs to again after the view is rebuilt.
+ */
+export const occKey = (occurrence: Occurrence): string =>
+  `${occurrence.sourceId}|${occurrence.key}`;
+
 /** Longer windows are clamped rather than refused. */
 export const MAX_WINDOW_MS = 5 * 365 * 86_400_000;
 

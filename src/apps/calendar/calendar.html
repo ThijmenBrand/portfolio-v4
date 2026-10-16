@@ -24,17 +24,27 @@
     <button type="button" class="icon-button" data-action="refresh" aria-label="Refresh calendars" title="Refresh calendars">
       <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.8-4.1M13 1.5V5H9.5" /></svg>
     </button>
-    <button type="button" class="icon-button sheet-toggle" data-action="sources" aria-label="Calendars" title="Calendars">
+    <button type="button" class="icon-button sheet-toggle" data-action="sources" aria-label="Calendars" aria-expanded="false" title="Calendars">
       <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4h11M2.5 8h11M2.5 12h11" /></svg>
     </button>
   </header>
 
   <div class="body">
     <aside class="side" data-field="side">
-      <h2 class="side-head">Calendars</h2>
+      <div class="side-top">
+        <h2 class="side-head">Calendars</h2>
+        <button type="button" class="icon-button side-close" data-action="close-sources" aria-label="Hide calendars">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" /></svg>
+        </button>
+      </div>
       <ul class="sources" data-field="sources"></ul>
       <button type="button" class="link add" data-action="add">+ Add calendar</button>
+      <p class="side-note" data-field="storage"></p>
     </aside>
+
+    <!-- Only while the list is an overlay: it dims the calendar underneath, so
+         the sheet reads as something covering the view rather than part of it. -->
+    <div class="scrim" data-field="scrim" hidden></div>
 
     <section class="stage" data-field="stage">
       <section class="empty" data-field="empty" hidden>

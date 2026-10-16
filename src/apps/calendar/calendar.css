@@ -158,7 +158,10 @@ input[role="switch"]:checked::after { translate: 13px 0; background: var(--app-a
 
 /* ------------------------------------------------------------------ body -- */
 
-.body { display: flex; flex: 1; min-height: 0; }
+/* The sheet and its scrim are positioned against this, so they cover the
+   calendar and nothing else: against the viewport they would also cover the
+   toolbar, which is where you reach for the button that closes them. */
+.body { position: relative; display: flex; flex: 1; min-height: 0; }
 
 .side {
   display: flex;
@@ -170,9 +173,16 @@ input[role="switch"]:checked::after { translate: 13px 0; background: var(--app-a
   border-right: 1px solid var(--app-border);
   overflow-y: auto;
 }
-.side-head { margin: 0 0 4px 6px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--app-text-faint); }
+.side-top { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; }
+.side-head { flex: 1; min-width: 0; margin: 0 0 0 6px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--app-text-faint); }
+.side-close { display: none; width: 22px; height: 22px; }
 .sources { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; }
 .add { margin: 6px 0 0 6px; justify-self: start; text-align: left; }
+/* Where the list is kept. Said the same way to everyone, because the answer
+   is about storage and never about who is signed in. */
+.side-note { margin: auto 0 0; padding: 10px 6px 0; color: var(--app-text-faint); font-size: 11px; line-height: 1.35; }
+
+.scrim { position: absolute; inset: 0; z-index: 2; background: #0007; }
 
 .source {
   display: flex;
@@ -607,17 +617,34 @@ input[role="switch"]:checked::after { translate: 13px 0; background: var(--app-a
 
 /* ----------------------------------------------------------------- phone -- */
 
-@media (max-width: 760px) {
-  .side {
-    position: absolute;
-    inset: 0 auto 0 0;
-    z-index: 3;
-    width: 220px;
-    background: var(--app-surface);
-    box-shadow: var(--app-shadow);
-  }
-  .side[hidden] { display: none; }
-  .sheet-toggle { display: inline-flex; }
+/* ------------------------------------------------------- narrow windows -- */
+
+/* Too narrow to spare a column for the list, so it becomes a sheet over the
+   calendar. main.ts owns the breakpoint (SHEET_QUERY) and sets .is-sheet: the
+   same query written out twice is how the list ended up docked AND absolutely
+   positioned, sitting on top of the toolbar. */
+body.is-sheet .side {
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: 3;
+  width: min(240px, 80%);
+  border-right-color: var(--app-border-hi);
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow);
+  animation: side-in 0.14s ease-out;
+}
+@keyframes side-in { from { translate: -100% 0; } }
+body.is-sheet .side-close, body.is-sheet .sheet-toggle { display: inline-flex; }
+
+/* Phone: the popover becomes a sheet on the bottom edge, within thumb reach.
+   Keyed to the same query as isPhone(), not to a nearby one of its own. */
+body.is-phone .detail {
+  width: 100%;
+  /* The UA keeps a dialog clear of the viewport edge; a sheet wants the edge. */
+  max-width: none;
+  max-height: 72vh;
+  margin-top: auto;
+  border-radius: var(--app-radius) var(--app-radius) 0 0;
 }
 
 @media (max-width: 560px) {
@@ -629,12 +656,6 @@ input[role="switch"]:checked::after { translate: 13px 0; background: var(--app-a
   .agenda-day { grid-template-columns: 1fr; }
   .agenda-date { position: static; }
   .agenda-row { grid-template-columns: 74px 3px 1fr; gap: 6px; }
-  .detail {
-    width: 100%;
-    max-height: 72vh;
-    margin-top: auto;
-    border-radius: var(--app-radius) var(--app-radius) 0 0;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

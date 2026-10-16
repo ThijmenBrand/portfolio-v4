@@ -10,7 +10,7 @@ import { isPhone, PHONE_QUERY } from "../../utils/phone";
 import { applyAccent, loadSettings, type Settings } from "../../utils/settings";
 import type { CalEvent } from "./parse.ts";
 import { parseIcs } from "./parse.ts";
-import { occurrencesIn, type Occurrence, type QuerySource } from "./query.ts";
+import { occKey, occurrencesIn, type Occurrence, type QuerySource } from "./query.ts";
 import {
   guessFeedName,
   hueFor,
@@ -42,6 +42,17 @@ import "./calendar.css";
 
 const TICK_MS = 60_000;
 const HUES = [0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330];
+/**
+ * Narrower than this and the calendar list stops being a column of its own
+ * and becomes a sheet over the view. The one place this is decided: the
+ * stylesheet follows the .is-sheet class rather than repeating the query,
+ * because a second copy drifting out of step is what left the list docked and
+ * floating over the toolbar at the same time.
+ */
+const SHEET_QUERY = "(max-width: 760px)";
+/** Breathing room between the popover and the window's edges, and its anchor. */
+const EDGE = 8;
+const GAP = 4;
 /** Expansion slack each side, so stepping a period is a filter, not a re-expand. */
 const PAD: Record<View, number> = { month: 31, week: 7, agenda: 0 };
 
@@ -210,6 +221,7 @@ function render(): void {
 }
 
 function setView(next: View): void {
+  closeDetail();
   store.data.view = next;
   store.save();
   render();
@@ -218,6 +230,26 @@ function setView(next: View): void {
 // --------------------------------------------------------------- sidebar --
 
 let editing: Source | "new" | null = null;
+
+const isSheet = (): boolean => document.body.classList.contains("is-sheet");
+
+/**
+ * Show or hide the calendar list. Docked it is simply always there; as a
+ * sheet it covers the view, so it gets a scrim to say so and to give the
+ * whole calendar back as a way out.
+ */
+function showSources(open: boolean): void {
+  const side = field("side");
+  side.hidden = isSheet() && !open;
+  field("scrim").hidden = !isSheet() || !open;
+  action("sources").setAttribute("aria-expanded", String(!side.hidden));
+}
+
+/** Close the sheet and hand focus back to the button that opened it. */
+function closeSources(): void {
+  showSources(false);
+  action("sources").focus();
+}
 
 function ago(at: number): string {
   const seconds = Math.round((at - Date.now()) / 1000);
@@ -469,6 +501,18 @@ function deps(): SyncDeps {
   };
 }
 
+/**
+ * Everything overdue, plus anything this browser holds no events for: a
+ * subscription that arrived from another browser has no cached body here, and
+ * waiting out its refresh interval would leave it blank for an hour.
+ */
+function needsSync(): Source[] {
+  const overdue = new Set(due(store.data.sources, Date.now()));
+  return store.data.sources.filter(
+    (source) => source.enabled && (overdue.has(source) || !parsed.has(source.id)),
+  );
+}
+
 async function refresh(sources: readonly Source[]): Promise<void> {
   const wanted = sources.filter((source) => source.enabled);
   if (!wanted.length) return;
@@ -493,6 +537,24 @@ async function hydrate(): Promise<void> {
   }
 }
 
+/**
+ * Adopt the shared list when another browser has changed it. Skipped while an
+ * editor is open: that row is the Source object being edited, and replacing
+ * it underneath would throw the edit away mid-sentence.
+ */
+async function pullShared(): Promise<void> {
+  if (editing !== null) return;
+  if (!(await store.pull().catch(() => false))) return;
+
+  const ids = new Set(store.data.sources.map((source) => source.id));
+  for (const id of [...parsed.keys()]) if (!ids.has(id)) parsed.delete(id);
+  bumpAll();
+  render();
+  await hydrate();
+  showStatus("Calendars updated from another browser.");
+  await refresh(needsSync());
+}
+
 // ---------------------------------------------------------------- detail --
 
 /** "45 min", "1 hr", "4 hr 5 min" — the headline's quiet second half. */
@@ -514,7 +576,65 @@ function linkLabel(url: string): string {
   }
 }
 
-function openDetail(occurrence: Occurrence, anchorEl: HTMLElement): void {
+/** The occurrence the popover belongs to, so its chip can be found again. */
+let detailFor = "";
+
+const closeDetail = (): void => (field("detail") as HTMLDialogElement).close();
+
+/** A coordinate kept inside the window, whatever size the window now is. */
+const fit = (value: number, size: number, within: number): number =>
+  Math.max(EDGE, Math.min(value, within - size - EDGE));
+
+/**
+ * Put the popover beside its event, inside the window.
+ *
+ * Called again on every resize, which is the whole point: a window can be
+ * dragged narrower (or a phone turned) under an open popover, and a position
+ * measured once at open time would then sit off the edge, clipped away by the
+ * window frame with no way to reach it.
+ */
+function placeDetail(): void {
+  const dialog = field("detail") as HTMLDialogElement;
+  if (!dialog.open) return;
+
+  // Phone: a sheet on the bottom edge, placed by the stylesheet alone.
+  if (isPhone()) {
+    dialog.style.position = "";
+    dialog.style.left = "";
+    dialog.style.top = "";
+    return;
+  }
+  dialog.style.position = "fixed";
+
+  const width = dialog.offsetWidth;
+  const height = dialog.offsetHeight;
+  // Rebuilt by every render, so it is found by key rather than held onto.
+  const anchorEl = detailFor
+    ? document.querySelector<HTMLElement>(`[data-occ="${CSS.escape(detailFor)}"]`)
+    : null;
+
+  // The event isn't on screen any more (its month was stepped past, say):
+  // leave the popover where it is, only pulled back inside the window.
+  if (!anchorEl) {
+    const here = dialog.getBoundingClientRect();
+    dialog.style.left = `${fit(here.left, width, innerWidth)}px`;
+    dialog.style.top = `${fit(here.top, height, innerHeight)}px`;
+    return;
+  }
+
+  const box = anchorEl.getBoundingClientRect();
+  const below = box.bottom + GAP;
+  const above = box.top - GAP - height;
+  dialog.style.left = `${fit(box.left, width, innerWidth)}px`;
+  // Below the event by preference, above it when the room is up there.
+  dialog.style.top = `${
+    below + height > innerHeight - EDGE && above >= EDGE
+      ? above
+      : fit(below, height, innerHeight)
+  }px`;
+}
+
+function openDetail(occurrence: Occurrence): void {
   const dialog = field("detail") as HTMLDialogElement;
   dialog.style.setProperty("--hue", String(occurrence.hue));
   field("detail-title").textContent = occurrence.event.summary || "(no title)";
@@ -574,19 +694,9 @@ function openDetail(occurrence: Occurrence, anchorEl: HTMLElement): void {
   // scrolled halfway down.
   field("detail-scroll").scrollTop = 0;
 
+  detailFor = occKey(occurrence);
   dialog.showModal();
-  if (!isPhone()) {
-    const box = anchorEl.getBoundingClientRect();
-    const width = dialog.offsetWidth;
-    const height = dialog.offsetHeight;
-    dialog.style.left = `${Math.max(8, Math.min(box.left, innerWidth - width - 8))}px`;
-    dialog.style.top = `${Math.max(8, Math.min(box.bottom + 4, innerHeight - height - 8))}px`;
-    dialog.style.position = "fixed";
-  } else {
-    dialog.style.position = "";
-    dialog.style.left = "";
-    dialog.style.top = "";
-  }
+  placeDetail();
 }
 
 // ---------------------------------------------------------------- status --
@@ -620,6 +730,7 @@ function showStatus(text: string, isError = false, undo?: () => void): void {
 // -------------------------------------------------------------- movement --
 
 function step(direction: number): void {
+  closeDetail();
   const current = view();
   if (current === "month") {
     anchor = new Date(anchor.getFullYear(), anchor.getMonth() + direction, 1);
@@ -636,6 +747,7 @@ function step(direction: number): void {
 }
 
 function goToday(): void {
+  closeDetail();
   anchor = midnight(new Date());
   focused = anchor;
   agendaSpan = AGENDA_DAYS;
@@ -673,9 +785,8 @@ function onKey(event: KeyboardEvent): void {
     case "a": case "A": setView("agenda"); break;
     case "r": case "R": void refresh(store.data.sources); break;
     case "Escape": {
-      const side = field("side");
       if (editing !== null) { editing = null; renderSources(); }
-      else if (isPhone() && !side.hidden) side.hidden = true;
+      else if (isSheet() && !field("side").hidden) closeSources();
       break;
     }
     default: return;
@@ -718,9 +829,17 @@ export async function main(appOs: AppInterface, args: string[] = []): Promise<vo
     action(`view-${name}`).addEventListener("click", () => setView(name));
   }
   action("sources").addEventListener("click", () => {
-    field("side").hidden = !field("side").hidden;
+    const opening = Boolean(field("side").hidden);
+    showSources(opening);
+    if (opening) action("close-sources").focus();
+    else action("sources").focus();
   });
+  action("close-sources").addEventListener("click", closeSources);
+  field("scrim").addEventListener("click", closeSources);
   const startAdd = (kind: "url" | "file"): void => {
+    // The editor is a row in the list, so the list has to be on screen --
+    // otherwise "Add a link" in the empty state appears to do nothing.
+    showSources(true);
     editing = "new";
     renderSources();
     // Switch the editor to File first: clicking the picker alone would leave
@@ -743,14 +862,43 @@ export async function main(appOs: AppInterface, args: string[] = []): Promise<vo
   });
   document.addEventListener("keydown", onKey);
 
+  // Both layout switches in one place, so the class the stylesheet reads and
+  // the state the app keeps can never disagree about which one is in force.
+  const sheet = matchMedia(SHEET_QUERY);
   const phone = matchMedia(PHONE_QUERY);
-  field("side").hidden = phone.matches;
-  phone.addEventListener("change", () => {
-    field("side").hidden = phone.matches;
-    field("week").replaceChildren(); // the column count changed
-    render();
+  const applyMode = (): void => {
+    document.body.classList.toggle("is-sheet", sheet.matches);
+    document.body.classList.toggle("is-phone", phone.matches);
+    // Docked, the list is always there; as a sheet it starts out of the way.
+    showSources(!sheet.matches);
+  };
+  applyMode();
+  for (const query of [sheet, phone]) {
+    query.addEventListener("change", () => {
+      applyMode();
+      field("week").replaceChildren(); // the column count may have changed
+      render();
+      placeDetail();
+    });
+  }
+
+  // Dragging a window edge fires this per pixel; one render per frame is
+  // enough, and the popover is placed again with it.
+  let frame = 0;
+  addEventListener("resize", () => {
+    cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(() => {
+      render();
+      placeDetail();
+    });
   });
-  addEventListener("resize", () => render());
+
+  // Said plainly, and in the same breath either way: where the list is kept
+  // is a fact about storage, not a hint about who is signed in.
+  field("storage").textContent =
+    store.backing === "cloud"
+      ? "Kept in cloud storage, the same in every browser."
+      : "Kept in this browser.";
 
   render();
   await hydrate();
@@ -772,12 +920,13 @@ export async function main(appOs: AppInterface, args: string[] = []): Promise<vo
     await refresh([source]);
   }
 
-  void refresh(due(store.data.sources, Date.now()));
+  void refresh(needsSync());
 
   await os.timers.setInterval(() => {
     if (view() === "week") placeNowLine(field("week"), anchor, context());
     renderSources();
     void syncDue();
+    void pullShared();
   }, TICK_MS);
 }
 
