@@ -495,28 +495,62 @@ async function hydrate(): Promise<void> {
 
 // ---------------------------------------------------------------- detail --
 
+/** "45 min", "1 hr", "4 hr 5 min" — the headline's quiet second half. */
+function spanLabel(ms: number): string {
+  const total = Math.round(ms / 60_000);
+  if (total < 1) return "";
+  const hours = Math.floor(total / 60);
+  const minutes = total % 60;
+  if (!hours) return `${minutes} min`;
+  return minutes ? `${hours} hr ${minutes} min` : `${hours} hr`;
+}
+
+/** "teams.microsoft.com" for a link too long to show whole. */
+function linkLabel(url: string): string {
+  try {
+    return new URL(url).host || url;
+  } catch {
+    return url;
+  }
+}
+
 function openDetail(occurrence: Occurrence, anchorEl: HTMLElement): void {
   const dialog = field("detail") as HTMLDialogElement;
   dialog.style.setProperty("--hue", String(occurrence.hue));
   field("detail-title").textContent = occurrence.event.summary || "(no title)";
 
+  // The headline is the time — what you came to the popover for — with the
+  // date below it in support.
   const sameStartDay = sameDay(occurrence.start, addDays(occurrence.end, occurrence.allDay ? -1 : 0));
-  field("detail-when").textContent = occurrence.allDay
-    ? sameStartDay
-      ? `All day · ${fullFmt.format(occurrence.start)}`
-      : `All day · ${dayMonthFmt.format(occurrence.start)} – ${dayMonthFmt.format(addDays(occurrence.end, -1))}`
-    : `${fullFmt.format(occurrence.start)} · ${time(occurrence.start)} – ${time(occurrence.end)}`;
+  const span = spanLabel(occurrence.end.getTime() - occurrence.start.getTime());
+  const when = occurrence.allDay
+    ? "All day"
+    : `${time(occurrence.start)} – ${time(occurrence.end)}${span ? ` · ${span}` : ""}`;
+  const day =
+    occurrence.allDay && !sameStartDay
+      ? `${dayMonthFmt.format(occurrence.start)} – ${fullFmt.format(addDays(occurrence.end, -1))}`
+      : fullFmt.format(occurrence.start);
+  field("detail-time").textContent = when;
+  field("detail-day").textContent = day;
 
-  const where = field("detail-where");
-  where.hidden = !occurrence.event.location;
-  where.textContent = occurrence.event.location;
+  field("prop-where").hidden = !occurrence.event.location;
+  field("detail-where").textContent = occurrence.event.location;
 
-  const description = field("detail-desc");
-  description.hidden = !occurrence.event.description;
-  description.textContent = occurrence.event.description;
+  field("prop-desc").hidden = !occurrence.event.description;
+  field("detail-desc").textContent = occurrence.event.description;
 
   field("detail-swatch").style.setProperty("--hue", String(occurrence.hue));
   field("detail-calendar").textContent = occurrence.sourceName;
+
+  field("prop-url").hidden = !occurrence.event.url;
+  const link = field("detail-url") as HTMLAnchorElement;
+  link.textContent = linkLabel(occurrence.event.url);
+  link.title = occurrence.event.url;
+  link.href = occurrence.event.url || "#";
+  link.onclick = (event) => {
+    event.preventDefault();
+    void os.shell.openExternal(occurrence.event.url);
+  };
 
   const open = action("open-link") as HTMLButtonElement;
   open.hidden = !occurrence.event.url;
@@ -525,8 +559,9 @@ function openDetail(occurrence: Occurrence, anchorEl: HTMLElement): void {
   (action("copy") as HTMLButtonElement).onclick = () => {
     const lines = [
       occurrence.event.summary || "(no title)",
-      field("detail-when").textContent ?? "",
+      `${day} · ${when}`,
       occurrence.event.location,
+      occurrence.event.url,
       occurrence.event.description,
     ].filter(Boolean);
     void os.clipboard.writeText(lines.join("\n")).then(
@@ -534,6 +569,10 @@ function openDetail(occurrence: Occurrence, anchorEl: HTMLElement): void {
       () => showStatus("Couldn't copy.", true),
     );
   };
+
+  // Each event opens at the top: the last one's description may have been
+  // scrolled halfway down.
+  field("detail-scroll").scrollTop = 0;
 
   dialog.showModal();
   if (!isPhone()) {

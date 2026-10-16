@@ -139,14 +139,37 @@
 
 <dialog class="detail" data-field="detail">
   <div class="detail-bar" data-field="detail-bar" aria-hidden="true"></div>
-  <h2 data-field="detail-title"></h2>
-  <p class="detail-when" data-field="detail-when"></p>
-  <p class="detail-where" data-field="detail-where" hidden></p>
-  <p class="detail-desc" data-field="detail-desc" hidden></p>
-  <p class="detail-source">
-    <span class="swatch" data-field="detail-swatch" aria-hidden="true"></span>
-    <span data-field="detail-calendar"></span>
-  </p>
+
+  <div class="detail-scroll" data-field="detail-scroll">
+    <header class="detail-head">
+      <h2 data-field="detail-title"></h2>
+      <p class="detail-time" data-field="detail-time"></p>
+      <p class="detail-day" data-field="detail-day"></p>
+    </header>
+
+    <dl class="detail-props">
+      <div class="prop" data-field="prop-where" hidden>
+        <dt>Location</dt>
+        <dd data-field="detail-where"></dd>
+      </div>
+      <div class="prop">
+        <dt>Calendar</dt>
+        <dd class="detail-source">
+          <span class="swatch" data-field="detail-swatch" aria-hidden="true"></span>
+          <span data-field="detail-calendar"></span>
+        </dd>
+      </div>
+      <div class="prop" data-field="prop-url" hidden>
+        <dt>Link</dt>
+        <dd><a class="detail-url" data-field="detail-url" href="#"></a></dd>
+      </div>
+      <div class="prop prop-block" data-field="prop-desc" hidden>
+        <dt>Notes</dt>
+        <dd class="detail-desc" data-field="detail-desc"></dd>
+      </div>
+    </dl>
+  </div>
+
   <div class="detail-actions">
     <button type="button" class="link" data-action="copy">Copy</button>
     <button type="button" class="link" data-action="open-link" hidden>Open link</button>
