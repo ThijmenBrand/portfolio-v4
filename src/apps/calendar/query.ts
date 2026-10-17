@@ -3,6 +3,7 @@
 import { expandSeries, groupByUid, type Instance } from "./expand.ts";
 import type { CalEvent } from "./parse.ts";
 import type { Todo } from "../todo/store.ts";
+import type { TodoPart } from "./todos.ts";
 
 export interface QuerySource {
   /** The app's own id for the subscription; travels onto every occurrence. */
@@ -22,6 +23,8 @@ export interface Occurrence extends Instance {
   hue: number;
   /** Set when this is a todo from the Todo app rather than a feed's event. */
   todo?: Todo;
+  /** Which of the todo's whens this is; see todos.ts. Set alongside `todo`. */
+  todoPart?: TodoPart;
   /** From a calendar of your own, rather than a subscription. */
   mine?: boolean;
 }

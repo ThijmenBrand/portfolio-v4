@@ -29,19 +29,26 @@
             <button type="button" class="pill" data-quick="0" aria-pressed="false">Today</button>
             <button type="button" class="pill" data-quick="1" aria-pressed="false">Tomorrow</button>
           </div>
-          <label class="when-field" title="Date">
+          <!-- The plan -- when you'll do it -- then, apart, when it's due. -->
+          <label class="when-field" title="Do on">
             <svg viewBox="0 0 16 16" aria-hidden="true">
               <rect x="2.5" y="3.5" width="11" height="10" rx="2" />
               <path d="M2.5 6.5h11M5.5 2v3M10.5 2v3" />
             </svg>
-            <input type="date" data-field="new-date" aria-label="Date" />
+            <input type="date" data-field="new-date" aria-label="Do on" />
           </label>
-          <label class="when-field" title="Time">
+          <label class="when-field" title="Do at">
             <svg viewBox="0 0 16 16" aria-hidden="true">
               <circle cx="8" cy="8" r="5.5" />
               <path d="M8 5v3l2 1.5" />
             </svg>
-            <input type="time" data-field="new-time" aria-label="Time" />
+            <input type="time" data-field="new-time" aria-label="Do at" />
+          </label>
+          <label class="when-field is-due" title="Due by">
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M4 14V2.5M4 3h8l-2 3 2 3H4" />
+            </svg>
+            <input type="date" data-field="new-deadline" aria-label="Due by" />
           </label>
         </div>
         <button type="button" class="button primary composer-add" data-action="add" disabled>
@@ -72,6 +79,8 @@
       <span><kbd>&uarr;</kbd><kbd>&darr;</kbd> move</span>
       <span><kbd>Space</kbd> done</span>
       <span><kbd>E</kbd> edit</span>
+      <span><kbd>T</kbd> do today</span>
+      <span><kbd>D</kbd> deadline</span>
     </p>
     <output class="status" aria-live="polite" data-field="status">
       <span data-field="status-text"></span>
@@ -90,7 +99,18 @@
     </button>
     <button type="button" class="item-main" data-action="edit">
       <span class="item-title" data-field="title"></span>
-      <span class="item-notes" data-field="notes"></span>
+      <span class="item-sub">
+        <span class="item-plan" data-field="plan"></span>
+        <span class="item-notes" data-field="notes"></span>
+      </span>
+    </button>
+    <!-- Only on a todo that is due but has no day to do it yet. -->
+    <button type="button" class="plan-button" data-action="plan" hidden>
+      <svg viewBox="0 0 16 16" aria-hidden="true">
+        <rect x="2.5" y="3.5" width="11" height="10" rx="2" />
+        <path d="M2.5 6.5h11M5.5 2v3M10.5 2v3" />
+      </svg>
+      Plan
     </button>
     <span class="item-due" data-field="due"></span>
     <button type="button" class="icon-button item-remove" data-action="remove" aria-label="Delete">
@@ -103,21 +123,64 @@
   <li class="editor">
     <input type="text" class="editor-title" name="title" maxlength="200" autocomplete="off" aria-label="Title" />
     <textarea name="notes" rows="2" maxlength="2000" placeholder="Notes" aria-label="Notes"></textarea>
+    <!-- Two whens, each on its own row: when you'll do it, and when it has
+         to be done by. -->
     <div class="editor-when">
-      <label class="field">
-        <span>Date</span>
-        <input type="date" name="date" />
-      </label>
-      <label class="field">
-        <span>Time</span>
-        <input type="time" name="time" />
-      </label>
-      <div class="quick" role="group" aria-label="Quick dates">
-        <button type="button" class="pill" data-quick="0">Today</button>
-        <button type="button" class="pill" data-quick="1">Tomorrow</button>
-        <button type="button" class="pill" data-quick="none">No date</button>
+      <span class="when-label is-do" title="When you'll work on it. Shows in Calendar at that time.">
+        <svg viewBox="0 0 16 16" aria-hidden="true">
+          <rect x="2.5" y="3.5" width="11" height="10" rx="2" />
+          <path d="M2.5 6.5h11M5.5 2v3M10.5 2v3" />
+        </svg>
+        Do
+      </span>
+      <div class="when-fields">
+        <input type="date" name="date" aria-label="Do on" />
+        <input type="time" name="time" aria-label="Do at" />
+        <select name="minutes" aria-label="For how long" title="For how long">
+          <option value="">No length</option>
+          <option value="15">15 min</option>
+          <option value="30">30 min</option>
+          <option value="45">45 min</option>
+          <option value="60">1 hr</option>
+          <option value="90">1½ hr</option>
+          <option value="120">2 hr</option>
+          <option value="180">3 hr</option>
+          <option value="240">4 hr</option>
+          <option value="360">6 hr</option>
+          <option value="480">8 hr</option>
+        </select>
+        <div class="quick" role="group" aria-label="Quick plans">
+          <button type="button" class="pill" data-quick="0">Today</button>
+          <button type="button" class="pill" data-quick="1">Tomorrow</button>
+          <button type="button" class="pill" data-quick="none">None</button>
+        </div>
+      </div>
+
+      <span class="when-label is-due" title="When it has to be done by. Shows in Calendar as a flag.">
+        <svg viewBox="0 0 16 16" aria-hidden="true">
+          <path d="M4 14V2.5M4 3h8l-2 3 2 3H4" />
+        </svg>
+        Due
+      </span>
+      <div class="when-fields">
+        <input type="date" name="deadline" aria-label="Due on" />
+        <input type="time" name="deadline-time" aria-label="Due at" />
+        <div class="quick" role="group" aria-label="Quick deadlines">
+          <button type="button" class="pill" data-due="friday">End of week</button>
+          <button type="button" class="pill" data-due="7">In a week</button>
+          <button type="button" class="pill" data-due="none">None</button>
+        </div>
       </div>
     </div>
+    <!-- Live, while editing: the plan ends after the deadline. -->
+    <p class="editor-notice" hidden>
+      <svg viewBox="0 0 16 16" aria-hidden="true">
+        <path d="M8 2.5l6 10.5H2z" />
+        <path d="M8 6.5v3M8 11.3v.2" />
+      </svg>
+      <span class="notice-text"></span>
+      <button type="button" class="link notice-fix"></button>
+    </p>
     <p class="editor-error" role="alert" hidden></p>
     <div class="editor-actions">
       <button type="button" class="link danger" data-action="editor-remove">Delete</button>

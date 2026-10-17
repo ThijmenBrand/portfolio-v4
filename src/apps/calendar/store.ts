@@ -64,6 +64,8 @@ export interface Data {
   view: View;
   /** Draw the Todo app's dated todos alongside the calendars. */
   todos: boolean;
+  /** Draw those todos' deadlines too. Only matters while `todos` is on. */
+  deadlines: boolean;
   /** The calendar of your own the last event was saved to, offered first next time. */
   lastCalendar?: string;
 }
@@ -312,6 +314,7 @@ export async function openStore(
     sources: readSources(local),
     view: VIEWS.includes(local.view as View) ? (local.view as View) : "month",
     todos: local.todos !== false,
+    deadlines: local.deadlines !== false,
     ...(typeof local.lastCalendar === "string" && { lastCalendar: local.lastCalendar }),
   };
 

@@ -5,6 +5,7 @@
 // bodies come off the internet and are never trusted as markup.
 import { columnLayout, minutesInto, packLanes, type Span } from "./layout.ts";
 import { occKey, type Occurrence } from "./query.ts";
+import { daysBetween, deadlineAt, deadlineState, plannedLate } from "../todo/store.ts";
 
 export const WEEK_START = 1; // ponytail: Monday, not derived from the locale
 const CHIP_H = 18;
@@ -13,6 +14,10 @@ const DATE_H = 21;
 const MIN_BOX_MINUTES = 20;
 const DAY_MINUTES = 1440;
 export const AGENDA_DAYS = 60;
+/** A planned todo this long or longer is drawn as a block, with room for its deadline. */
+const BLOCK_MINUTES = 45;
+
+const FLAG = `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 14V2.5M4 3h8l-2 3 2 3H4" /></svg>`;
 
 export interface ViewContext {
   /** Already expanded and cached by the caller. */
@@ -22,6 +27,8 @@ export interface ViewContext {
   weekday(at: Date, long?: boolean): string;
   dayMonth(at: Date): string;
   today: Date;
+  /** The moment the view was drawn, which decides how pressing a deadline is. */
+  now: Date;
   focused: Date;
   openDetail(occurrence: Occurrence): void;
   /** Tick a todo off, or back on. */
@@ -124,12 +131,45 @@ function tickFor(occurrence: Occurrence, ctx: ViewContext): HTMLSpanElement {
   return tick;
 }
 
-/** Todo styling and its tick box, on any chip, box or agenda row. */
+/** The little flag a deadline carries where a planned todo has its tick. */
+function flagFor(): HTMLSpanElement {
+  const flag = el("span", "todo-flag");
+  flag.innerHTML = FLAG;
+  return flag;
+}
+
+/** The tick box, or the flag on a deadline. */
+const markerFor = (occurrence: Occurrence, ctx: ViewContext): HTMLSpanElement =>
+  occurrence.todoPart === "deadline" ? flagFor() : tickFor(occurrence, ctx);
+
+/** "Fri 17:00", "today 17:00", "Fri", "Tue 3 Nov": when a todo is due, said short. */
+function dueText(occurrence: Occurrence, ctx: ViewContext): string {
+  const todo = occurrence.todo!;
+  const at = deadlineAt(todo);
+  if (!at) return "";
+  // A bare weekday only names a day in the coming week.
+  const days = daysBetween(ctx.today, at);
+  const day = days === 0 ? "today" : days > 0 && days < 7 ? ctx.weekday(at) : ctx.dayMonth(at);
+  return todo.deadlineTime ? `${day} ${ctx.time(at)}` : day;
+}
+
+/**
+ * Todo styling on any chip, box or agenda row: which of the todo's whens it
+ * is, how pressing its deadline is, and the todo's id, which is how hovering
+ * a plan lights up its deadline and the other way round (see main.ts).
+ */
 function markTodo(node: HTMLElement, occurrence: Occurrence, ctx: ViewContext): void {
-  if (!occurrence.todo) return;
-  node.classList.add("is-todo");
-  if (occurrence.todo.done) node.classList.add("is-done");
+  const todo = occurrence.todo;
+  if (!todo) return;
+  node.classList.add("is-todo", `is-${occurrence.todoPart ?? "plan"}`);
+  node.dataset.todo = todo.id;
+  if (todo.done) node.classList.add("is-done");
   if (occKey(occurrence) === ctx.ticked) node.classList.add("just-ticked");
+  if (occurrence.todoPart === "deadline") {
+    node.classList.add(`is-${deadlineState(todo, ctx.now) ?? "later"}`);
+  } else if (!todo.done && plannedLate(todo)) {
+    node.classList.add("is-planned-late");
+  }
 }
 
 function chipFor(occurrence: Occurrence, ctx: ViewContext, withTime: boolean): HTMLButtonElement {
@@ -139,7 +179,7 @@ function chipFor(occurrence: Occurrence, ctx: ViewContext, withTime: boolean): H
   chip.style.setProperty("--hue", String(occurrence.hue));
   if (occurrence.event.transparent) chip.classList.add("is-free");
   markTodo(chip, occurrence, ctx);
-  if (occurrence.todo) chip.append(tickFor(occurrence, ctx));
+  if (occurrence.todo) chip.append(markerFor(occurrence, ctx));
   if (withTime && !occurrence.allDay) {
     const time = el("span", "chip-time");
     time.textContent = ctx.time(occurrence.start);
@@ -329,7 +369,12 @@ export function renderWeek(
 
   const occurrences = ctx.occurrences(start, end);
   const allDay = occurrences.filter((occurrence) => occurrence.allDay);
-  const timed = occurrences.filter((occurrence) => !occurrence.allDay);
+  // A timed deadline is an instant, drawn as a line across its day rather
+  // than as a box that would take a column from the meetings beside it.
+  const isLine = (occurrence: Occurrence): boolean =>
+    !occurrence.allDay && occurrence.todoPart === "deadline";
+  const timed = occurrences.filter((occurrence) => !occurrence.allDay && !isLine(occurrence));
+  const lines = occurrences.filter(isLine);
 
   // All-day strip: the same lane packing as the month grid.
   const strip = root.querySelector<HTMLElement>('[data-field="week-allday"]')!;
@@ -397,12 +442,46 @@ export function renderWeek(
       title.textContent = occurrence.event.summary || "(no title)";
       const when = el("span");
       when.textContent = ctx.time(occurrence.start);
-      // A todo is a moment, not a stretch: one line, tick first, at its time.
-      if (occurrence.todo) box.append(tickFor(occurrence, ctx), when, title);
-      else box.append(title, when);
+      if (occurrence.todo) {
+        // One line, tick first, at its time; a long plan is a block with
+        // room under that line for when it is due.
+        const head = el("span", "todo-head");
+        head.append(tickFor(occurrence, ctx), when, title);
+        box.append(head);
+        const due = dueText(occurrence, ctx);
+        if (span.end - span.start >= BLOCK_MINUTES) {
+          box.classList.add("is-block");
+          if (due && !occurrence.todo.done) {
+            const line = el("span", "todo-due");
+            line.innerHTML = FLAG;
+            line.append(box.classList.contains("is-planned-late") ? `after its deadline, ${due}` : `due ${due}`);
+            box.append(line);
+          }
+        }
+      } else box.append(title, when);
       opens(box, occurrence, ctx);
       frag.append(box);
     });
+
+    for (const occurrence of lines) {
+      if (occurrence.start < date || occurrence.start >= next) continue;
+      const line = el("button", "deadline-line");
+      line.type = "button";
+      line.tabIndex = -1;
+      line.style.setProperty("--day", String(day));
+      line.style.setProperty("--start", String(minutesInto(date, occurrence.start)));
+      markTodo(line, occurrence, ctx);
+      const flag = el("span", "deadline-flag");
+      const when = el("span", "deadline-time");
+      when.textContent = ctx.time(occurrence.start);
+      const title = el("b");
+      title.textContent = occurrence.event.summary || "(no title)";
+      flag.append(flagFor(), when, title);
+      line.append(flag);
+      line.title = `Due ${ctx.time(occurrence.start)}: ${occurrence.event.summary}`;
+      opens(line, occurrence, ctx);
+      frag.append(line);
+    }
 
     if (hidden.length) {
       const more = el("button", "week-overflow");
@@ -481,15 +560,18 @@ export function renderAgenda(
       markTodo(row, occurrence, ctx);
 
       const when = el("span", "when");
-      if (occurrence.allDay) when.textContent = "All day";
-      else if (occurrence.todo) when.textContent = ctx.time(occurrence.start);
+      if (occurrence.todoPart === "deadline") {
+        when.textContent = occurrence.allDay ? "Due" : `Due ${ctx.time(occurrence.start)}`;
+      } else if (occurrence.todoPart === "carried") when.textContent = "Carried over";
+      else if (occurrence.allDay) when.textContent = "All day";
+      else if (occurrence.todo && !occurrence.todo.minutes) when.textContent = ctx.time(occurrence.start);
       else if (occurrence.start < date) when.textContent = `… ${ctx.time(occurrence.end)}`;
       else if (occurrence.end.getTime() === occurrence.start.getTime()) {
         when.textContent = ctx.time(occurrence.start);
       } else when.textContent = `${ctx.time(occurrence.start)} – ${ctx.time(occurrence.end)}`;
 
       const what = el("span", "what");
-      if (occurrence.todo) what.append(tickFor(occurrence, ctx));
+      if (occurrence.todo) what.append(markerFor(occurrence, ctx));
       const title = el("span", "what-title");
       title.textContent = occurrence.event.summary || "(no title)";
       what.append(title);

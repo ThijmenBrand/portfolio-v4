@@ -65,7 +65,7 @@ body {
 }
 .pill:hover { border-color: var(--app-border-hi); color: var(--app-text); }
 
-input[type="date"], input[type="time"] { color-scheme: dark; }
+input[type="date"], input[type="time"], select { color-scheme: dark; }
 
 /* ------------------------------------------------------------------- top -- */
 
@@ -142,6 +142,8 @@ input[type="date"], input[type="time"] { color-scheme: dark; }
 .when-field:hover { border-color: var(--app-border-hi); }
 .when-field:focus-within { border-color: var(--app-accent); color: var(--app-text-dim); }
 .when-field.has-value { color: var(--app-text-dim); }
+/* The deadline field: a flag, and once set, the deadline's own colour. */
+.when-field.is-due.has-value { border-color: color-mix(in oklab, var(--app-warn) 45%, transparent); color: var(--app-warn); }
 .when-field svg { flex: none; width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
 .when-field input {
   height: 22px;
@@ -197,7 +199,9 @@ input[type="date"], input[type="time"] { color-scheme: dark; }
   text-transform: uppercase;
 }
 .group-count { font-weight: 500; font-variant-numeric: tabular-nums; opacity: 0.8; }
-.group.is-overdue .group-head { color: var(--app-danger); }
+.group.is-late .group-head { color: var(--app-danger); }
+.group.is-unplanned .group-head { color: var(--app-warn); }
+.group-hint { margin-left: auto; color: var(--app-text-faint); font-weight: 400; letter-spacing: 0; text-transform: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .group.is-today .group-head { color: var(--app-accent); }
 .group-head .link { font-size: 11px; text-transform: none; letter-spacing: 0; font-weight: 500; }
 
@@ -368,23 +372,80 @@ input[type="date"], input[type="time"] { color-scheme: dark; }
   background: linear-gradient(currentColor, currentColor) no-repeat 0 55% / 0 1.5px;
   transition: color 0.3s ease, background-size 0.32s cubic-bezier(0.65, 0, 0.35, 1);
 }
-.item-notes { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--app-text-faint); font-size: 12px; }
+/* Under the title: the plan (or what's wrong with it), then the notes. */
+.item-sub { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12px; }
+.item-sub:has(> :not([hidden])) { margin-top: 1px; }
+.item-notes { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--app-text-faint); }
+.item-plan {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.item-plan svg, .item-due svg, .plan-button svg {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.item-plan.is-plan { color: var(--app-accent); }
+.item-plan.is-carried { color: var(--app-text-dim); font-style: italic; }
+.item-plan.is-warn { color: var(--app-warn); }
+.item-plan.is-quiet { color: var(--app-text-faint); }
 
 .item.is-done .item-title { color: var(--app-text-faint); background-size: 100% 1.5px; }
 .item.is-ticking .item-title { transition-delay: 0.15s; }
 
+/* The deadline: a chip that says how close it is -- grey while there's time,
+   amber within a few days, red once it has passed. */
 .item-due {
+  --due: var(--app-text-dim);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   flex: none;
-  padding: 2px 7px;
-  border-radius: 10px;
-  color: var(--app-text-dim);
+  height: 21px;
+  padding: 0 7px;
+  border: 1px solid color-mix(in oklab, var(--due) 40%, transparent);
+  border-radius: 11px;
+  color: var(--due);
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.item-due.is-timed { background: var(--app-surface-hi); }
-.item-due.is-late { color: var(--app-danger); background: var(--app-danger-soft); }
-.item.is-done .item-due { color: var(--app-text-faint); background: none; }
+.item-due svg { width: 11px; height: 11px; }
+.item-due.is-later { border-color: var(--app-border); }
+.item-due.is-soon { --due: var(--app-warn); background: color-mix(in oklab, var(--app-warn) 10%, transparent); }
+.item-due.is-late { --due: var(--app-danger); background: var(--app-danger-soft); }
+.item-due.is-done { --due: var(--app-text-faint); border-color: transparent; }
+.due-left { white-space: pre; opacity: 0.75; }
+
+.plan-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  height: 21px;
+  padding: 0 8px;
+  border: 1px dashed var(--app-border-hi);
+  border-radius: 11px;
+  background: none;
+  color: var(--app-text-dim);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: default;
+}
+.plan-button svg { width: 11px; height: 11px; }
+.plan-button:hover { border-color: var(--app-accent); border-style: solid; color: var(--app-accent); }
 
 .item-remove { width: 24px; height: 24px; opacity: 0; }
 .item-remove svg { width: 13px; height: 13px; }
@@ -406,7 +467,7 @@ input[type="date"], input[type="time"] { color-scheme: dark; }
 }
 @keyframes open-editor { from { opacity: 0; transform: translateY(-4px) scale(0.99); } }
 
-.editor-title, .editor textarea, .field input {
+.editor-title, .editor textarea, .when-fields input, .when-fields select {
   border: 1px solid var(--app-border-hi);
   border-radius: var(--app-radius);
   background: var(--app-well);
@@ -415,14 +476,36 @@ input[type="date"], input[type="time"] { color-scheme: dark; }
 }
 .editor-title { height: 30px; padding: 0 9px; font-size: 14px; }
 .editor textarea { padding: 6px 9px; resize: vertical; min-height: 40px; color: var(--app-text-dim); }
-.editor-title:focus-visible, .editor textarea:focus-visible, .field input:focus-visible { outline-offset: 0; border-color: var(--app-accent); }
+.editor-title:focus-visible, .editor textarea:focus-visible,
+.when-fields input:focus-visible, .when-fields select:focus-visible { outline-offset: 0; border-color: var(--app-accent); }
 .editor-title[aria-invalid="true"] { border-color: var(--app-danger); }
 
-.editor-when { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
-.field { display: grid; gap: 3px; }
-.field > span { color: var(--app-text-dim); font-size: 11px; }
-.field input { height: 28px; padding: 0 6px; }
-.quick { display: flex; gap: 4px; padding-bottom: 2px; }
+/* Two whens, Do and Due, each a label and a row of fields. */
+.editor-when { display: grid; grid-template-columns: max-content 1fr; align-items: start; gap: 8px 10px; margin-top: 2px; }
+.when-label { display: inline-flex; align-items: center; gap: 5px; height: 28px; font-size: 12px; font-weight: 600; }
+.when-label svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.when-label.is-do { color: var(--app-accent); }
+.when-label.is-due { color: var(--app-warn); }
+.when-fields { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.when-fields input, .when-fields select { height: 28px; padding: 0 6px; font-variant-numeric: tabular-nums; }
+.when-fields select:disabled { color: var(--app-text-faint); }
+.quick { display: flex; gap: 4px; }
+
+.editor-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 7px 10px;
+  border: 1px solid color-mix(in oklab, var(--app-warn) 40%, transparent);
+  border-radius: var(--app-radius);
+  background: color-mix(in oklab, var(--app-warn) 10%, transparent);
+  color: var(--app-warn);
+  font-size: 12.5px;
+}
+.editor-notice svg { flex: none; width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.notice-text { flex: 1; min-width: 0; }
+.notice-fix { flex: none; color: var(--app-text); text-decoration: underline; text-underline-offset: 2px; }
 
 .editor-error { margin: 0; color: var(--app-danger); font-size: 12px; }
 .editor-actions { display: flex; align-items: center; gap: 6px; }
@@ -472,6 +555,9 @@ input[type="date"], input[type="time"] { color-scheme: dark; }
   .composer-add kbd { display: none; }
   .keys { display: none; }
   .item-remove { opacity: 1; }
+  .group-hint { display: none; }
+  .editor-when { grid-template-columns: 1fr; gap: 4px; }
+  .when-label { height: auto; margin-top: 4px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

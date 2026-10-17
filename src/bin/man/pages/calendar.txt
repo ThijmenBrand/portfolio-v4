@@ -23,9 +23,16 @@ calendar [file.ics]
   which case every browser you sign in to shows the same list. The sidebar
   says which of the two you are looking at.
 
-  Dated todos from the Todo app show up too: at their time of day if they
-  have one, as all-day items if not. Tick the box to mark one done. The
-  Todos switch in the sidebar hides them.
+  Dated todos from the Todo app show up too: at the time you planned them
+  (as long as you planned them for) if they have one, as all-day items if
+  not. A plan whose day went by stays there, dashed, and is carried over to
+  today. Tick the box to mark one done.
+
+  An open todo's deadline shows as a flag: a line across its day at its
+  time, or an all-day chip. Grey while there's time, amber within three
+  days, red once it has passed. Hover a todo to light up its deadline, and
+  the other way round. The Todos and Deadlines switches in the sidebar hide
+  them.
 
   Keys: N new event, T today, arrows move, Enter open the focused day,
   M/W/D/A switch view, R refresh, Esc close. Event chips are reachable by

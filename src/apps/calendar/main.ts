@@ -13,7 +13,8 @@
 // on who is running it.
 //
 // The Todo app's dated todos are drawn here too, from the same file the Todo
-// app keeps, and can be ticked off from any view.
+// app keeps, and can be ticked off from any view: each at the time it is
+// planned for, and each open one's deadline as a flag on the day it is due.
 import type { AppInterface } from "../../kernel/syscalls/api";
 import { isPhone, PHONE_QUERY } from "../../utils/phone";
 import { applyAccent, loadSettings, type Settings } from "../../utils/settings";
@@ -23,10 +24,17 @@ import { parseIcs } from "./parse.ts";
 import { pling } from "../todo/pling.ts";
 import {
   dateKey,
+  daysBetween,
+  deadlineAt,
+  deadlineState,
+  isForToday,
   isTime,
   openTodos,
   parseDate,
+  plannedAt,
+  plannedLate,
   saveProblem,
+  type Todo,
   type TodoStore,
 } from "../todo/store.ts";
 import {
@@ -115,6 +123,11 @@ let todos: TodoStore;
 let todoRev = 0;
 /** The todo ticked off a moment ago, drawn with a flourish on the next render. */
 let ticked = "";
+/**
+ * When the views were last drawn: a missed plan moves at midnight, and a
+ * timed deadline turns red the moment it passes.
+ */
+let drawnAt = 0;
 let settings: Settings;
 let anchor = midnight(new Date());
 let focused = midnight(new Date());
@@ -209,7 +222,11 @@ function revKey(): string {
   }
   return `mine:${mineRev}|${store.data.sources
     .map((s) => `${s.id}:${s.enabled ? 1 : 0}:${revisions.get(s.id) ?? 0}`)
-    .join(",")}|todos:${store.data.todos ? todoRev : "off"}`;
+    .join(",")}|todos:${
+    // The day is in the key because the todos drawn depend on it: a plan
+    // missed yesterday is carried over to today.
+    store.data.todos ? `${todoRev}:${store.data.deadlines ? 1 : 0}:${dateKey(new Date())}` : "off"
+  }`;
 }
 
 /**
@@ -231,9 +248,10 @@ function occurrences(from: Date, to: Date): Occurrence[] {
   if (!items) {
     items = occurrencesIn(enabledSources(), lo, hi);
     if (store.data.todos) {
-      items = [...items, ...todoOccurrences(todos.data.todos, lo, hi, "Todos")].sort(
-        compareOccurrences,
+      const own = todoOccurrences(todos.data.todos, lo, hi, "Todos").filter(
+        (o) => store.data.deadlines || o.todoPart !== "deadline",
       );
+      items = [...items, ...own].sort(compareOccurrences);
     }
     if (windows.size >= 4) windows.delete(windows.keys().next().value!);
     windows.set(windowKey, items);
@@ -254,6 +272,7 @@ function context(): ViewContext {
     weekday: (at, long) => (long ? longWeekdayFmt : weekdayFmt).format(at),
     dayMonth: (at) => dayMonthFmt.format(at),
     today: midnight(new Date()),
+    now: new Date(),
     focused,
     openDetail,
     toggleTodo,
@@ -275,12 +294,17 @@ function render(): void {
   const agenda = field("agenda");
   const empty = field("empty");
   const current = view();
+  drawnAt = Date.now();
 
   // Dated todos are something to look at too, calendars or not.
   const hasSources =
     mine.calendars.length > 0 ||
     store.data.sources.length > 0 ||
-    (store.data.todos && todos.data.todos.some((todo) => todo.date));
+    (store.data.todos &&
+      todos.data.todos.some(
+        // A deadline is only drawn while its todo is open and deadlines are on.
+        (todo) => todo.date || (store.data.deadlines && todo.deadline && !todo.done),
+      ));
   empty.hidden = hasSources;
   month.hidden = !hasSources || current !== "month";
   const grid = current === "week" || current === "day";
@@ -440,21 +464,29 @@ function renderSources(): void {
   action("add").hidden = editing !== null || store.data.sources.length >= MAX_SOURCES;
 
   const open = todos.data.todos.filter((todo) => !todo.done);
-  const today = dateKey(new Date());
-  // Kept apart, as the Todo app groups them: last week's todos aren't due today.
-  const overdue = open.filter((todo) => todo.date && todo.date < today).length;
-  const dueToday = open.filter((todo) => todo.date === today).length;
+  const now = new Date();
+  const today = dateKey(now);
+  // Counted as the Todo app groups them: a missed plan is today's, but a
+  // passed deadline is late, and that is counted under Deadlines instead.
+  const onToday = open.filter(
+    (todo) => isForToday(todo, today) && deadlineState(todo, now) !== "late",
+  ).length;
   field("todo-note").textContent = !open.length
     ? "All done"
-    : [
-        overdue ? `${overdue} overdue` : "",
-        dueToday ? `${dueToday} due today` : "",
-        `${open.length} open`,
-      ]
-        .filter(Boolean)
-        .join(" · ");
+    : [onToday ? `${onToday} today` : "", `${open.length} open`].filter(Boolean).join(" · ");
+  const late = open.filter((todo) => deadlineState(todo, now) === "late").length;
+  const soon = open.filter((todo) => deadlineState(todo, now) === "soon").length;
+  const note = field("deadline-note");
+  note.textContent =
+    [late ? `${late} passed` : "", soon ? `${soon} due soon` : ""].filter(Boolean).join(" · ") ||
+    "None coming up";
+  note.classList.toggle("is-error", late > 0);
   (action("show-todos") as HTMLInputElement).checked = store.data.todos;
   action("show-todos").closest(".source")!.classList.toggle("is-off", !store.data.todos);
+  const deadlines = action("show-deadlines") as HTMLInputElement;
+  deadlines.checked = store.data.deadlines;
+  deadlines.disabled = !store.data.todos;
+  deadlines.closest(".source")!.classList.toggle("is-off", !store.data.todos || !store.data.deadlines);
 }
 
 function editorFor(existing: Source | null): HTMLLIElement {
@@ -872,7 +904,9 @@ function toggleTodo(occurrence: Occurrence): void {
       render();
     });
   todoRev++;
-  ticked = finishing ? occKey(occurrence) : "";
+  // On the plan, keyed by the todo's id: a done todo's carried-over copy and
+  // deadline are no longer drawn, so their own keys would light up nothing.
+  ticked = finishing ? occKey({ ...occurrence, key: todo.id }) : "";
   render();
   showStatus(finishing ? `Done: ${todo.title}` : `Not done: ${todo.title}`);
 }
@@ -903,6 +937,86 @@ function linkLabel(url: string): string {
   } catch {
     return url;
   }
+}
+
+/** "Friday 23 October, 17:00": a stored day, and its time when it has one. */
+function dayAndTime(at: Date, timed: boolean): string {
+  return timed ? `${fullFmt.format(at)}, ${time(at)}` : fullFmt.format(at);
+}
+
+/** "in 2 days", "today", "1 day late": how far off a todo's deadline is. */
+function dueRelative(todo: Todo, now: Date): string {
+  const days = daysBetween(now, deadlineAt(todo)!);
+  if (deadlineState(todo, now) === "late") {
+    return days < 0 ? `${-days} day${days === -1 ? "" : "s"} late` : "passed";
+  }
+  if (days === 0) return "today";
+  if (days === 1) return "tomorrow";
+  return `in ${days} days`;
+}
+
+/** The popover's headline for a todo: when it's planned, or when it's due. */
+function todoWhen(occurrence: Occurrence, todo: Todo, plain: string): string {
+  switch (occurrence.todoPart) {
+    case "deadline":
+      return occurrence.allDay ? "Due by the end of the day" : `Due ${time(occurrence.start)}`;
+    case "carried":
+      return `Carried over from ${dayMonthFmt.format(plannedAt(todo)!)}`;
+    default:
+      // A todo with no length is a moment, so it gets no end time.
+      if (occurrence.allDay) return "Any time";
+      return todo.minutes ? plain : time(occurrence.start);
+  }
+}
+
+/** The popover's second fact about a todo: the when its headline isn't. */
+function todoOther(
+  occurrence: Occurrence,
+  todo: Todo,
+): { label: string; text: string; warn: boolean } | null {
+  const now = new Date();
+  if (occurrence.todoPart === "deadline") {
+    const plan = plannedAt(todo);
+    return {
+      label: "Planned",
+      text: plan ? dayAndTime(plan, Boolean(todo.time)) : "Not yet",
+      warn: !plan || plannedLate(todo),
+    };
+  }
+  const due = deadlineAt(todo);
+  if (!due) return null;
+  const late = !todo.done && plannedLate(todo);
+  return {
+    label: "Due",
+    text: `${dayAndTime(due, Boolean(todo.deadlineTime))}${todo.done ? "" : ` · ${dueRelative(todo, now)}`}${
+      late ? ", before this plan" : ""
+    }`,
+    warn: late || deadlineState(todo, now) === "soon",
+  };
+}
+
+/**
+ * Hovering any of a todo's items -- its plan, a missed plan, its deadline --
+ * lights up the rest, so a plan can be read against when it is due. Wired
+ * once, on the document: the views rebuild their elements on every render.
+ */
+function wireTodoLinks(): void {
+  let lit = "";
+  const light = (id: string): void => {
+    // Unless a render has rebuilt the lit elements, unlit, in the meantime.
+    if (id === lit && (!id || document.querySelector(".is-linked"))) return;
+    for (const node of document.querySelectorAll(".is-linked")) node.classList.remove("is-linked");
+    lit = id;
+    if (!id) return;
+    for (const node of document.querySelectorAll(`[data-todo="${CSS.escape(id)}"]`)) {
+      node.classList.add("is-linked");
+    }
+  };
+  document.addEventListener("pointerover", (event) => {
+    light((event.target as HTMLElement).closest<HTMLElement>("[data-todo]")?.dataset.todo ?? "");
+  });
+  // On the root element: pointerleave doesn't bubble, so the document never sees it.
+  document.documentElement.addEventListener("pointerleave", () => light(""));
 }
 
 /** The occurrence the popover belongs to, so its chip can be found again. */
@@ -974,18 +1088,28 @@ function openDetail(occurrence: Occurrence): void {
   // date below it in support.
   const sameStartDay = sameDay(occurrence.start, addDays(occurrence.end, occurrence.allDay ? -1 : 0));
   const span = spanLabel(occurrence.end.getTime() - occurrence.start.getTime());
-  // A todo is due at a moment, so it gets no end time and no length.
-  const when = occurrence.allDay
-    ? todo ? "Any time" : "All day"
-    : todo
-      ? `Due ${time(occurrence.start)}`
-      : `${time(occurrence.start)} – ${time(occurrence.end)}${span ? ` · ${span}` : ""}`;
+  const plain = occurrence.allDay
+    ? "All day"
+    : `${time(occurrence.start)} – ${time(occurrence.end)}${span ? ` · ${span}` : ""}`;
+  const when = todo ? todoWhen(occurrence, todo, plain) : plain;
   const day =
     occurrence.allDay && !sameStartDay
       ? `${dayMonthFmt.format(occurrence.start)} – ${fullFmt.format(addDays(occurrence.end, -1))}`
       : fullFmt.format(occurrence.start);
   field("detail-time").textContent = when;
   field("detail-day").textContent = day;
+  field("detail-time").classList.toggle(
+    "is-late",
+    Boolean(todo && occurrence.todoPart === "deadline" && deadlineState(todo, new Date()) === "late"),
+  );
+
+  // A todo's other when: on its plan, when it is due; on its deadline, when
+  // it is planned.
+  const other = todo ? todoOther(occurrence, todo) : null;
+  field("prop-todo").hidden = !other;
+  field("todo-label").textContent = other?.label ?? "";
+  field("todo-other").textContent = other?.text ?? "";
+  field("todo-other").classList.toggle("is-warn", Boolean(other?.warn));
 
   field("prop-where").hidden = !occurrence.event.location;
   field("detail-where").textContent = occurrence.event.location;
@@ -1643,6 +1767,12 @@ export async function main(appOs: AppInterface, args: string[] = []): Promise<vo
     store.save();
     render();
   });
+  action("show-deadlines").addEventListener("change", () => {
+    store.data.deadlines = (action("show-deadlines") as HTMLInputElement).checked;
+    store.save();
+    render();
+  });
+  wireTodoLinks();
   action("open-todo-app").addEventListener("click", () => void os.process.spawn("/ProgramFiles/todo"));
   action("add-link").addEventListener("click", () => {
     closeMineEditor();
@@ -1728,6 +1858,14 @@ export async function main(appOs: AppInterface, args: string[] = []): Promise<vo
   });
 
   await os.timers.setInterval(() => {
+    // Past midnight a missed plan carries over to the new today; a timed
+    // deadline passed since the last draw is late now.
+    const now = new Date();
+    const passed = store.data.todos && todos.data.todos.some((todo) => {
+      const at = !todo.done && todo.deadlineTime ? deadlineAt(todo) : null;
+      return at !== null && at.getTime() > drawnAt && at <= now;
+    });
+    if (passed || dateKey(new Date(drawnAt)) !== dateKey(now)) render();
     if (view() === "week" || view() === "day") {
       const { start, days } = gridRange();
       placeNowLine(field("week"), start, days);
