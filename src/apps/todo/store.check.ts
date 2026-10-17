@@ -8,7 +8,17 @@
 // meets. The Calendar's view of the list, todoOccurrences, is checked last.
 import type { AppInterface } from "../../kernel/syscalls/api";
 import { todoOccurrences } from "../calendar/todos.ts";
-import { dateKey, dueAt, openTodos, parseData, type Todo } from "./store.ts";
+import {
+  dateKey,
+  deadlineAt,
+  deadlineState,
+  isForToday,
+  openTodos,
+  parseData,
+  plannedAt,
+  plannedLate,
+  type Todo,
+} from "./store.ts";
 
 let count = 0;
 function ok(actual: unknown, expected: unknown, what: string): void {
@@ -141,16 +151,65 @@ const todo = (id: string, extra: Partial<Todo> = {}): Todo => ({
   ok(data.todos[1]!.id !== data.todos[2]!.id, true, "duplicate ids are split");
   ok(data.todos[2]!.doneAt, 5, "a finished todo keeps when");
   ok(parseData("not json"), { todos: [], sound: true }, "garbage is an empty list");
+
+  const [planned, untimed, due, noDay] = parseData(
+    JSON.stringify({
+      todos: [
+        { id: "a", title: "a", date: "2026-10-17", time: "09:00", minutes: 90, deadline: "2026-10-20", deadlineTime: "17:00" },
+        { id: "b", title: "b", date: "2026-10-17", minutes: 90 },
+        { id: "c", title: "c", deadline: "2026-10-20", deadlineTime: "7pm", minutes: -5 },
+        { id: "d", title: "d", deadlineTime: "17:00", minutes: 99999, time: "09:00" },
+      ],
+    }),
+  ).todos as [Todo, Todo, Todo, Todo];
+  ok([planned.minutes, planned.deadline, planned.deadlineTime], [90, "2026-10-20", "17:00"], "a plan's length and a deadline are kept");
+  ok(untimed.minutes, undefined, "a length needs a time to start from");
+  ok([due.deadline, due.deadlineTime, due.minutes], ["2026-10-20", undefined, undefined], "a deadline's bad time is dropped, and a stray length");
+  ok([noDay.deadlineTime, noDay.time, noDay.minutes], [undefined, undefined, undefined], "times with no day are dropped");
+  const long = parseData(JSON.stringify({ todos: [{ id: "e", title: "e", date: "2026-10-17", time: "09:00", minutes: 99999 }] }));
+  ok(long.todos[0]!.minutes, 1440, "a length is capped at a day");
+}
+
+// ------------------------------------------------------ plan and deadline --
+
+{
+  // Saturday 17 October 2026, mid-morning.
+  const now = new Date(2026, 9, 17, 10, 30);
+  const today = dateKey(now);
+
+  const at = plannedAt(todo("t", { date: "2026-10-17", time: "09:05" }))!;
+  ok([at.getFullYear(), at.getMonth(), at.getDate(), at.getHours(), at.getMinutes()], [2026, 9, 17, 9, 5], "a planned time is a local wall clock");
+  ok(plannedAt(todo("t")), null, "no date, no plan");
+  ok(deadlineAt(todo("t", { deadline: "2026-10-20", deadlineTime: "17:00" }))!.getHours(), 17, "a deadline at its time");
+  ok(dateKey(new Date(2026, 0, 5)), "2026-01-05", "days are stored zero-padded");
+
+  const state = (extra: Partial<Todo>) => deadlineState(todo("t", extra), now);
+  ok(state({}), null, "no deadline, nothing to say");
+  ok(state({ deadline: "2026-10-17" }), "soon", "due today with no time isn't late until the day is over");
+  ok(state({ deadline: "2026-10-17", deadlineTime: "10:00" }), "late", "due earlier today, at a time, is late");
+  ok(state({ deadline: "2026-10-17", deadlineTime: "18:00" }), "soon", "due later today is soon");
+  ok(state({ deadline: "2026-10-16" }), "late", "due yesterday is late");
+  ok(state({ deadline: "2026-10-20" }), "soon", "three days off is soon");
+  ok(state({ deadline: "2026-10-21" }), "later", "four days off is later");
+  ok(state({ deadline: "2026-10-16", done: true }), null, "a done todo's deadline is no longer news");
+
+  const late = (extra: Partial<Todo>) => plannedLate(todo("t", extra));
+  ok(late({ date: "2026-10-21", deadline: "2026-10-20" }), true, "planned the day after it's due");
+  ok(late({ date: "2026-10-20", deadline: "2026-10-20" }), false, "planned on the day it's due is fine");
+  ok(late({ date: "2026-10-20", time: "16:00", minutes: 120, deadline: "2026-10-20", deadlineTime: "17:00" }), true, "a plan that runs past the deadline's time");
+  ok(late({ date: "2026-10-20", time: "15:00", minutes: 120, deadline: "2026-10-20", deadlineTime: "17:00" }), false, "and one that ends on it");
+  ok(late({ date: "2026-10-20", time: "18:00", deadline: "2026-10-20" }), false, "a deadline with no time runs all day");
+  ok(late({ date: "2026-10-21" }), false, "no deadline, never late");
+
+  ok(isForToday(todo("t", { date: "2026-10-12" }), today), true, "a missed plan carries over to today");
+  ok(isForToday(todo("t", { deadline: today }), today), true, "so does a deadline today");
+  ok(isForToday(todo("t", { date: "2026-10-18", deadline: "2026-10-16" }), today), false, "a past deadline alone doesn't");
 }
 
 // ------------------------------------------------------- in the Calendar --
 
 {
-  const at = dueAt(todo("t", { date: "2026-10-17", time: "09:05" }))!;
-  ok([at.getFullYear(), at.getMonth(), at.getDate(), at.getHours(), at.getMinutes()], [2026, 9, 17, 9, 5], "a due time is a local wall clock");
-  ok(dueAt(todo("t")), null, "no date, no due time");
-  ok(dateKey(new Date(2026, 0, 5)), "2026-01-05", "days are stored zero-padded");
-
+  const now = new Date(2026, 9, 17, 10, 30);
   const list = [
     todo("timed", { date: "2026-10-17", time: "14:00" }),
     todo("allday", { date: "2026-10-17" }),
@@ -159,12 +218,35 @@ const todo = (id: string, extra: Partial<Todo> = {}): Todo => ({
   ];
   const from = new Date(2026, 9, 12);
   const to = new Date(2026, 9, 19);
-  const shown = todoOccurrences(list, from, to, "Todos");
+  const shown = todoOccurrences(list, from, to, "Todos", now);
   ok(shown.map((o) => o.todo!.id), ["timed", "allday"], "dated todos in the window, and only those");
   const [timed, allDay] = shown as [(typeof shown)[0], (typeof shown)[0]];
   ok([timed.allDay, timed.start.getHours(), (timed.end.getTime() - timed.start.getTime()) / 60_000], [false, 14, 30], "a timed todo sits at its time");
   ok([allDay.allDay, allDay.end.getDate()], [true, 18], "an undated-in-the-day todo is all day, ending at the next midnight");
-  ok(timed.sourceId, "todo", "and they are marked as todos");
+  ok([timed.sourceId, timed.todoPart], ["todo", "plan"], "and they are marked as todos, and as plans");
+
+  const parts = (one: Todo) =>
+    todoOccurrences([one], from, to, "Todos", now).map((o) => [o.todoPart, o.key, o.start.getDate(), o.allDay]);
+  const [long] = todoOccurrences([todo("long", { date: "2026-10-17", time: "09:00", minutes: 120 })], from, to, "Todos", now);
+  ok(long!.end.getHours(), 11, "a plan with a length takes it up");
+  ok(
+    parts(todo("m", { date: "2026-10-14", time: "09:00" })),
+    [["missed", "m", 14, false], ["carried", "m:today", 17, true]],
+    "a missed plan stays where it was and carries over to today, all day",
+  );
+  ok(parts(todo("m", { date: "2026-10-14", done: true })), [["plan", "m", 14, true]], "a done one doesn't carry over");
+  ok(
+    parts(todo("d", { deadline: "2026-10-16", deadlineTime: "17:00" })),
+    [["deadline", "d:due", 16, false]],
+    "a timed deadline sits at its time",
+  );
+  ok(parts(todo("d", { deadline: "2026-10-18" })), [["deadline", "d:due", 18, true]], "a deadline with no time is all day");
+  ok(parts(todo("d", { deadline: "2026-10-18", done: true })), [], "a done todo's deadline isn't drawn");
+  ok(
+    parts(todo("b", { date: "2026-10-17", deadline: "2026-10-18" })).map((p) => p[0]),
+    ["plan", "deadline"],
+    "a todo with both puts both on the calendar",
+  );
 }
 
 console.log(`todo store: ${count} checks passed`);

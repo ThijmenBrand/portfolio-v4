@@ -1,4 +1,10 @@
-// Todo — things to do, some on a day, some at a time of day.
+// Todo — things to do, some on a day, some at a time of day, some by a
+// deadline.
+//
+// A todo has two whens (see store.ts): the day you plan to do it, which
+// orders the list, and the day it is due, which sits beside it as a chip.
+// A plan that slips just carries over to today; only a passed deadline is
+// drawn as late.
 //
 // store.ts keeps the list in cloud storage when that mount will have us and
 // in ~/.config otherwise. The Calendar reads the same file and draws every
@@ -8,15 +14,22 @@ import type { AppInterface } from "../../kernel/syscalls/api";
 import { applyAccent, loadSettings, type Settings } from "../../utils/settings";
 import { pling } from "./pling.ts";
 import {
+  addDays,
   dateKey,
-  dueAt,
+  daysBetween,
+  deadlineAt,
+  deadlineState,
+  isForToday,
   isTime,
+  MAX_MINUTES,
   MAX_NOTES,
   MAX_TITLE,
   MAX_TODOS,
   newId,
   openTodos,
   parseDate,
+  plannedAt,
+  plannedLate,
   saveProblem,
   type Todo,
   type TodoStore,
@@ -52,6 +65,7 @@ let weekdayFmt: Intl.DateTimeFormat;
 let dayMonthFmt: Intl.DateTimeFormat;
 let dayMonthYearFmt: Intl.DateTimeFormat;
 let todayFmt: Intl.DateTimeFormat;
+let fullDayFmt: Intl.DateTimeFormat;
 
 const field = <T extends HTMLElement = HTMLElement>(name: string) =>
   document.querySelector<T>(`[data-field="${name}"]`)!;
@@ -75,35 +89,94 @@ function buildFormats(): void {
   dayMonthFmt = new Intl.DateTimeFormat(undefined, { weekday: "short", day: "numeric", month: "short" });
   dayMonthYearFmt = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", year: "numeric" });
   todayFmt = new Intl.DateTimeFormat(undefined, { weekday: "long", day: "numeric", month: "long" });
+  fullDayFmt = new Intl.DateTimeFormat(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 }
 
-const midnight = (at: Date): Date => new Date(at.getFullYear(), at.getMonth(), at.getDate());
-const addDays = (at: Date, days: number): Date =>
-  new Date(at.getFullYear(), at.getMonth(), at.getDate() + days);
-/** Calendar days from `from` to `to`, by date rather than by elapsed time. */
-const daysBetween = (from: Date, to: Date): number =>
-  Math.round((midnight(to).getTime() - midnight(from).getTime()) / 86_400_000);
+const ICONS = {
+  clock: `<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.5" /><path d="M8 5v3l2 1.5" /></svg>`,
+  day: `<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="3.5" width="11" height="10" rx="2" /><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3" /></svg>`,
+  carried: `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h9M9 5l3 3-3 3" /></svg>`,
+  warn: `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5l6 10.5H2z" /><path d="M8 6.5v3M8 11.3v.2" /></svg>`,
+  flag: `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 14V2.5M4 3h8l-2 3 2 3H4" /></svg>`,
+};
+
+/** "Today", "Tomorrow", "Thu", "Mon, Oct 26": a day, said relative to now. */
+function dayLabel(at: Date, now: Date): string {
+  const diff = daysBetween(now, at);
+  if (diff === 0) return "Today";
+  if (diff === 1) return "Tomorrow";
+  if (diff === -1) return "Yesterday";
+  if (diff > 1 && diff < 7) return weekdayFmt.format(at);
+  if (at.getFullYear() === now.getFullYear()) return dayMonthFmt.format(at);
+  return dayMonthYearFmt.format(at);
+}
 
 /**
- * "Thu · 9:30", "Oct 15", "Tomorrow". The group heading already names today
- * and tomorrow, so rows under it leave the day out (`withDay` false).
+ * "Thu · 9:30 – 11:00", "9:30", "Oct 15": when a todo is planned for. The
+ * Today and Tomorrow groups already name the day, so rows under them leave
+ * it out (`withDay` false).
  */
-function dueLabel(todo: Todo, now: Date, withDay: boolean): { text: string; late: boolean } {
-  const at = dueAt(todo);
-  if (!at) return { text: "", late: false };
-  const diff = daysBetween(now, at);
-  let day = "";
-  if (withDay || diff < 0 || diff > 1) {
-    if (diff === 0) day = "Today";
-    else if (diff === 1) day = "Tomorrow";
-    else if (diff === -1) day = "Yesterday";
-    else if (diff > 1 && diff < 7) day = weekdayFmt.format(at);
-    else if (at.getFullYear() === now.getFullYear()) day = dayMonthFmt.format(at);
-    else day = dayMonthYearFmt.format(at);
+function planText(todo: Todo, now: Date, withDay: boolean): string {
+  const at = plannedAt(todo);
+  if (!at) return "";
+  const day = withDay ? dayLabel(at, now) : "";
+  let time = "";
+  if (todo.time) {
+    time = timeFmt.format(at);
+    if (todo.minutes) time += ` – ${timeFmt.format(new Date(at.getTime() + todo.minutes * 60_000))}`;
   }
-  const time = todo.time ? timeFmt.format(at) : "";
-  const late = !todo.done && (todo.time ? at < now : diff < 0);
-  return { text: [day, time].filter(Boolean).join(" · "), late };
+  return [day, time].filter(Boolean).join(" · ");
+}
+
+interface Label {
+  text: string;
+  icon: keyof typeof ICONS;
+  kind: "plan" | "carried" | "warn" | "quiet";
+}
+
+/**
+ * The line under a todo's title: its plan, or what's wrong with it. In
+ * order: a plan that ends after the deadline, a plan missed and carried
+ * over, a deadline today with no plan, and then just the plan.
+ */
+function planLabel(todo: Todo, group: string, now: Date): Label | null {
+  const at = plannedAt(todo);
+  const today = dateKey(now);
+  const withDay = group !== "today" && group !== "tomorrow";
+  if (todo.done) {
+    return at ? { text: planText(todo, now, true), icon: todo.time ? "clock" : "day", kind: "quiet" } : null;
+  }
+  if (at && plannedLate(todo)) {
+    return { text: `planned ${planText(todo, now, true)} — after its deadline`, icon: "warn", kind: "warn" };
+  }
+  if (at && todo.date! < today) {
+    return group === "late"
+      ? { text: `was planned ${dayLabel(at, now)}`, icon: "day", kind: "quiet" }
+      : { text: `carried over from ${dayLabel(at, now)}`, icon: "carried", kind: "carried" };
+  }
+  if (!at) {
+    if (group === "today") return { text: "due today, not planned", icon: "warn", kind: "warn" };
+    if (group === "late") return { text: "never planned", icon: "day", kind: "quiet" };
+    return null;
+  }
+  const text = planText(todo, now, withDay);
+  return text ? { text, icon: todo.time ? "clock" : "day", kind: "plan" } : null;
+}
+
+/** "Fri 17:00 · 2d", "Yesterday · 1d late": the deadline chip. */
+function dueChip(todo: Todo, now: Date): { text: string; left: string; state: string } | null {
+  const at = deadlineAt(todo);
+  if (!at) return null;
+  const state = deadlineState(todo, now) ?? "later";
+  const days = daysBetween(now, at);
+  const text = [dayLabel(at, now), todo.deadlineTime ? timeFmt.format(at) : ""].filter(Boolean).join(" ");
+  let left = "";
+  if (!todo.done) {
+    if (days > 1) left = `${days}d`;
+    else if (days < 0) left = `${-days}d late`;
+    else if (state === "late") left = "late";
+  }
+  return { text, left, state: todo.done ? "done" : state };
 }
 
 // ---------------------------------------------------------------- groups --
@@ -111,15 +184,26 @@ function dueLabel(todo: Todo, now: Date, withDay: boolean): { text: string; late
 interface Group {
   id: string;
   label: string;
+  /** Said quietly beside the label, for a group whose name needs it. */
+  hint?: string;
   todos: Todo[];
 }
 
-/** By day, then undated-in-the-day before timed, then time, then age. */
-function byDue(a: Todo, b: Todo): number {
+/** By plan day, then undated-in-the-day before timed, then time, then deadline, then age. */
+function byPlan(a: Todo, b: Todo): number {
   return (
     (a.date ?? "9999").localeCompare(b.date ?? "9999") ||
     Number(Boolean(a.time)) - Number(Boolean(b.time)) ||
     (a.time ?? "").localeCompare(b.time ?? "") ||
+    byDeadline(a, b)
+  );
+}
+
+/** By deadline, the most pressing first, then age. */
+function byDeadline(a: Todo, b: Todo): number {
+  return (
+    (a.deadline ?? "9999").localeCompare(b.deadline ?? "9999") ||
+    (a.deadlineTime ?? "99").localeCompare(b.deadlineTime ?? "99") ||
     a.createdAt - b.createdAt
   );
 }
@@ -127,24 +211,37 @@ function byDue(a: Todo, b: Todo): number {
 /** Still on the list: not done, or done a moment ago and not yet moved. */
 const isOpen = (todo: Todo): boolean => !todo.done || settling.has(todo.id);
 
+/**
+ * The open todos, by when you'll do them. A missed plan isn't late -- it
+ * carries over into Today -- but a passed deadline is, and those lead the
+ * list whatever their plan. A deadline today puts a todo on Today too, so it
+ * can't be missed for lack of a plan; other deadlines with no plan wait in
+ * "Needs a plan".
+ */
 function openGroups(todos: readonly Todo[], now: Date): Group[] {
   const today = dateKey(now);
   const tomorrow = dateKey(addDays(now, 1));
   const groups: Group[] = [
-    { id: "overdue", label: "Overdue", todos: [] },
+    { id: "late", label: "Past deadline", todos: [] },
     { id: "today", label: "Today", todos: [] },
     { id: "tomorrow", label: "Tomorrow", todos: [] },
     { id: "upcoming", label: "Upcoming", todos: [] },
+    { id: "unplanned", label: "Needs a plan", hint: "due, but no day to do it", todos: [] },
     { id: "someday", label: "No date", todos: [] },
   ];
-  const [overdue, onToday, onTomorrow, upcoming, someday] = groups as [Group, Group, Group, Group, Group];
-  for (const todo of [...todos].filter(isOpen).sort(byDue)) {
-    if (!todo.date) someday.todos.push(todo);
-    else if (todo.date < today) overdue.todos.push(todo);
-    else if (todo.date === today) onToday.todos.push(todo);
+  const [late, onToday, onTomorrow, upcoming, unplanned, someday] = groups as [
+    Group, Group, Group, Group, Group, Group,
+  ];
+  for (const todo of [...todos].filter(isOpen).sort(byPlan)) {
+    // A todo ticked a moment ago is still on show, where it was.
+    if (!todo.done && deadlineState(todo, now) === "late") late.todos.push(todo);
+    else if (isForToday(todo, today)) onToday.todos.push(todo);
+    else if (!todo.date) (todo.deadline ? unplanned : someday).todos.push(todo);
     else if (todo.date === tomorrow) onTomorrow.todos.push(todo);
     else upcoming.todos.push(todo);
   }
+  late.todos.sort(byDeadline);
+  unplanned.todos.sort(byDeadline);
   return groups.filter((group) => group.todos.length);
 }
 
@@ -163,12 +260,17 @@ function render(): void {
   const groups = openGroups(todos, now);
   const done = todos
     .filter((todo) => !isOpen(todo))
-    .sort((a, b) => (b.doneAt ?? 0) - (a.doneAt ?? 0) || byDue(a, b));
+    .sort((a, b) => (b.doneAt ?? 0) - (a.doneAt ?? 0) || byPlan(a, b));
   const left = todos.filter((todo) => !todo.done).length;
+  const late = todos.filter((todo) => deadlineState(todo, now) === "late").length;
 
-  field("subtitle").textContent = `${todayFmt.format(now)} · ${
-    left ? `${left} to do` : todos.length ? "all done" : "nothing planned"
-  }`;
+  field("subtitle").textContent = [
+    todayFmt.format(now),
+    left ? `${left} to do` : todos.length ? "all done" : "nothing planned",
+    late ? `${late} past ${late === 1 ? "its deadline" : "their deadlines"}` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
   const sound = action("sound");
   sound.setAttribute("aria-pressed", String(store.data.sound));
   sound.title = store.data.sound ? "Sound on when finishing a todo" : "Sound off";
@@ -178,7 +280,7 @@ function render(): void {
   field("empty-title").textContent = done.length ? "All done" : "Nothing to do";
   field("empty-text").textContent = done.length
     ? "Everything on the list is ticked off. Enjoy it."
-    : "Add a todo above. Give it a date and it shows up in Calendar too.";
+    : "Add a todo above. Give it a day to do it, or a deadline, and it shows up in Calendar too.";
 
   // Focus follows the todo, not the element: the rows are rebuilt.
   const active = document.activeElement as HTMLElement | null;
@@ -210,11 +312,15 @@ function groupFor(group: Group, now: Date): HTMLElement {
   const count = el("span", "group-count");
   count.textContent = String(group.todos.length);
   head.append(label, count);
+  if (group.hint) {
+    const hint = el("span", "group-hint");
+    hint.textContent = group.hint;
+    head.append(hint);
+  }
 
   const list = el("ul", "items");
-  const withDay = group.id !== "today" && group.id !== "tomorrow";
   for (const todo of group.todos) {
-    list.append(todo.id === editing ? editorFor(todo) : rowFor(todo, now, withDay));
+    list.append(todo.id === editing ? editorFor(todo) : rowFor(todo, now, group.id));
   }
   section.append(head, list);
   return section;
@@ -250,14 +356,14 @@ function doneGroup(done: readonly Todo[], now: Date): HTMLElement {
   if (showDone) {
     const list = el("ul", "items");
     for (const todo of done) {
-      list.append(todo.id === editing ? editorFor(todo) : rowFor(todo, now, true));
+      list.append(todo.id === editing ? editorFor(todo) : rowFor(todo, now, "done"));
     }
     section.append(list);
   }
   return section;
 }
 
-function rowFor(todo: Todo, now: Date, withDay: boolean): HTMLElement {
+function rowFor(todo: Todo, now: Date, group: string): HTMLElement {
   const row = clone("todo-row");
   row.dataset.id = todo.id;
   row.classList.toggle("is-done", todo.done);
@@ -274,12 +380,36 @@ function rowFor(todo: Todo, now: Date, withDay: boolean): HTMLElement {
   notes.textContent = todo.notes?.split("\n", 1)[0] ?? "";
   notes.hidden = !todo.notes;
 
+  const plan = row.querySelector<HTMLElement>('[data-field="plan"]')!;
+  const label = planLabel(todo, group, now);
+  plan.hidden = !label;
+  if (label) {
+    plan.className = `item-plan is-${label.kind}`;
+    plan.innerHTML = ICONS[label.icon];
+    plan.append(label.text);
+  }
+
   const due = row.querySelector<HTMLElement>('[data-field="due"]')!;
-  const { text, late } = dueLabel(todo, now, withDay);
-  due.textContent = text;
-  due.hidden = !text;
-  due.classList.toggle("is-late", late);
-  if (todo.time) due.classList.add("is-timed");
+  const chip = dueChip(todo, now);
+  due.hidden = !chip;
+  if (chip) {
+    due.classList.add(`is-${chip.state}`);
+    due.innerHTML = ICONS.flag;
+    due.append(chip.text);
+    if (chip.left) {
+      const left = el("span", "due-left");
+      left.textContent = ` · ${chip.left}`;
+      due.append(left);
+    }
+    due.title = `Due ${fullDayFmt.format(deadlineAt(todo)!)}${
+      todo.deadlineTime ? `, ${timeFmt.format(deadlineAt(todo)!)}` : ""
+    }`;
+  }
+
+  const planButton = row.querySelector<HTMLButtonElement>('[data-action="plan"]')!;
+  planButton.hidden = todo.done || Boolean(todo.date) || !todo.deadline;
+  planButton.title = `Pick a day to do “${todo.title}”`;
+  planButton.addEventListener("click", () => startEdit(todo.id, "date"));
 
   const main = row.querySelector<HTMLElement>(".item-main")!;
   main.setAttribute("aria-label", `Edit ${todo.title}`);
@@ -378,6 +508,7 @@ function add(): void {
   const titleInput = field<HTMLInputElement>("new-title");
   const dateInput = field<HTMLInputElement>("new-date");
   const timeInput = field<HTMLInputElement>("new-time");
+  const deadlineInput = field<HTMLInputElement>("new-deadline");
   const title = titleInput.value.trim().slice(0, MAX_TITLE);
   if (!title) {
     titleInput.focus();
@@ -391,12 +522,14 @@ function add(): void {
   // A time with no day means today: that is what anyone typing "15:00" means.
   const time = isTime(timeInput.value) ? timeInput.value : "";
   const date = parseDate(dateInput.value) ? dateInput.value : time ? dateKey(new Date()) : "";
+  const deadline = parseDate(deadlineInput.value) ? deadlineInput.value : "";
   const todo: Todo = {
     id: newId(),
     title,
     done: false,
     ...(date && { date }),
     ...(date && time && { time }),
+    ...(deadline && { deadline }),
     createdAt: Date.now(),
   };
   void store.update((data) => void data.todos.push(structuredClone(todo))).catch(onSaveError);
@@ -404,6 +537,7 @@ function add(): void {
   titleInput.value = "";
   timeInput.value = "";
   dateInput.value = "";
+  deadlineInput.value = "";
   arrived = todo.id;
   render();
   titleInput.focus();
@@ -420,9 +554,11 @@ function syncComposer(): void {
   const title = field<HTMLInputElement>("new-title");
   const date = field<HTMLInputElement>("new-date");
   const time = field<HTMLInputElement>("new-time");
+  const deadline = field<HTMLInputElement>("new-deadline");
   composer.classList.toggle(
     "is-open",
-    composer.contains(document.activeElement) || Boolean(title.value || date.value || time.value),
+    composer.contains(document.activeElement) ||
+      Boolean(title.value || date.value || time.value || deadline.value),
   );
   for (const quick of composer.querySelectorAll<HTMLButtonElement>("[data-quick]")) {
     const day = dateKey(addDays(new Date(), Number(quick.dataset.quick)));
@@ -430,13 +566,19 @@ function syncComposer(): void {
   }
   date.closest(".when-field")!.classList.toggle("has-value", Boolean(date.value));
   time.closest(".when-field")!.classList.toggle("has-value", Boolean(time.value));
+  deadline.closest(".when-field")!.classList.toggle("has-value", Boolean(deadline.value));
   action<HTMLButtonElement>("add").disabled = !title.value.trim();
 }
 
 // ---------------------------------------------------------------- editor --
 
-function startEdit(id: string): void {
+/** Which field the editor opens on: the title, the plan's day, or the deadline. */
+type EditFocus = "title" | "date" | "deadline";
+let editFocus: EditFocus = "title";
+
+function startEdit(id: string, focus: EditFocus = "title"): void {
   editing = id;
+  editFocus = focus;
   render();
 }
 
@@ -448,6 +590,11 @@ function closeEditor(): void {
   if (stale) render();
 }
 
+/** The coming Friday, or today on a Friday: "end of the week". */
+function endOfWeek(now: Date): Date {
+  return addDays(now, (5 - now.getDay() + 7) % 7);
+}
+
 function editorFor(todo: Todo): HTMLElement {
   const node = clone("todo-editor");
   const pick = <T extends HTMLElement>(selector: string) => node.querySelector<T>(selector)!;
@@ -455,12 +602,77 @@ function editorFor(todo: Todo): HTMLElement {
   const notes = pick<HTMLTextAreaElement>('textarea[name="notes"]');
   const date = pick<HTMLInputElement>('input[name="date"]');
   const time = pick<HTMLInputElement>('input[name="time"]');
+  const minutes = pick<HTMLSelectElement>('select[name="minutes"]');
+  const deadline = pick<HTMLInputElement>('input[name="deadline"]');
+  const deadlineTime = pick<HTMLInputElement>('input[name="deadline-time"]');
+  const notice = pick<HTMLElement>(".editor-notice");
+  const fix = pick<HTMLButtonElement>(".notice-fix");
   const error = pick<HTMLElement>(".editor-error");
 
   title.value = todo.title;
   notes.value = todo.notes ?? "";
   date.value = todo.date ?? "";
   time.value = todo.time ?? "";
+  deadline.value = todo.deadline ?? "";
+  deadlineTime.value = todo.deadlineTime ?? "";
+  // A length set by hand in the file, that the list doesn't offer, is kept.
+  if (todo.minutes && ![...minutes.options].some((o) => o.value === String(todo.minutes))) {
+    const option = el("option");
+    option.value = String(todo.minutes);
+    option.textContent = `${todo.minutes} min`;
+    minutes.append(option);
+  }
+  minutes.value = todo.minutes ? String(todo.minutes) : "";
+
+  /** The todo as the editor has it now. A time with no day means today. */
+  const draft = (): Todo => {
+    const today = dateKey(new Date());
+    const nextTime = isTime(time.value) ? time.value : "";
+    const nextDate = parseDate(date.value) ? date.value : nextTime ? today : "";
+    const nextDeadlineTime = isTime(deadlineTime.value) ? deadlineTime.value : "";
+    const nextDeadline = parseDate(deadline.value) ? deadline.value : nextDeadlineTime ? today : "";
+    const length = Number(minutes.value);
+    return {
+      ...todo,
+      date: nextDate || undefined,
+      time: (nextDate && nextTime) || undefined,
+      minutes: nextDate && nextTime && length > 0 ? Math.min(length, MAX_MINUTES) : undefined,
+      deadline: nextDeadline || undefined,
+      deadlineTime: (nextDeadline && nextDeadlineTime) || undefined,
+    };
+  };
+
+  /**
+   * Keep the editor honest as it is edited: a length needs a time, and a
+   * plan that ends after the deadline says so, with a way to fix it -- the
+   * day before the deadline, or today if that has already gone.
+   */
+  const sync = (): void => {
+    minutes.disabled = !time.value;
+    const next = draft();
+    const late = plannedLate(next);
+    notice.hidden = !late;
+    if (!late) return;
+    const now = new Date();
+    const due = deadlineAt(next)!;
+    const before = dateKey(addDays(due, -1));
+    const target = before < dateKey(now) ? dateKey(now) : before;
+    const sameDay = target === next.deadline;
+    pick(".notice-text").textContent = `Planned after the deadline (${dayLabel(due, now)}${
+      next.deadlineTime ? ` ${timeFmt.format(due)}` : ""
+    }).`;
+    const name = dayLabel(parseDate(target)!, now);
+    fix.textContent = sameDay
+      ? "Do it earlier that day"
+      : `Do it ${name === "Today" || name === "Tomorrow" ? name.toLowerCase() : name} instead`;
+    fix.onclick = () => {
+      date.value = target;
+      // On the deadline's own day, a time after it can't stand; leave the
+      // plan open on that day rather than guess an hour.
+      if (sameDay) time.value = "";
+      sync();
+    };
+  };
 
   for (const quick of node.querySelectorAll<HTMLButtonElement>("[data-quick]")) {
     quick.addEventListener("click", () => {
@@ -468,11 +680,31 @@ function editorFor(todo: Todo): HTMLElement {
       if (which === "none") {
         date.value = "";
         time.value = "";
+        minutes.value = "";
       } else {
         date.value = dateKey(addDays(new Date(), Number(which)));
       }
+      sync();
     });
   }
+  for (const quick of node.querySelectorAll<HTMLButtonElement>("[data-due]")) {
+    quick.addEventListener("click", () => {
+      const which = quick.dataset.due!;
+      const now = new Date();
+      if (which === "none") {
+        deadline.value = "";
+        deadlineTime.value = "";
+      } else {
+        deadline.value = dateKey(which === "friday" ? endOfWeek(now) : addDays(now, Number(which)));
+      }
+      sync();
+    });
+  }
+  for (const input of [date, time, minutes, deadline, deadlineTime]) {
+    input.addEventListener("input", sync);
+    input.addEventListener("change", sync);
+  }
+  sync();
 
   const save = (): void => {
     const nextTitle = title.value.trim().slice(0, MAX_TITLE);
@@ -483,18 +715,17 @@ function editorFor(todo: Todo): HTMLElement {
       title.focus();
       return;
     }
-    const nextTime = isTime(time.value) ? time.value : "";
-    const nextDate = parseDate(date.value) ? date.value : nextTime ? dateKey(new Date()) : "";
+    const next = draft();
     const nextNotes = notes.value.trim().slice(0, MAX_NOTES);
     void store
       .update((data) => {
         const target = data.todos.find((t) => t.id === todo.id);
         if (!target) return;
         target.title = nextTitle;
-        if (nextDate) target.date = nextDate;
-        else delete target.date;
-        if (nextDate && nextTime) target.time = nextTime;
-        else delete target.time;
+        for (const key of ["date", "time", "minutes", "deadline", "deadlineTime"] as const) {
+          if (next[key] === undefined) delete target[key];
+          else (target as unknown as Record<string, unknown>)[key] = next[key];
+        }
         if (nextNotes) target.notes = nextNotes;
         else delete target.notes;
       })
@@ -522,11 +753,36 @@ function editorFor(todo: Todo): HTMLElement {
     }
   });
 
+  const focus = editFocus;
+  editFocus = "title";
   queueMicrotask(() => {
-    title.focus();
-    title.select();
+    if (focus === "title") {
+      title.focus();
+      title.select();
+    } else {
+      (focus === "date" ? date : deadline).focus();
+    }
   });
   return node;
+}
+
+/** T: do it today. Its time and length stay; only the day moves. */
+function doToday(id: string): void {
+  const today = dateKey(new Date());
+  const todo = store.data.todos.find((t) => t.id === id);
+  if (!todo || todo.done) return;
+  if (todo.date === today) {
+    showStatus("Already planned for today.");
+    return;
+  }
+  void store
+    .update((data) => {
+      const target = data.todos.find((t) => t.id === id);
+      if (target) target.date = today;
+    })
+    .catch(onSaveError);
+  render();
+  showStatus(`Planned for today: ${todo.title}`);
 }
 
 // ---------------------------------------------------------------- remove --
@@ -625,6 +881,18 @@ function onKey(event: KeyboardEvent): void {
       if (id) {
         event.preventDefault();
         startEdit(id);
+      }
+      break;
+    case "p": case "P": case "d": case "D":
+      if (id) {
+        event.preventDefault();
+        startEdit(id, event.key.toLowerCase() === "p" ? "date" : "deadline");
+      }
+      break;
+    case "t": case "T":
+      if (id) {
+        event.preventDefault();
+        doToday(id);
       }
       break;
     case "Delete": case "Backspace":

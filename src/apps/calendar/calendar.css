@@ -688,27 +688,124 @@ input[role="switch"]:checked::after { translate: 13px 0; background: var(--app-a
 
 /* In the hour grid a timed todo sits at its time on one line -- tick, time,
    title -- raised above the grid and outlined, so it stands out from the
-   meetings around it. */
+   meetings around it. A long one is a block, with when it is due beneath. */
 .box.is-todo {
   z-index: 1;
-  flex-direction: row;
-  align-items: center;
-  gap: 5px;
+  justify-content: center;
+  gap: 3px;
   padding: 0 6px;
   border: 1px solid color-mix(in oklab, var(--app-accent) 75%, transparent);
   background: color-mix(in oklab, var(--app-accent) 28%, var(--app-bg));
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
 }
+.box.is-todo.is-block { justify-content: flex-start; padding-top: 4px; }
 .box.is-todo:hover { background: color-mix(in oklab, var(--app-accent) 40%, var(--app-bg)); }
+.box.is-todo .todo-head { display: flex; align-items: center; gap: 5px; min-width: 0; color: var(--app-text); }
 .box.is-todo .todo-tick { width: 14px; height: 14px; }
-.box.is-todo span:not(.todo-tick) { flex: none; color: var(--app-accent); font-weight: 600; }
+.box.is-todo .todo-head > span:not(.todo-tick) { flex: none; color: var(--app-accent); font-weight: 600; }
 .box.is-todo b { min-width: 0; }
 .box.is-todo.is-done {
   border-style: dashed;
   background: color-mix(in oklab, var(--app-accent) 10%, var(--app-bg));
   box-shadow: none;
 }
-.box.is-todo.is-done span:not(.todo-tick) { color: var(--app-text-faint); }
+.box.is-todo.is-done .todo-head > span:not(.todo-tick) { color: var(--app-text-faint); }
+.todo-due { display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.box .todo-due { color: var(--app-text-dim); font-size: 10.5px; }
+.todo-due svg, .todo-flag svg { flex: none; width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.box.is-todo.is-planned-late { border-color: var(--app-warn); }
+.chip.is-todo.is-planned-late { box-shadow: inset 0 0 0 1px var(--app-warn); }
+.box.is-todo.is-planned-late .todo-due { color: var(--app-warn); }
+
+/* A plan whose day went by with the todo still open: left faint and dashed
+   where it was, while a copy sits on today, where the work carried over to. */
+.chip.is-todo.is-missed, .box.is-todo.is-missed {
+  border: 1px dashed color-mix(in oklab, var(--app-accent) 55%, transparent);
+  background: transparent;
+  box-shadow: none;
+  color: var(--app-text-dim);
+}
+.box.is-todo.is-missed .todo-head { color: var(--app-text-dim); }
+.box.is-todo.is-missed .todo-head > span:not(.todo-tick) { color: var(--app-text-faint); }
+.agenda-row.is-missed .what-title { color: var(--app-text-dim); }
+
+/* Deadlines: a flag where a plan has its tick, in a colour that says how
+   close it is -- grey while there's time, amber within a few days, red once
+   it has passed. A timed one is a line across its day, at its time. */
+.is-deadline { --dl: var(--app-text-dim); }
+.is-deadline.is-soon { --dl: var(--app-warn); }
+.is-deadline.is-late { --dl: var(--app-danger); }
+.todo-flag { display: inline-grid; place-items: center; flex: none; width: 12px; height: 12px; color: var(--dl); }
+
+.chip.is-todo.is-deadline {
+  padding-left: 4px;
+  border: 1px solid color-mix(in oklab, var(--dl) 55%, transparent);
+  background: color-mix(in oklab, var(--dl) 12%, transparent);
+  color: var(--dl);
+}
+.chip.is-todo.is-deadline:hover { background: color-mix(in oklab, var(--dl) 24%, transparent); }
+.chip.is-deadline .chip-time { color: inherit; opacity: 0.8; }
+
+.deadline-line {
+  position: absolute;
+  left: calc(var(--day) / var(--days) * 100%);
+  width: calc(100% / var(--days) - 2px);
+  top: calc(var(--start) * var(--px-per-min) * 1px - 1px);
+  height: 0;
+  padding: 0;
+  border: 0;
+  border-top: 2px solid var(--dl);
+  background: none;
+  color: inherit;
+  font: inherit;
+  z-index: 3;
+  cursor: default;
+}
+.deadline-flag {
+  position: absolute;
+  left: 2px;
+  top: -10px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: calc(100% - 4px);
+  height: 17px;
+  padding: 0 6px 0 4px;
+  border-radius: 9px;
+  background: var(--dl);
+  color: #0b0b0e;
+  font-size: 10.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+.deadline-flag .todo-flag { color: inherit; width: 10px; }
+.deadline-flag .deadline-time { flex: none; font-variant-numeric: tabular-nums; }
+.deadline-flag b { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.deadline-line:hover .deadline-flag { filter: brightness(1.12); }
+
+.agenda-row.is-deadline .rule { background: var(--dl); }
+.agenda-row.is-deadline .when { color: var(--dl); }
+
+/* Hovering one of a todo's items lights up the rest: plan and deadline. */
+.chip.is-linked, .box.is-linked { outline: 1.5px solid var(--app-text); outline-offset: -1px; }
+.deadline-line.is-linked .deadline-flag { outline: 1.5px solid var(--app-text); outline-offset: 1px; }
+.agenda-row.is-linked { background: var(--app-surface-hi); }
+
+.swatch.is-deadline {
+  width: 12px;
+  height: 12px;
+  border-radius: 0;
+  background: none;
+  fill: none;
+  stroke: var(--app-warn);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.detail-time.is-late { color: var(--app-danger); }
+.detail-props .is-warn { color: var(--app-warn); }
 
 .agenda-row.is-todo .rule { background: var(--app-accent); }
 .agenda-row.is-todo .what { display: flex; align-items: center; gap: 7px; }

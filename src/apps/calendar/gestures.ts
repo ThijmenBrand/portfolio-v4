@@ -22,7 +22,7 @@ export interface GridTarget {
 }
 
 /** Things already in the grid, which take their own clicks. */
-const TAKEN = ".box, .chip, .week-overflow, .todo-tick";
+const TAKEN = ".box, .chip, .week-overflow, .todo-tick, .deadline-line";
 
 const at = (start: Date, day: number, minutes: number): Date =>
   new Date(start.getFullYear(), start.getMonth(), start.getDate() + day, 0, minutes);

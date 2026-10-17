@@ -25,15 +25,37 @@ const CLOUD_FILE = `${CLOUD_DIR}/todos.json`;
 export const MAX_TODOS = 1000;
 export const MAX_TITLE = 200;
 export const MAX_NOTES = 2000;
+/** A plan can't be longer than its day. */
+export const MAX_MINUTES = 1440;
+/** A deadline this many days off or closer is "soon". */
+export const SOON_DAYS = 3;
 
+/**
+ * A todo has two "when"s, and they mean different things:
+ *
+ *   date, time, minutes        the plan: when you mean to do it. It slips,
+ *                              and that's fine -- a missed plan just carries
+ *                              over to today.
+ *   deadline, deadlineTime     when it has to be done by. Passing this is
+ *                              the only thing the apps draw in red.
+ *
+ * The plan kept the names `date` and `time` from before deadlines existed,
+ * so lists written then still read the same.
+ */
 export interface Todo {
   id: string;
   title: string;
   done: boolean;
-  /** A local calendar day, "YYYY-MM-DD". No date: someday. */
+  /** The day you plan to do it, a local "YYYY-MM-DD". No date: someday. */
   date?: string;
-  /** A local wall clock, "HH:MM". Only ever alongside a date. */
+  /** The planned local wall clock, "HH:MM". Only ever alongside a date. */
   time?: string;
+  /** How long the plan takes. Only ever alongside a time. */
+  minutes?: number;
+  /** The day it is due, a local "YYYY-MM-DD". */
+  deadline?: string;
+  /** Due by this local wall clock, "HH:MM". Only alongside a deadline. */
+  deadlineTime?: string;
   notes?: string;
   createdAt: number;
   doneAt?: number;
@@ -74,15 +96,66 @@ export function parseDate(key: string): Date | null {
 
 export const isTime = (value: string): boolean => TIME.test(value);
 
-/** When a todo is due: its day's midnight, or that day at its time. */
-export function dueAt(todo: Todo): Date | null {
-  if (!todo.date) return null;
-  const day = parseDate(todo.date);
+/** A stored day, at a stored time if there is one; otherwise its midnight. */
+function moment(date: string | undefined, time: string | undefined): Date | null {
+  const day = date ? parseDate(date) : null;
   if (!day) return null;
-  if (!todo.time) return day;
-  const [h, m] = todo.time.split(":").map(Number);
+  if (!time) return day;
+  const [h, m] = time.split(":").map(Number);
   // Built from parts, so a DST change that day lands on the right wall clock.
   return new Date(day.getFullYear(), day.getMonth(), day.getDate(), h, m);
+}
+
+/** When you plan to do it: the day's midnight, or that day at its time. */
+export const plannedAt = (todo: Todo): Date | null => moment(todo.date, todo.time);
+
+/** When it is due: the deadline day's midnight, or that day at its time. */
+export const deadlineAt = (todo: Todo): Date | null => moment(todo.deadline, todo.deadlineTime);
+
+export const addDays = (at: Date, days: number): Date =>
+  new Date(at.getFullYear(), at.getMonth(), at.getDate() + days);
+
+/** Calendar days from `from` to `to`, by date rather than by elapsed time. */
+export function daysBetween(from: Date, to: Date): number {
+  const midnight = (at: Date) => new Date(at.getFullYear(), at.getMonth(), at.getDate()).getTime();
+  return Math.round((midnight(to) - midnight(from)) / 86_400_000);
+}
+
+/**
+ * How pressing a deadline is, `now`: "late" once it has passed, "soon"
+ * within SOON_DAYS (its own day included), "later" before that. Null with no
+ * deadline, or once the todo is done -- a met deadline is no longer news.
+ *
+ * A deadline with no time runs to the end of its day, so it is only late
+ * the day after.
+ */
+export function deadlineState(todo: Todo, now: Date): "late" | "soon" | "later" | null {
+  const at = deadlineAt(todo);
+  if (!at || todo.done) return null;
+  const days = daysBetween(now, at);
+  if (todo.deadlineTime ? at <= now : days < 0) return "late";
+  return days <= SOON_DAYS ? "soon" : "later";
+}
+
+/**
+ * The plan won't be done before the deadline: it ends after it, or, where
+ * either has no time, it is on a later day.
+ */
+export function plannedLate(todo: Todo): boolean {
+  const plan = plannedAt(todo);
+  const due = deadlineAt(todo);
+  if (!plan || !due) return false;
+  if (!todo.time || !todo.deadlineTime) return todo.date! > todo.deadline!;
+  return plan.getTime() + (todo.minutes ?? 0) * 60_000 > due.getTime();
+}
+
+/**
+ * On today's list: planned for today or a day already gone (a missed plan
+ * carries over), or due today. Shared by the Todo app's Today group and the
+ * Calendar's count of it.
+ */
+export function isForToday(todo: Todo, today: string): boolean {
+  return Boolean((todo.date && todo.date <= today) || todo.deadline === today);
 }
 
 // ------------------------------------------------------------ validation --
@@ -96,6 +169,12 @@ function cleanTodo(raw: unknown): Todo | null {
   if (!title) return null;
   const date = parseDate(text(given.date)) ? text(given.date) : "";
   const time = date && isTime(text(given.time)) ? text(given.time) : "";
+  const minutes =
+    time && Number.isInteger(given.minutes) && given.minutes! > 0
+      ? Math.min(given.minutes!, MAX_MINUTES)
+      : 0;
+  const deadline = parseDate(text(given.deadline)) ? text(given.deadline) : "";
+  const deadlineTime = deadline && isTime(text(given.deadlineTime)) ? text(given.deadlineTime) : "";
   const notes = text(given.notes).slice(0, MAX_NOTES);
   const done = given.done === true;
   return {
@@ -104,6 +183,9 @@ function cleanTodo(raw: unknown): Todo | null {
     done,
     ...(date && { date }),
     ...(time && { time }),
+    ...(minutes && { minutes }),
+    ...(deadline && { deadline }),
+    ...(deadlineTime && { deadlineTime }),
     ...(notes && { notes }),
     createdAt: typeof given.createdAt === "number" ? given.createdAt : 0,
     ...(done && typeof given.doneAt === "number" && { doneAt: given.doneAt }),

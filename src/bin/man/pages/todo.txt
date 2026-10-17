@@ -1,16 +1,24 @@
 todo
-  Things to do, some on a day and some at a time of day. Tick one off and
-  it plays a short chime and moves to Completed; the speaker button in the
-  corner turns the chime off.
+  Things to do. Each can have a day you plan to do it (and a time, and how
+  long it takes), a deadline it has to be done by, both, or neither. Tick
+  one off and it plays a short chime and moves to Completed; the speaker
+  button in the corner turns the chime off.
 
-  Every todo with a date also appears in Calendar: at its time of day when
-  it has one, as an all-day item when it doesn't. Ticking it off there
-  ticks it off here, and the other way round.
+  The list is ordered by when you plan to do things: Today, Tomorrow,
+  Upcoming. A plan you didn't get to carries over to Today. The deadline
+  sits beside each todo: grey while there's time, amber within three days,
+  red once it has passed. Anything past its deadline goes to the top; a
+  deadline with no plan waits under "Needs a plan". The editor warns when
+  a plan ends after its deadline, and offers to move it.
+
+  Every todo with a plan or a deadline also appears in Calendar. Ticking it
+  off there ticks it off here, and the other way round.
 
   The list lives in /mnt/cloud/todo/todos.json where that mount will have
   you -- in which case every browser you sign in to shows the same list --
   and in ~/.config/todo.json otherwise. The app says which one you have.
 
-  Keys: N new todo, Up/Down move, Space done, E edit, Delete remove.
+  Keys: N new todo, Up/Down move, Space done, E edit, T do it today,
+  P plan, D deadline, Delete remove.
 
   See also: calendar.
