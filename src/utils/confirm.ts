@@ -3,6 +3,10 @@ import "./confirm.css";
 /**
  * A themed stand-in for window.confirm(): a modal <dialog> on the top layer.
  * Esc / Cancel resolves false; the confirm button is focused, Enter accepts.
+ *
+ * The buttons close the dialog themselves rather than through a
+ * <form method="dialog">: apps run in sandboxed iframes without allow-forms,
+ * where submitting a form (even a dialog one) is blocked and does nothing.
  */
 export function confirmDialog(
   message: string,
@@ -10,26 +14,28 @@ export function confirmDialog(
 ): Promise<boolean> {
   const dialog = document.createElement("dialog");
   dialog.className = "confirm-dialog";
-  const form = document.createElement("form");
-  form.method = "dialog";
-  if (title) form.append(Object.assign(document.createElement("h2"), { textContent: title }));
+  const content = document.createElement("div");
+  if (title) content.append(Object.assign(document.createElement("h2"), { textContent: title }));
   const actions = document.createElement("div");
   actions.className = "confirm-dialog-actions";
   const cancel = Object.assign(document.createElement("button"), {
-    value: "cancel",
+    type: "button",
     textContent: "Cancel",
   });
   const accept = Object.assign(document.createElement("button"), {
-    value: "ok",
+    type: "button",
     textContent: ok,
     className: danger ? "danger" : "primary",
-    autofocus: true,
   });
+  cancel.addEventListener("click", () => dialog.close("cancel"));
+  accept.addEventListener("click", () => dialog.close("ok"));
   actions.append(cancel, accept);
-  form.append(Object.assign(document.createElement("p"), { textContent: message }), actions);
-  dialog.append(form);
+  content.append(Object.assign(document.createElement("p"), { textContent: message }), actions);
+  dialog.append(content);
   document.body.append(dialog);
   dialog.showModal();
+  // Not `autofocus`: that's ignored in a cross-origin iframe.
+  accept.focus();
   return new Promise((resolve) => {
     dialog.addEventListener("close", () => {
       resolve(dialog.returnValue === "ok");

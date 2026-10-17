@@ -25,6 +25,8 @@ export interface GridOptions {
   /** Pixels per hour. */
   hourPx: number;
   onOpen: (todo: Todo) => void;
+  /** Draw only these todos; the rest still count as busy time. */
+  only?: (todo: Todo) => boolean;
 }
 
 interface Block {
@@ -85,6 +87,13 @@ export function renderGrid(root: HTMLElement, options: GridOptions): void {
   // Todos: plans, missed plans carried to today, and open deadlines.
   for (const todo of app.todos.data.todos) {
     const plan = plannedAt(todo);
+    if (options.only && !options.only(todo)) {
+      if (plan && todo.time && !todo.done && todo.date! >= today) {
+        const at = indexOf(plan);
+        if (at !== -1) busy[at]!.push({ start: plan.getTime(), end: plan.getTime() + (todo.minutes ?? 30) * 60_000 });
+      }
+      continue;
+    }
     const hue = projectOf(todo)?.hue;
     if (plan && !todo.done && todo.date! < today) {
       const at = indexOf(now);

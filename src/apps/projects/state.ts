@@ -12,7 +12,7 @@ import type { Area, Project, ProjectStore } from "./store.ts";
 export type Route =
   | { view: "today" }
   | { view: "upcoming" }
-  /** An area with nothing open in it yet. */
+  /** An area's overview, across its courses and projects. */
   | { view: "area"; id: string }
   | { view: "project"; id: string }
   | { view: "goal"; id: string; goal: string }
