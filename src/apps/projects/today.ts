@@ -1,5 +1,5 @@
 // The two pages that cut across every area: Today (what to do now, beside a
-// calendar of the day or week) and Upcoming (the next two weeks, day by day).
+// calendar of the next few days) and Upcoming (the next two weeks, day by day).
 // An area's overview (area.ts) is Today again, for that area's todos only.
 import {
   addDays,
@@ -12,7 +12,7 @@ import {
 } from "../todo/store.ts";
 import { composer } from "./composer.ts";
 import { editTodo } from "./dialogs.ts";
-import { gridDays, renderGrid } from "./grid.ts";
+import { calendarPanel } from "./grid.ts";
 import { app, goalOf, partsOf, projectOf } from "./state.ts";
 import {
   backButton,
@@ -112,11 +112,22 @@ export function dayLists(all: readonly Todo[], now: Date) {
   };
 }
 
+/** Open todos with neither a plan nor a deadline: someday. A goal's parts are its business. */
+export const someday = (todos: readonly Todo[]): Todo[] =>
+  todos.filter((todo) => !todo.done && !todo.goal && !goalOf(todo) && !todo.date && !todo.deadline);
+
 /**
  * The sections of `dayLists`, or `none` when there's nothing to do, then
- * what's done today. On an area's overview, `area` leaves its own tag off.
+ * `rest`, then what's done today. On an area's overview, `area` leaves its
+ * own tag off.
  */
-export function daySections(lists: ReturnType<typeof dayLists>, now: Date, none: HTMLElement, area?: string): HTMLElement[] {
+export function daySections(
+  lists: ReturnType<typeof dayLists>,
+  now: Date,
+  none: HTMLElement,
+  area?: string,
+  rest?: HTMLElement | null,
+): HTMLElement[] {
   const sections = [
     section("Overdue", lists.late, now, { late: true, area }),
     section("Planned for today", lists.planned, now, { noDay: true, area }),
@@ -124,29 +135,13 @@ export function daySections(lists: ReturnType<typeof dayLists>, now: Date, none:
     section("Due today, not planned", lists.dueOnly, now, { area }),
   ].filter((node): node is HTMLElement => node !== null);
   if (!sections.length) sections.push(none);
+  if (rest) sections.push(rest);
   const done = section(`Done today · ${lists.doneToday.length}`, lists.doneToday, now, { noDay: true, area });
   if (done) {
     done.classList.add("is-done-list");
     sections.push(done);
   }
   return sections;
-}
-
-/** The Day / Week switch above the calendar beside today's todos. */
-export function rangeSwitch(): HTMLElement {
-  const range = el("div", "segmented is-small");
-  range.setAttribute("role", "radiogroup");
-  range.setAttribute("aria-label", "Calendar shows");
-  for (const [value, label] of [["day", "Day"], ["week", "Week"]] as const) {
-    const pick = button("segment", label, () => {
-      app.todayRange = value;
-      app.render();
-    });
-    pick.setAttribute("role", "radio");
-    pick.setAttribute("aria-checked", String(app.todayRange === value));
-    range.append(pick);
-  }
-  return range;
 }
 
 export function renderToday(page: HTMLElement): void {
@@ -160,23 +155,16 @@ export function renderToday(page: HTMLElement): void {
   titles.append(
     el("p", "page-sub", [fmtFull(now), lists.count ? `${lists.count} to do` : "nothing to do", lists.late.length ? `${lists.late.length} overdue` : ""].filter(Boolean).join(" · ")),
   );
-  head.append(titles, rangeSwitch());
+  head.append(titles);
 
   const left = el("div", "page-main");
   left.append(composer({ placeholder: "Add a todo, then # to file it", today: true }));
   const none = el("div", "empty-state");
   none.append(el("h2", "", "Nothing for today"), el("p", "", "Plan something on today, or drag a todo onto the calendar."));
-  left.append(...daySections(lists, now, none));
+  left.append(...daySections(lists, now, none, undefined, section("Not planned", someday(app.todos.data.todos), now)));
 
   const side = el("aside", "page-side");
-  const gridBox = el("div", "grid-box");
-  side.append(gridBox, deadlinesAhead(now, 30));
-  renderGrid(gridBox, {
-    days: gridDays(now, app.todayRange === "day" ? 1 : 7),
-    now,
-    hourPx: app.todayRange === "day" ? 44 : 34,
-    onOpen: open,
-  });
+  side.append(calendarPanel({ now, onOpen: open }), deadlinesAhead(now, 30));
 
   const body = el("div", "page-cols");
   body.append(left, side);
@@ -228,11 +216,12 @@ export function renderUpcoming(page: HTMLElement): void {
     none.append(el("h2", "", "Nothing coming up"), el("p", "", "Todos planned after today, and deadlines, show here."));
     left.append(none);
   }
+  const somedayNode = section("Not planned", someday(todos), now);
+  if (somedayNode) left.append(somedayNode);
 
-  const side = el("aside", "page-side");
-  const gridBox = el("div", "grid-box");
-  side.append(heading("This week"), gridBox);
-  renderGrid(gridBox, { days: gridDays(now, 7), now, hourPx: 34, onOpen: open });
+  // Stays in view down a long list, to drag todos onto.
+  const side = el("aside", "page-side is-sticky");
+  side.append(calendarPanel({ now, onOpen: open }));
 
   const body = el("div", "page-cols");
   body.append(left, side);

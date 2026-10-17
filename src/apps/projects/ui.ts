@@ -2,6 +2,8 @@
 // and the todo row. Icons are inline SVG -- nothing is loaded, and no emoji.
 import { pling } from "../todo/pling.ts";
 import {
+  addDays,
+  dateKey,
   daysBetween,
   deadlineAt,
   deadlineState,
@@ -9,8 +11,10 @@ import {
   plannedLate,
   type Todo,
 } from "../todo/store.ts";
+import { planTodo, removeTodos, saveTodo } from "./actions.ts";
 import type { Slot } from "./match.ts";
-import { app, areaOfLoose, goalOf, projectOf } from "./state.ts";
+import { openMenu, type MenuEntry } from "./menu.ts";
+import { app, areaOfLoose, goalOf, partsOf, projectOf } from "./state.ts";
 import type { Area, Project } from "./store.ts";
 
 export function el<K extends keyof HTMLElementTagNameMap>(
@@ -81,6 +85,51 @@ export const hueColor = (hue: number, alpha?: number): string =>
 export function dot(hue: number, className = "dot"): HTMLSpanElement {
   const node = el("span", className);
   node.style.background = hueColor(hue);
+  return node;
+}
+
+// The realm's CSP keeps outside images out, so an icon's bytes come through
+// os.net (the backend fetches them) and are shown from a blob: URL.
+// ponytail: kept in memory for this run; cache to ~/.cache if refetching shows.
+const icons = new Map<string, Promise<string | null>>();
+
+/** An area icon as a blob: URL, or null when the link isn't an image. Once per link. */
+export function loadIcon(url: string): Promise<string | null> {
+  let icon = icons.get(url);
+  if (!icon) {
+    icon = app.os.net
+      .fetch(url)
+      .then(({ status, contentType, body }) =>
+        status === 200 && contentType.startsWith("image/") && body.length
+          ? URL.createObjectURL(new Blob([body], { type: contentType }))
+          : null,
+      )
+      .catch(() => null);
+    icons.set(url, icon);
+  }
+  return icon;
+}
+
+/**
+ * An area's tile: its colour with its initial, or its icon once that's
+ * loaded. Takes a draft too, for the settings sheet's preview.
+ */
+export function areaMark(area: Pick<Area, "name" | "hue" | "icon">, className = "rail-swatch"): HTMLSpanElement {
+  const node = el("span", className);
+  node.style.background = hueColor(area.hue);
+  node.dataset.initial = [...area.name.trim()][0]?.toUpperCase() ?? "";
+  if (area.icon) {
+    void loadIcon(area.icon).then((src) => {
+      if (!src) return;
+      const img = el("img");
+      img.alt = "";
+      img.src = src;
+      node.replaceChildren(img);
+      // No colour behind it, so a logo's transparent corners stay clear.
+      node.style.background = "";
+      node.classList.add("has-icon");
+    });
+  }
   return node;
 }
 
@@ -292,7 +341,53 @@ export function todoRow(todo: Todo, now: Date, options: RowOptions): HTMLDivElem
   }
   const due = dueChip(todo, now);
   if (due) row.append(due);
+  row.addEventListener("contextmenu", (event) => openMenu(event, row, todoMenu(todo, now, options)));
   return row;
+}
+
+/** What a todo's right-click menu offers: open it, tick it, plan it, delete it. */
+function todoMenu(todo: Todo, now: Date, options: RowOptions): (MenuEntry | null)[] {
+  const today = dateKey(now);
+  const tomorrow = dateKey(addDays(now, 1));
+  const plan = (date: string) => () => {
+    planTodo(todo.id, date);
+    app.render();
+  };
+  const parts = todo.goal ? partsOf(todo).length : 0;
+  return [
+    { label: "Open", action: () => options.onOpen(todo) },
+    {
+      label: todo.done ? "Mark not done" : "Mark done",
+      action: () => {
+        setDone(todo, !todo.done);
+        app.render();
+      },
+    },
+    null,
+    { label: "Plan for today", disabled: todo.done || todo.date === today, action: plan(today) },
+    { label: "Plan for tomorrow", disabled: todo.done || todo.date === tomorrow, action: plan(tomorrow) },
+    {
+      label: "Remove from plan",
+      disabled: todo.done || !todo.date,
+      action: () => {
+        const next = structuredClone(todo);
+        delete next.date;
+        delete next.time;
+        delete next.minutes;
+        saveTodo(todo, next);
+        app.render();
+      },
+    },
+    null,
+    {
+      label: "Delete",
+      danger: true,
+      action: () => {
+        removeTodos([todo.id], parts ? `Goal deleted; its ${parts} part${parts === 1 ? "" : "s"} stay as todos.` : "Deleted.");
+        app.render();
+      },
+    },
+  ];
 }
 
 /** A drop of a dragged todo onto a day: keep its time, move its day. */

@@ -92,6 +92,34 @@ function fakeOs(files: Map<string, string>, cloud: boolean): AppInterface {
   ok([labelOf(data, "UE"), labelOf(data, "XY"), labelOf(data, "")], ["Exercise", "XY", "Session"], "and the ones that weren't");
   ok(parseData(serialize(data)), data, "what is written reads back the same");
   ok(parseData("not json").areas, [], "a broken file is an empty one");
+  ok(
+    parseData(
+      JSON.stringify({
+        areas: [
+          { name: "Work", calendar: "mine:abc123", openDuring: true },
+          { name: "Bad", calendar: "../x", openDuring: true },
+          { name: "Old" },
+        ],
+      }),
+    ).areas.map((a) => [a.calendar, a.openDuring]),
+    [["mine:abc123", true], ["", false], ["", false]],
+    "an area's calendar is an id or nothing, and opens on its events only with one",
+  );
+
+  ok(
+    parseData(
+      JSON.stringify({
+        areas: [
+          { name: "A", icon: " http://example.com/logo.png " },
+          { name: "B", icon: "javascript:alert(1)" },
+          { name: "C", icon: "data:image/png;base64,AAAA" },
+          { name: "D" },
+        ],
+      }),
+    ).areas.map((a) => a.icon),
+    ["https://example.com/logo.png", undefined, undefined, undefined],
+    "an area's icon is an https link or nothing",
+  );
 
   ok(folderFor("a/b: c?", new Set()), "a b c", "a folder name is one safe path segment");
   ok(folderFor("..", new Set()), "Project", "and never dots alone");

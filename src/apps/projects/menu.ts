@@ -1,4 +1,4 @@
-// The right-click menu on areas and on courses and projects: one at a time,
+// The right-click menu on areas, on courses and projects, and on todos: one at a time,
 // at the pointer (or under the item, from the keyboard), gone on Esc, a click
 // elsewhere or when the window loses focus.
 import { el } from "./ui.ts";

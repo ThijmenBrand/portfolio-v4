@@ -18,6 +18,8 @@ export type Route =
   | { view: "goal"; id: string; goal: string }
   | { view: "note"; id: string; file: string };
 
+export type CalendarDays = 1 | 3 | 7;
+
 /** Which of the three columns a phone (or a narrow window) shows. */
 export type Pane = "rail" | "list" | "page";
 
@@ -29,8 +31,10 @@ export interface App {
   settings: Settings;
   route: Route;
   pane: Pane;
-  /** Today's page shows one day or the coming week. */
-  todayRange: "day" | "week";
+  /** How many days the calendar beside a page's todos shows. */
+  calendarDays: CalendarDays;
+  /** How far from today, in days, the calendar has been stepped. */
+  calendarShift: number;
   /** Goals folded shut on a project page, by id. */
   folded: Set<string>;
   /** The project last open in each area, by area id. */
@@ -156,6 +160,28 @@ export function courseOfEvent(occurrence: Occurrence): Project | undefined {
     return project;
   }
   return undefined;
+}
+
+/** The area whose own calendar an event is from, if any. */
+export const areaOfEvent = (occurrence: Occurrence): Area | undefined =>
+  app.projects.data.areas.find((area) => area.calendar && area.calendar === occurrence.sourceId);
+
+/** The colour an event is drawn in, if it's anyone's: its course's, else its area's. */
+export function ownerOfEvent(occurrence: Occurrence): { hue: number; course?: Project } | undefined {
+  const course = courseOfEvent(occurrence);
+  if (course) return { hue: course.hue, course };
+  const area = areaOfEvent(occurrence);
+  return area && { hue: area.hue };
+}
+
+/** An area's own calendar's timed events overlapping [from, to), in order. */
+export function areaEventsIn(area: Area, from: Date, to: Date): Occurrence[] {
+  if (!area.calendar) return [];
+  const cal = app.calendars.calendars.find((each) => each.id === area.calendar);
+  if (!cal) return [];
+  return occurrencesIn([{ id: cal.id, name: cal.name, hue: cal.hue, events: cal.events }], from, to)
+    .filter((occurrence) => !occurrence.allDay)
+    .sort((a, b) => a.start.getTime() - b.start.getTime());
 }
 
 /** Every calendar event overlapping [from, to), across the visible calendars. */

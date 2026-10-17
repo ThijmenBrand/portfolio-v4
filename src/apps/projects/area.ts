@@ -1,15 +1,15 @@
-// An area's overview: Today for the area only -- what to do now, beside the
-// day or week -- then the area's own todos, the ones in no project (an area
+// An area's overview: Today for the area only -- what to do now, and what's
+// next in the area's own calendar, beside the next few days -- then the area's own todos, the ones in no project (an area
 // needs no projects: Private can be just a list), and a card per course and
 // project with its next session, its open todos and how far along its goals are.
 import { deadlineAt, deadlineState, type Todo } from "../todo/store.ts";
 import { composer } from "./composer.ts";
 import { editArea, editProject } from "./dialogs.ts";
-import { gridDays, renderGrid } from "./grid.ts";
-import { app, areaTodos, goalsOf, isEnded, partsOf, sessionsFor, todosInArea } from "./state.ts";
+import { calendarPanel } from "./grid.ts";
+import { app, areaEventsIn, areaTodos, goalsOf, isEnded, partsOf, sessionsFor, todosInArea } from "./state.ts";
 import type { Area, Project } from "./store.ts";
-import { dayLists, daySections, deadlinesAhead, open, rangeSwitch } from "./today.ts";
-import { backButton, button, dot, dueChip, el, fmtFull, fmtTime, fmtWeekday, heading, hueColor, ICONS, todoRow, withIcon } from "./ui.ts";
+import { dayLists, daySections, deadlinesAhead, open } from "./today.ts";
+import { areaMark, backButton, button, dot, dueChip, el, fmtFull, fmtTime, fmtWeekday, heading, hueColor, ICONS, todoRow, withIcon } from "./ui.ts";
 
 const plural = (count: number, word: string): string => `${count} ${word}${count === 1 ? "" : "s"}`;
 
@@ -128,6 +128,15 @@ function projectCards(area: Area, projects: Project[], now: Date): HTMLElement {
   return node;
 }
 
+/** What's on next today in the area's own calendar: "Standup now", "Review at 14:00", or "". */
+function nextEvent(area: Area, now: Date): string {
+  const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const next = areaEventsIn(area, now, midnight).find((each) => each.end > now);
+  if (!next) return "";
+  const title = next.event.summary || "(no title)";
+  return next.start <= now ? `${title} now` : `${title} at ${fmtTime(next.start)}`;
+}
+
 export function renderArea(page: HTMLElement, area: Area): void {
   const now = new Date();
   const projects = app.projects.data.projects.filter((project) => project.area === area.id);
@@ -141,9 +150,7 @@ export function renderArea(page: HTMLElement, area: Area): void {
   head.append(backButton(area.name, () => app.go(app.route, "list")));
   const titles = el("div", "page-titles");
   const h1 = el("h1");
-  const swatch = el("span", "rail-swatch");
-  swatch.style.background = hueColor(area.hue);
-  h1.append(swatch, el("span", "", area.name));
+  h1.append(areaMark(area), el("span", "", area.name));
   const courses = active.filter((project) => project.kind === "course").length;
   titles.append(
     h1,
@@ -152,6 +159,7 @@ export function renderArea(page: HTMLElement, area: Area): void {
       "page-sub",
       [
         fmtFull(now),
+        nextEvent(area, now),
         courses ? plural(courses, "course") : "",
         active.length - courses ? plural(active.length - courses, "project") : "",
         lists.count ? `${lists.count} to do today` : "nothing to do today",
@@ -164,7 +172,7 @@ export function renderArea(page: HTMLElement, area: Area): void {
   const settings = button("icon-button", ICONS.gear, () => editArea(area));
   settings.setAttribute("aria-label", `${area.name} settings`);
   settings.title = "Area settings";
-  head.append(titles, rangeSwitch(), settings);
+  head.append(titles, settings);
 
   const left = el("div", "page-main");
   left.append(
@@ -189,15 +197,7 @@ export function renderArea(page: HTMLElement, area: Area): void {
   left.append(projectCards(area, projects, now));
 
   const side = el("aside", "page-side");
-  const gridBox = el("div", "grid-box");
-  side.append(gridBox, deadlinesAhead(now, 30, todos, area.id));
-  renderGrid(gridBox, {
-    days: gridDays(now, app.todayRange === "day" ? 1 : 7),
-    now,
-    hourPx: app.todayRange === "day" ? 44 : 34,
-    onOpen: open,
-    only: inArea,
-  });
+  side.append(calendarPanel({ now, onOpen: open, only: inArea }), deadlinesAhead(now, 30, todos, area.id));
 
   const body = el("div", "page-cols");
   body.append(left, side);

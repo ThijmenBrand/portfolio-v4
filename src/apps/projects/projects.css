@@ -133,10 +133,10 @@ kbd {
 .rail-item {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
   flex: none;
-  height: 30px;
-  padding: 0 8px;
+  height: 32px;
+  padding: 0 8px 0 6px;
   border: 0;
   border-radius: var(--app-radius);
   background: none;
@@ -145,27 +145,70 @@ kbd {
 }
 .rail-item:hover { background: var(--app-surface); color: var(--app-text); }
 .rail-item.is-on { background: var(--app-surface-hi); color: var(--app-text); }
-.rail-icon { display: grid; place-items: center; flex: none; width: 16px; }
+/* As wide as an area's tile, so every name starts on the same line. */
+.rail-icon { display: grid; place-items: center; flex: none; width: 20px; }
 .rail-icon svg { width: 15px; height: 15px; }
 .rail-label { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.rail-count { color: var(--app-text-faint); font-size: 11px; font-variant-numeric: tabular-nums; }
-.rail-count.is-late { color: var(--app-danger); }
+.rail-count {
+  flex: none;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border-radius: 9px;
+  background: var(--app-surface-hi);
+  color: var(--app-text-dim);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.rail-item.is-on .rail-count { background: var(--app-border-hi); color: var(--app-text); }
+.rail-count.is-late, .rail-item.is-on .rail-count.is-late { background: var(--app-danger-soft); color: var(--app-danger); }
 .rail-swatch { flex: none; width: 11px; height: 11px; margin: 0 2px; border-radius: 3px; }
 .rail-swatch.is-big { width: 28px; height: 28px; border-radius: 8px; }
+/* An area's own image in place of its colour: a touch bigger, as 11px hides most logos. */
+.rail-swatch.has-icon { width: 15px; height: 15px; margin: 0; overflow: hidden; }
+.rail-swatch.is-big.has-icon { width: 28px; height: 28px; }
+.rail-swatch img { display: block; width: 100%; height: 100%; object-fit: cover; }
+/* In the rail an area is a tile with its initial, the same as the strip of
+   icons draws it, only smaller. */
+.rail .rail-swatch {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  border-radius: 6px;
+  color: #0b0b0e;
+  font-size: 10.5px;
+  font-weight: 650;
+  line-height: 1;
+}
+.rail .rail-swatch::after { content: attr(data-initial); }
+.rail .rail-swatch.has-icon { width: 20px; height: 20px; }
+.rail .rail-swatch.has-icon::after { content: none; }
+.rail-item:not(.is-on) .rail-swatch { opacity: 0.8; }
+.rail-item:hover .rail-swatch { opacity: 1; }
+.rail-add { color: var(--app-text-faint); }
+.rail-add .rail-icon { height: 20px; box-sizing: border-box; border: 1px dashed var(--app-border-hi); border-radius: 6px; }
+.rail-add .rail-icon svg { width: 11px; height: 11px; }
+.rail-add:hover .rail-icon { border-color: var(--app-text-faint); }
+.icon-field { display: flex; align-items: center; gap: 8px; }
+.icon-field input { flex: 1; min-width: 0; }
 .rail-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin: 12px 0 2px;
-  padding: 0 0 0 8px;
+  margin: 16px 0 4px;
+  padding: 0 6px;
   color: var(--app-text-faint);
   font-size: 10.5px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
-.rail-head .icon-button { width: 22px; height: 22px; }
-.rail-head .icon-button svg { width: 13px; height: 13px; }
 .storage { margin: 8px 8px 0; color: var(--app-text-faint); font-size: 11px; }
 .rail-toggle { display: none; }
 
@@ -177,7 +220,7 @@ kbd {
 .is-compact .rail-item { position: relative; justify-content: center; width: 36px; height: 36px; padding: 0; }
 .is-compact .rail-label, .is-compact .storage { display: none; }
 .is-compact .rail-icon svg { width: 17px; height: 17px; }
-.is-compact .rail-count {
+.is-compact .rail-item .rail-count {
   position: absolute;
   top: 1px;
   right: 0;
@@ -194,25 +237,15 @@ kbd {
   line-height: 15px;
   text-align: center;
 }
-.is-compact .rail-count.is-late { background: var(--app-danger); color: #fff; }
+.is-compact .rail-item .rail-count.is-late { background: var(--app-danger); color: #fff; }
 .is-compact .rail-head { width: 28px; height: 0; margin: 6px 0 4px; padding: 0; border-top: 1px solid var(--app-border); font-size: 0; }
-.is-compact .rail-add { width: 28px; height: 28px; margin-top: 2px; border: 1px dashed var(--app-border-hi); border-radius: 7px; color: var(--app-text-faint); }
-.is-compact .rail-add svg { width: 13px; height: 13px; }
-.is-compact .rail-swatch {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  margin: 0;
-  border-radius: 7px;
-  color: #0b0b0e;
-  font-size: 12px;
-  font-weight: 650;
-}
-.is-compact .rail-swatch::after { content: attr(data-initial); }
+.is-compact .rail-add:hover { background: none; }
+.is-compact .rail-add .rail-icon { width: 26px; height: 26px; border-radius: 7px; }
+.is-compact .rail-add .rail-icon svg { width: 13px; height: 13px; }
+.is-compact .rail .rail-swatch { width: 26px; height: 26px; border-radius: 7px; font-size: 12px; }
 .is-compact .rail-item:has(.rail-swatch) { background: none; }
-.is-compact .rail-item:has(.rail-swatch):not(.is-on) .rail-swatch { opacity: 0.7; }
-.is-compact .rail-item:has(.rail-swatch):hover .rail-swatch { opacity: 1; }
+.is-compact .rail-item:not(.is-on) .rail-swatch { opacity: 0.7; }
+.is-compact .rail-item:hover .rail-swatch { opacity: 1; }
 /* The area you're in: its tile ringed, and a mark at the strip's edge. */
 .is-compact .rail-item.is-on .rail-swatch { box-shadow: 0 0 0 2px var(--app-well), 0 0 0 3.5px var(--app-text-dim); }
 .is-compact .rail-item.is-on::before {
@@ -340,9 +373,10 @@ kbd {
 .crumbs { display: flex; align-items: center; gap: 6px; margin: 0 0 2px; color: var(--app-text-faint); font-size: 11.5px; }
 .crumbs .link { color: var(--app-text-dim); }
 
-.page-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 340px); align-items: start; gap: 22px; }
+.page-cols { display: grid; grid-template-columns: minmax(0, 1fr) clamp(300px, 36%, 460px); align-items: start; gap: 22px; }
 .page-main { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
 .page-side { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.page-side.is-sticky { position: sticky; top: 12px; }
 
 .section-head {
   display: flex;
@@ -869,15 +903,51 @@ kbd {
 
 /* ------------------------------------------------------------------ grid -- */
 
-.grid-box { min-width: 0; }
-.grid {
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
-  height: 430px;
+/* The card the grid sits in, under a bar as tall as the composer beside it,
+   so the two columns start and rule off on the same lines. */
+.cal-panel {
+  container-type: inline-size;
+  min-width: 0;
   overflow: hidden;
   border: 1px solid var(--app-border);
   border-radius: 9px;
   background: var(--app-well);
+}
+.cal-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 34px;
+  padding: 0 5px 0 6px;
+  border-bottom: 1px solid var(--app-border);
+}
+.cal-bar .icon-button { width: 24px; height: 24px; }
+.cal-bar .icon-button svg { width: 13px; height: 13px; }
+.cal-today {
+  height: 22px;
+  margin-right: 2px;
+  padding: 0 8px;
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+  background: none;
+  color: var(--app-text-dim);
+  font-size: 12px;
+}
+.cal-today:hover:not(:disabled) { background: var(--app-surface-hi); color: var(--app-text); }
+.cal-today:disabled { opacity: 0.45; }
+.cal-label { flex: 1; min-width: 0; margin-left: 4px; overflow: hidden; color: var(--app-text); font-size: 12.5px; font-weight: 500; white-space: nowrap; text-overflow: ellipsis; }
+.cal-bar .segmented { flex: none; }
+@container (max-width: 330px) {
+  .cal-label { visibility: hidden; }
+}
+
+.grid-box { min-width: 0; }
+.grid {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  /* Most of the window, but never so short a morning won't fit. */
+  height: clamp(380px, calc(100vh - 200px), 640px);
+  overflow: hidden;
   font-size: 10.5px;
 }
 .g-head, .g-all { display: grid; grid-template-columns: 34px repeat(var(--cols), minmax(0, 1fr)); }
@@ -962,6 +1032,8 @@ kbd {
   pointer-events: none;
 }
 .is-week .g-block.is-free { font-size: 9px; }
+.is-week .g-free-word { display: none; }
+.is-week .g-block { padding: 1px 3px; }
 .g-now { position: absolute; z-index: 3; left: 0; right: 0; height: 0; border-top: 2px solid var(--app-danger); pointer-events: none; }
 .g-dueline { position: absolute; z-index: 3; left: 0; right: 0; height: 0; border-top: 2px solid var(--app-warn); }
 .g-duelabel { position: absolute; right: 2px; top: -14px; display: inline-flex; align-items: center; gap: 2px; max-width: 100%; overflow: hidden; padding: 0 3px; border: 0; border-radius: 3px; background: var(--app-well); color: var(--app-warn); font-size: 9.5px; white-space: nowrap; }
@@ -1001,7 +1073,7 @@ kbd {
 .menu-item.is-danger:not(:disabled):is(:hover, :focus) { background: var(--app-danger); color: #fff; }
 .menu-sep { height: 1px; margin: 4px 6px; background: var(--app-border); }
 /* The item a menu is open for. */
-.rail-item.has-menu, .list-item.has-menu { box-shadow: inset 0 0 0 1px var(--app-accent); }
+.rail-item.has-menu, .list-item.has-menu, .row.has-menu { box-shadow: inset 0 0 0 1px var(--app-accent); }
 
 /* ----------------------------------------------------------------- sheet -- */
 
@@ -1172,6 +1244,7 @@ kbd {
 @media (max-width: 1080px) {
   .page-cols { grid-template-columns: minmax(0, 1fr); }
   .page-side { order: 2; }
+  .page-side.is-sticky { position: static; }
 }
 
 /* Phone, or a window this narrow: one column at a time. Keep in step with

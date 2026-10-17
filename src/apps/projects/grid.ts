@@ -1,9 +1,10 @@
-// A small day or week calendar: the hour grid the Today and project pages
-// plan in. It shows
+// A small calendar of one, three or seven days: the hour grid the Today,
+// Upcoming, area and project pages plan in. It shows
 //
 //   your calendars' events   grey, as busy time; a course's sessions in the
 //                            course's colour (dashed when they don't count
-//                            as busy)
+//                            as busy), and an area's own calendar in the
+//                            area's
 //   planned todos            outlined in their project's colour
 //   deadlines                a flag: a line at a timed one, a chip otherwise
 //   free time                the gaps of an hour or more between 8:00 and
@@ -15,8 +16,8 @@ import { columnLayout } from "../calendar/layout.ts";
 import { addDays, dateKey, deadlineAt, plannedAt, type Todo } from "../todo/store.ts";
 import { planTodo } from "./actions.ts";
 import { freeSlots, hhmm, type Span } from "./match.ts";
-import { app, courseOfEvent, eventsIn, hueOfTodo } from "./state.ts";
-import { dropTarget, el, fmtTime, fmtWeekday, hueColor, ICONS, lengthText, withIcon } from "./ui.ts";
+import { app, eventsIn, hueOfTodo, ownerOfEvent, type CalendarDays } from "./state.ts";
+import { button, dropTarget, el, fmtDayMonth, fmtTime, fmtWeekday, hueColor, ICONS, lengthText, withIcon } from "./ui.ts";
 
 export interface GridOptions {
   /** Local midnights, one per column. */
@@ -49,15 +50,14 @@ interface Chip {
 
 const SNAP_MIN = 15;
 
-/** Where the grid was scrolled to, per kind of grid, so a re-render keeps it. */
-const scrolled = new Map<string, number>();
+/** The hour the grid was scrolled to, so a re-render (or another range) keeps it. */
+let scrolledHour: number | undefined;
 
 export function renderGrid(root: HTMLElement, options: GridOptions): void {
   const { days, now, hourPx } = options;
   const first = days[0]!;
   const after = addDays(days.at(-1)!, 1);
   const today = dateKey(now);
-  const key = `${days.length}`;
 
   const timed: Block[][] = days.map(() => []);
   const allDay: Chip[][] = days.map(() => []);
@@ -65,22 +65,22 @@ export function renderGrid(root: HTMLElement, options: GridOptions): void {
   const busy: Span[][] = days.map(() => []);
   const indexOf = (at: Date): number => days.findIndex((day) => dateKey(day) === dateKey(at));
 
-  // Calendar events: busy time, and course sessions in their course's colour.
+  // Calendar events: busy time; course sessions and an area's own calendar in their colour.
   for (const occurrence of eventsIn(first, after)) {
-    const course = courseOfEvent(occurrence);
-    const kind = course ? "session" : "event";
-    const soft = course ? !course.link!.busy : occurrence.event.transparent;
+    const owner = ownerOfEvent(occurrence);
+    const kind = owner ? "session" : "event";
+    const soft = owner?.course ? !owner.course.link!.busy : occurrence.event.transparent;
     const title = occurrence.event.summary || "(no title)";
     if (occurrence.allDay) {
       for (let day = new Date(occurrence.start); day < occurrence.end; day = addDays(day, 1)) {
         const at = indexOf(day);
-        if (at !== -1) allDay[at]!.push({ kind, title, hue: course?.hue });
+        if (at !== -1) allDay[at]!.push({ kind, title, hue: owner?.hue });
       }
       continue;
     }
     const at = indexOf(occurrence.start);
     if (at === -1) continue;
-    timed[at]!.push({ kind, start: occurrence.start, end: occurrence.end, title, hue: course?.hue, soft });
+    timed[at]!.push({ kind, start: occurrence.start, end: occurrence.end, title, hue: owner?.hue, soft });
     if (!soft) busy[at]!.push({ start: occurrence.start.getTime(), end: occurrence.end.getTime() });
   }
 
@@ -127,7 +127,7 @@ export function renderGrid(root: HTMLElement, options: GridOptions): void {
 
   // --------------------------------------------------------------- draw --
 
-  const grid = el("div", `grid ${days.length === 1 ? "is-day" : "is-week"}`);
+  const grid = el("div", `grid ${days.length === 1 ? "is-day" : days.length < 7 ? "is-few" : "is-week"}`);
   grid.style.setProperty("--cols", String(days.length));
   grid.style.setProperty("--hour", `${hourPx}px`);
 
@@ -183,7 +183,7 @@ export function renderGrid(root: HTMLElement, options: GridOptions): void {
       line.style.top = `${(minutes(at) / 60) * hourPx}px`;
       const hue = hueOfTodo(todo);
       if (hue !== undefined) line.style.setProperty("--c", hueColor(hue));
-      const label = button(line, todo, options);
+      const label = dueLabel(line, todo, options);
       label.innerHTML = withIcon(ICONS.flag, `${fmtTime(at)} ${todo.title}`);
       col.append(line);
     }
@@ -206,15 +206,16 @@ export function renderGrid(root: HTMLElement, options: GridOptions): void {
   root.replaceChildren(grid);
 
   // Back where it was, or with the morning (or now) at the top.
-  const start = scrolled.get(key) ?? Math.max(7, Math.min(now.getHours() - 1, 12)) * hourPx;
+  // A first visit leaves a little room so the top hour's label isn't cut off.
+  const start = scrolledHour !== undefined ? scrolledHour * hourPx : Math.max(7, Math.min(now.getHours() - 1, 12)) * hourPx - 8;
   // The page is put on screen after this returns; scrolling needs it there.
   requestAnimationFrame(() => {
     scroll.scrollTop = start;
-    scroll.addEventListener("scroll", () => scrolled.set(key, scroll.scrollTop), { passive: true });
+    scroll.addEventListener("scroll", () => (scrolledHour = scroll.scrollTop / hourPx), { passive: true });
   });
 }
 
-function button(parent: HTMLElement, todo: Todo, options: GridOptions): HTMLButtonElement {
+function dueLabel(parent: HTMLElement, todo: Todo, options: GridOptions): HTMLButtonElement {
   const node = el("button", "g-duelabel");
   node.type = "button";
   node.addEventListener("click", () => options.onOpen(todo));
@@ -268,7 +269,8 @@ function blockFor(
   if (block.soft) node.classList.add("is-soft");
 
   if (block.kind === "free") {
-    node.textContent = `free · ${lengthText(Math.round((block.end.getTime() - block.start.getTime()) / 60_000))}`;
+    // A week's columns are too narrow for the word; the dashed box says it.
+    node.append(el("span", "g-free-word", "free · "), lengthText(Math.round((block.end.getTime() - block.start.getTime()) / 60_000)));
     node.title = `Free ${fmtTime(block.start)} – ${fmtTime(block.end)}: drop a todo here to plan it`;
     return node;
   }
@@ -286,9 +288,75 @@ function blockFor(
   return node;
 }
 
-/** The days a grid shows: one, or seven from the given day. */
+/** The days a grid shows: `count` of them from the given day. */
 export function gridDays(from: Date, count: number): Date[] {
   const start = new Date(from.getFullYear(), from.getMonth(), from.getDate());
   return Array.from({ length: count }, (_, i) => addDays(start, i));
+}
+
+// ---------------------------------------------------------------- panel --
+
+const RANGES = [
+  [1, "Day"],
+  [3, "3 days"],
+  [7, "Week"],
+] as const;
+
+/** Narrower columns get less height per hour, so more of the day fits. */
+const HOUR_PX: Record<CalendarDays, number> = { 1: 44, 3: 40, 7: 34 };
+
+let rangeFmt: Intl.DateTimeFormat | undefined;
+
+/**
+ * The calendar beside a page's todos: a bar to step back and forth and to
+ * show one, three or seven days, over the grid. Every page shares the
+ * choice, so the calendar looks the same wherever you go.
+ */
+export function calendarPanel(options: Omit<GridOptions, "days" | "hourPx">): HTMLElement {
+  const { now } = options;
+  const count = app.calendarDays;
+  const days = gridDays(addDays(now, app.calendarShift), count);
+
+  const bar = el("div", "cal-bar");
+  const step = (by: number) => () => {
+    app.calendarShift += by;
+    app.render();
+  };
+  const unit = count === 1 ? "day" : `${count} days`;
+  const back = button("icon-button", ICONS.back, step(-count));
+  back.setAttribute("aria-label", `Previous ${unit}`);
+  back.title = `Previous ${unit}`;
+  const next = button("icon-button", ICONS.next, step(count));
+  next.setAttribute("aria-label", `Next ${unit}`);
+  next.title = `Next ${unit}`;
+  const home = button("cal-today", "Today", () => {
+    app.calendarShift = 0;
+    app.render();
+  });
+  home.disabled = app.calendarShift === 0;
+
+  rangeFmt ??= new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short" });
+  const label = el("span", "cal-label", count === 1 ? fmtDayMonth(days[0]!) : rangeFmt.formatRange(days[0]!, days.at(-1)!));
+
+  const range = el("div", "segmented is-small");
+  range.setAttribute("role", "radiogroup");
+  range.setAttribute("aria-label", "Calendar shows");
+  for (const [value, text] of RANGES) {
+    const pick = button("segment", text, () => {
+      app.calendarDays = value;
+      app.render();
+    });
+    pick.setAttribute("role", "radio");
+    pick.setAttribute("aria-checked", String(count === value));
+    range.append(pick);
+  }
+  bar.append(home, back, next, label, range);
+
+  const box = el("div", "grid-box");
+  renderGrid(box, { ...options, days, hourPx: HOUR_PX[count] });
+  const panel = el("section", "cal-panel");
+  panel.setAttribute("aria-label", "Calendar");
+  panel.append(bar, box);
+  return panel;
 }
 

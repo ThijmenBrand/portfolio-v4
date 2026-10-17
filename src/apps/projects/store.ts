@@ -83,8 +83,18 @@ export interface Area {
   id: string;
   name: string;
   hue: number;
+  /** An https link to an image shown in place of the colour tile; absent for none. */
+  icon?: string;
   /** When this area opens on its own: the Shortcuts app's rules, same meaning. */
   rules: Rule[];
+  /**
+   * The area's own calendar (work meetings, a uni timetable), as a course's
+   * Link names one; "" for none. Its events are drawn in the area's colour,
+   * and new courses here look for their sessions in it.
+   */
+  calendar: string;
+  /** Open this area while one of its calendar's events is on. */
+  openDuring: boolean;
 }
 
 export interface Data {
@@ -119,9 +129,9 @@ export function newId(): string {
 export function starter(): Data {
   return {
     areas: [
-      { id: newId(), name: "Uni", hue: 290, rules: [] },
-      { id: newId(), name: "Work", hue: 255, rules: [] },
-      { id: newId(), name: "Private", hue: 160, rules: [] },
+      { id: newId(), name: "Uni", hue: 290, rules: [], calendar: "", openDuring: false },
+      { id: newId(), name: "Work", hue: 255, rules: [], calendar: "", openDuring: false },
+      { id: newId(), name: "Private", hue: 160, rules: [], calendar: "", openDuring: false },
     ],
     projects: [],
     labels: {},
@@ -159,6 +169,12 @@ const text = (value: unknown, max: number): string =>
 const idOf = (value: unknown): string =>
   typeof value === "string" && /^[a-z0-9]{1,16}$/i.test(value.trim()) ? value.trim() : "";
 
+/** A calendar's id as the Calendar app keeps it: a subscription's, or "mine:<id>"; "" otherwise. */
+const calendarId = (value: unknown): string => {
+  const id = text(value, 40);
+  return /^(mine:)?[a-z0-9]{1,16}$/i.test(id) ? id : "";
+};
+
 const hueOf = (value: unknown, fallback: number): number =>
   typeof value === "number" && Number.isFinite(value) ? ((Math.round(value) % 360) + 360) % 360 : fallback;
 
@@ -173,6 +189,12 @@ function cleanRule(raw: unknown): Rule | null {
   return days.length && from && to ? { days, from, to } : null;
 }
 
+/** An area icon's link: https only, as os.net fetches nothing else; "" otherwise. */
+export function iconOf(value: unknown): string {
+  const url = toUrl(text(value, 2000));
+  return url?.protocol === "https:" ? url.href : "";
+}
+
 function cleanArea(raw: unknown): Area | null {
   if (!raw || typeof raw !== "object") return null;
   const given = raw as Partial<Area>;
@@ -182,7 +204,17 @@ function cleanArea(raw: unknown): Area | null {
     .map(cleanRule)
     .filter((rule): rule is Rule => rule !== null)
     .slice(0, MAX_RULES);
-  return { id: idOf(given.id) || newId(), name, hue: hueOf(given.hue, 255), rules };
+  const calendar = calendarId(given.calendar);
+  const icon = iconOf(given.icon);
+  return {
+    id: idOf(given.id) || newId(),
+    name,
+    hue: hueOf(given.hue, 255),
+    ...(icon && { icon }),
+    rules,
+    calendar,
+    openDuring: Boolean(calendar) && given.openDuring === true,
+  };
 }
 
 function cleanShortcut(raw: unknown): Shortcut | null {
@@ -197,9 +229,8 @@ function cleanShortcut(raw: unknown): Shortcut | null {
 function cleanLink(raw: unknown): Link | undefined {
   if (!raw || typeof raw !== "object") return undefined;
   const given = raw as Partial<Link>;
-  const calendar = text(given.calendar, 40);
   return {
-    calendar: /^(mine:)?[a-z0-9]{1,16}$/i.test(calendar) ? calendar : "",
+    calendar: calendarId(given.calendar),
     skip: (Array.isArray(given.skip) ? given.skip : [])
       .map((type) => text(type, 12).toUpperCase())
       .filter(Boolean)
