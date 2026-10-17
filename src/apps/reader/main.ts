@@ -29,7 +29,7 @@ export async function main(os: AppInterface, args: string[] = []): Promise<void>
     try {
       path = (await os.dialog.open({ kind: "file", title: "Open Document" })) ?? undefined;
     } catch (error) {
-      return fail(`Couldn't open the file picker (${errorCode(error)}).`);
+      return say(`Couldn't open the file picker (${errorCode(error)}).`);
     }
     if (!path) return void os.process.exit(0);
   }
@@ -42,14 +42,15 @@ export async function main(os: AppInterface, args: string[] = []): Promise<void>
     if (ext === "md") showMarkdown(await os.fs.readTextFile(path));
     else if (ext === "pdf") {
       const file = path;
+      say(`Opening ${name}…`); // a big PDF takes a moment to parse
       await (await import("./pdf")).showPdf(await os.fs.readFile(file), name, {
         write: (bytes) => os.fs.writeFile(file, bytes),
         setTitle: (title) => void handle.setTitle(title),
       });
     }
-    else fail(`${name} isn't a PDF or Markdown file.`);
+    else say(`${name} isn't a PDF or Markdown file.`);
   } catch (error) {
-    fail(`Couldn't open ${name} (${errorCode(error)}).`);
+    say(`Couldn't open ${name} (${errorCode(error)}).`);
   }
 }
 
@@ -64,7 +65,7 @@ function showMarkdown(text: string): void {
   document.body.replaceChildren(article);
 }
 
-function fail(message: string): void {
+function say(message: string): void {
   const p = document.createElement("p");
   p.className = "error";
   p.textContent = message;

@@ -76,6 +76,8 @@ export interface WindowCommmands {
   moveSplit(dx: number, dy: number): void;
   /** A resize of an outer edge: the window floats, keeping its frame. */
   float(): void;
+  /** Double-click on a resize edge: stretch those edges to the work area's. */
+  stretch(edges: ReadonlySet<Edge>): void;
   /** The pointer entered or left the maximize button: the layouts picker opens after a pause. */
   hoverLayouts(button: HTMLElement, over: boolean): void;
   closeLayouts(): void;

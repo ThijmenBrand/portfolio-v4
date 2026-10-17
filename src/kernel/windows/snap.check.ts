@@ -4,6 +4,7 @@ import {
   innerEdges,
   keyStep,
   splitBounds,
+  stretchFrame,
   tileFrame,
   unsnapFrame,
   zoneAt,
@@ -100,6 +101,41 @@ eq(
   ),
   { x: 880, y: 43, width: 400, height: 300 },
   "unsnap from the right half, grabbed low in the bar",
+);
+
+// Double-click an edge: it goes to the work area's edge, the opposite edge stays.
+const workArea = { x: 0, y: 40, width: 1440, height: 800 };
+const floating = { x: 100, y: 200, width: 400, height: 300 };
+const limits = { minWidth: 100, maxWidth: 1920, minHeight: 100, maxHeight: 1080 };
+eq(
+  stretchFrame(floating, new Set(["s"]), workArea, limits, 1),
+  { x: 100, y: 200, width: 400, height: 638 },
+  "bottom edge to the work area's bottom (border outside)",
+);
+eq(
+  stretchFrame(floating, new Set(["n"]), workArea, limits, 1),
+  { x: 100, y: 40, width: 400, height: 460 },
+  "top edge to the work area's top, bottom stays",
+);
+eq(
+  stretchFrame(floating, new Set(["e"]), workArea, limits, 1),
+  { x: 100, y: 200, width: 1338, height: 300 },
+  "right edge to the screen's right",
+);
+eq(
+  stretchFrame(floating, new Set(["w"]), workArea, limits, 1),
+  { x: 0, y: 200, width: 500, height: 300 },
+  "left edge to the screen's left, right stays",
+);
+eq(
+  stretchFrame(floating, new Set(["n", "w"]), workArea, limits, 1),
+  { x: 0, y: 40, width: 500, height: 460 },
+  "a corner stretches both edges",
+);
+eq(
+  stretchFrame(floating, new Set(["n"]), workArea, { ...limits, maxHeight: 350 }, 1),
+  { x: 100, y: 150, width: 400, height: 350 },
+  "max height: the top stops short, the bottom stays",
 );
 
 // Keyboard steps.

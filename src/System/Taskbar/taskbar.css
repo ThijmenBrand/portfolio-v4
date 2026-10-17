@@ -352,6 +352,25 @@
   transition: visibility 0s 150ms; /* after the slide, or the hover drops mid-way */
 }
 
+/* The maximized window's title bar tucks away at the same edge (window.css), and its buttons
+   sit right under the pill. So they come out together, like macOS fullscreen: either one
+   brings out both, the title bar below the topbar. */
+#screen:has(.window.maximized:not(.minimized) > .top-bar:is(:hover, :has(:focus-visible))) .topbar {
+  transform: none;
+}
+#screen:has(.topbar:is(:hover, :focus-within, :has(:popover-open))) .window.maximized > .top-bar,
+#screen:has(.topbar) .window.maximized > .top-bar:is(:hover, :has(:focus-visible)) {
+  transform: translateY(28px); /* .topbar height */
+}
+/* Out, the title bar leaves the edge it was hovered at: a band over the topbar's row keeps the
+   hover (the pill, a layer above, still gets its own spot). Off screen while tucked away. */
+#screen:has(.topbar) .window.maximized > .top-bar::before {
+  content: "";
+  position: absolute;
+  inset: auto 0 100%;
+  height: 28px;
+}
+
 /* Same for the dock, sliding down (Settings > Taskbar picks when). The bar is the hover target,
    so 2px stays on screen. */
 #screen:has(.window.maximized:not(.minimized)) .taskbar[data-hide="maximized"],
