@@ -29,6 +29,7 @@ import type { ApiRequest, ApiResponse } from "./api-fetch";
 import type { NetRequest, NetResponse } from "./net";
 import type { Ids, SpawnOptions } from "./process";
 import type { StatusItemInfo, StatusItemSpec } from "./status";
+import type { Hotkey } from "./hotkeys";
 import type { SyscallTable } from "./table";
 import type { WindowHandleCommands } from "./window";
 
@@ -41,6 +42,11 @@ export interface AppInterface {
     ): Promise<number>;
     updateStatusItem(id: number, patch: Partial<StatusItemSpec>): Promise<void>;
     removeStatusItem(id: number): Promise<void>;
+    /**
+     * Privileged: be the process a system hotkey goes to (Ctrl/Cmd+K is
+     * "palette"), wherever the keyboard is. Held until exit; EBUSY if taken.
+     */
+    claimHotkey(name: Hotkey, onPress: () => void): Promise<void>;
   };
   windows: {
     create(options: WindowOptions): Promise<WindowHandle>;
@@ -56,6 +62,10 @@ export interface AppInterface {
     setTitle(windowId: WindowId, title: string): Promise<void>;
     close(windowId: WindowId): Promise<void>;
     onCloseRequest(windowId: WindowId, callback: () => void): Promise<void>;
+    /** Resize your own window. An overlay stays centred and fits the screen. */
+    setSize(windowId: WindowId, size: { width?: number; height?: number }): Promise<void>;
+    /** Show or hide your own overlay (`surface: "overlay"`; it starts hidden). */
+    setVisible(windowId: WindowId, visible: boolean): Promise<void>;
   };
   process: {
     readonly signal: ProcessSignal;
@@ -183,6 +193,7 @@ export function bindSyscalls(target: SyscallTable, pid: Pid): SystemInterface {
       listStatusItems: () => target.listStatusItems(pid),
       activateStatusItem: (id, menuId) =>
         target.activateStatusItem(pid, id, menuId),
+      claimHotkey: (name, onPress) => target.claimHotkey(pid, name, onPress),
     },
     windows: {
       create: (options) => target.createWindow(pid, options),
@@ -197,6 +208,9 @@ export function bindSyscalls(target: SyscallTable, pid: Pid): SystemInterface {
       close: (windowId) => target.closeWindow(pid, windowId),
       onCloseRequest: (windowId, callback) =>
         target.onWindowCloseRequest(pid, windowId, callback),
+      setSize: (windowId, size) => target.setWindowSize(pid, windowId, size),
+      setVisible: (windowId, visible) =>
+        target.setWindowVisible(pid, windowId, visible),
     },
     process: {
       get signal() {

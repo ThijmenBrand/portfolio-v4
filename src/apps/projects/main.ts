@@ -3,8 +3,10 @@
 // parts planned before their deadline, todos and notes.
 //
 // Three columns: the areas (and Today and Upcoming, which cut across them),
-// the area's overview and its courses and projects, and the page. On a
-// phone, or in a narrow window, they become a drill-down, one at a time.
+// the area's overview and its courses and projects, and the page. Inside an
+// area the first shrinks to a strip of icons, and the second can be put away
+// too. On a phone, or in a narrow window, they become a drill-down, one at a
+// time.
 //
 // The todos are the Todo app's (../todo/store.ts), filed by project, so the
 // Todo app and the Calendar show them too. Areas and projects are kept by
@@ -37,6 +39,7 @@ import {
 } from "./state.ts";
 import { fromShortcuts, MAX_AREAS, openProjects, saveProblem, type Project } from "./store.ts";
 import { renderToday, renderUpcoming } from "./today.ts";
+import { isPhone, PHONE_QUERY } from "../../utils/phone.ts";
 import { button, buildFormats, dot, el, hueColor, ICONS, withIcon } from "./ui.ts";
 import projectsHTML from "./projects.html?raw";
 import "../../ui/theme.css";
@@ -79,8 +82,12 @@ function render(): void {
   const root = field("app");
   root.dataset.pane = app.pane;
   const area = currentArea();
-  root.classList.toggle("has-list", area !== undefined);
-  renderRail();
+  // Inside an area its own column says where you are, so the areas need
+  // only their icons. A phone shows one column at a time and keeps both.
+  const compact = area !== undefined && !isPhone();
+  root.classList.toggle("has-list", area !== undefined && !(compact && app.listHidden));
+  root.classList.toggle("is-compact", compact);
+  renderRail(compact);
   renderList(area);
   renderPage();
   renderKeys();
@@ -127,7 +134,12 @@ function attention(todos: readonly Todo[], now: Date): { count: number; late: bo
   return { count, late };
 }
 
-function renderRail(): void {
+function toggleList(): void {
+  app.listHidden = !app.listHidden;
+  render();
+}
+
+function renderRail(compact: boolean): void {
   const rail = field("rail");
   const now = new Date();
   const route = app.route;
@@ -138,6 +150,11 @@ function renderRail(): void {
     node.append(icon, el("span", "rail-label", label));
     if (count?.count) node.append(el("span", `rail-count${count.late ? " is-late" : ""}`, String(count.count)));
     if (on) node.setAttribute("aria-current", "page");
+    // Icons only: the name is said on hover and to a screen reader.
+    if (compact) {
+      node.title = count?.count ? `${label} · ${count.count}` : label;
+      node.setAttribute("aria-label", node.title);
+    }
     return node;
   };
   const icon = (svg: string): HTMLSpanElement => {
@@ -146,6 +163,14 @@ function renderRail(): void {
     return node;
   };
 
+  if (compact) {
+    const toggle = button("icon-button rail-toggle", ICONS.sidebar, toggleList);
+    const label = app.listHidden ? "Show courses and projects" : "Hide courses and projects";
+    toggle.title = `${label} (\\)`;
+    toggle.setAttribute("aria-label", label);
+    toggle.setAttribute("aria-pressed", String(!app.listHidden));
+    rail.append(toggle);
+  }
   rail.append(
     item("Today", icon(ICONS.today), route.view === "today", () => go({ view: "today" }), attention(app.todos.data.todos, now)),
     item("Upcoming", icon(ICONS.upcoming), route.view === "upcoming", () => go({ view: "upcoming" })),
@@ -154,13 +179,20 @@ function renderRail(): void {
   const add = button("icon-button", ICONS.plus, () => editArea());
   add.setAttribute("aria-label", "New area");
   add.title = "New area";
-  head.append(add);
+  // As icons, the new area's button follows the areas rather than heading them.
+  if (!compact) head.append(add);
   rail.append(head);
   const area = currentArea();
   for (const each of app.projects.data.areas) {
     const swatch = el("span", "rail-swatch");
     swatch.style.background = hueColor(each.hue);
-    const node = item(each.name, swatch, area === each.id, () => go(areaRoute(each.id), "list"), attention(todosInArea(each.id), now));
+    swatch.dataset.initial = [...each.name.trim()][0]?.toUpperCase() ?? "";
+    // The area you're in, picked again, brings its column back.
+    const open = (): void => {
+      if (area === each.id && app.listHidden) toggleList();
+      else go(areaRoute(each.id), "list");
+    };
+    const node = item(each.name, swatch, area === each.id, open, attention(todosInArea(each.id), now));
     node.addEventListener("contextmenu", (event) =>
       openMenu(event, node, [
         { label: "Area settings…", action: () => editArea(each) },
@@ -169,6 +201,10 @@ function renderRail(): void {
       ]),
     );
     rail.append(node);
+  }
+  if (compact) {
+    add.classList.add("rail-add");
+    rail.append(add);
   }
   const storage = el("p", "storage");
   storage.textContent =
@@ -371,6 +407,7 @@ function renderKeys(): void {
   };
   const view = app.route.view;
   const list = [hint("todo", "N"), hint("today", "T"), hint("upcoming", "U")];
+  if (currentArea() !== undefined && !isPhone()) list.push(hint(app.listHidden ? "show list" : "hide list", "\\"));
   if (view === "project") list.unshift(hint("open site", "1", "9"), hint("goal", "G"));
   if (view === "goal" || view === "note") list.unshift(hint("back", "Esc"));
   const area = currentArea();
@@ -436,6 +473,12 @@ function onKey(event: KeyboardEvent): void {
     case "u":
     case "U":
       go({ view: "upcoming" });
+      break;
+    case "\\":
+      if (currentArea() !== undefined && !isPhone()) {
+        event.preventDefault();
+        toggleList();
+      }
       break;
     case "Escape":
       if ((view === "goal" || view === "note") && project) go({ view: "project", id: project.id });
@@ -520,6 +563,7 @@ export async function main(appOs: AppInterface): Promise<void> {
     lastIn: new Map<string, string>(),
     showDone: false,
     showEnded: false,
+    listHidden: false,
     go,
     render,
     save,
@@ -549,6 +593,8 @@ export async function main(appOs: AppInterface): Promise<void> {
     undo?.();
   });
   document.addEventListener("keydown", onKey);
+  // Into or out of phone width: the columns change between a row and a drill-down.
+  matchMedia(PHONE_QUERY).addEventListener("change", () => renderSoon());
   // Typing ended: draw what changed meanwhile.
   document.addEventListener("focusout", () => setTimeout(() => stale && !busy() && render()));
   document.addEventListener("close", () => setTimeout(() => stale && !busy() && render()), true);

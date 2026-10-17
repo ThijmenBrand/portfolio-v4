@@ -8,6 +8,7 @@ import {
 } from "./status";
 import type { KernelContext, Pid, StrutEdge } from "../types";
 import { alive, requirePrivilege } from "./guards";
+import { claimHotkey } from "./hotkeys";
 import type { SyscallTable } from "./table";
 
 export function displaySyscalls(
@@ -24,6 +25,7 @@ export function displaySyscalls(
   | "removeStatusItem"
   | "listStatusItems"
   | "activateStatusItem"
+  | "claimHotkey"
 > {
   return {
     getDisplayRoot: alive(ctx, (pid: Pid) => {
@@ -64,5 +66,8 @@ export function displaySyscalls(
       requirePrivilege(ctx, pid, "activateStatusItem");
       activateStatusItem(ctx, id, menuId);
     }),
+    claimHotkey: alive(ctx, (pid: Pid, name: unknown, onPress: () => void) =>
+      claimHotkey(ctx, pid, name, onPress),
+    ),
   };
 }

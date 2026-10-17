@@ -1,0 +1,31 @@
+<div class="spotlight" id="panel">
+  <div class="bar">
+    <svg class="glass" viewBox="0 0 16 16" aria-hidden="true">
+      <circle cx="7" cy="7" r="4.75" />
+      <path d="M10.5 10.5 14 14" />
+    </svg>
+    <span class="chip" id="chip" hidden>
+      <img class="chip-icon" id="chip-icon" alt="" />
+      <span id="chip-title"></span>
+    </span>
+    <input
+      id="query"
+      type="text"
+      autocomplete="off"
+      spellcheck="false"
+      role="combobox"
+      aria-expanded="true"
+      aria-controls="results"
+      aria-autocomplete="list"
+      aria-label="Search"
+      placeholder="Search apps, windows, commands and files"
+    />
+    <span class="busy" id="busy" hidden aria-hidden="true"></span>
+  </div>
+  <div class="results" id="results" role="listbox" aria-label="Results"></div>
+  <div class="status" id="status" role="status" hidden></div>
+  <div class="footer" id="footer">
+    <span id="footer-hint"></span>
+    <span class="keys"><kbd>↑</kbd><kbd>↓</kbd> to move · <kbd>esc</kbd> to close</span>
+  </div>
+</div>

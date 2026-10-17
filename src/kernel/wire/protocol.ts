@@ -95,6 +95,7 @@ export const WIRE_CALLS = {
   "display.addStatusItem": "addStatusItem",
   "display.updateStatusItem": "updateStatusItem",
   "display.removeStatusItem": "removeStatusItem",
+  "display.claimHotkey": "claimHotkey",
 
   // Over the wire this claims the window made at exec (iframe processes).
   "windows.create": "claimWindow",
@@ -105,6 +106,8 @@ export const WIRE_CALLS = {
   "windows.setTitle": "setWindowTitle",
   "windows.close": "closeWindow",
   "windows.onCloseRequest": "onWindowCloseRequest",
+  "windows.setSize": "setWindowSize",
+  "windows.setVisible": "setWindowVisible",
 
   "process.onSignal": "onSignal",
   "process.wait": "wait",

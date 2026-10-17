@@ -5,6 +5,15 @@ import type { Edge, SnapTarget, TileZone } from "./snap";
 
 export type WindowState = "normal" | "maximized" | "tiled";
 
+/**
+ * What kind of surface a process draws in. A "window" is the usual framed,
+ * movable window. An "overlay" has no frame at all: it floats over every
+ * window, centred near the top (a palette, a quick-entry panel), is hidden
+ * until its app shows it, and isn't a window to the shell -- no taskbar
+ * button, no window.* events, no snapping or cycling.
+ */
+export type SurfaceKind = "window" | "overlay";
+
 export interface WindowOptions {
   title: string;
   width?: number;
@@ -17,11 +26,16 @@ export interface WindowOptions {
   maxHeight?: number;
   translucent?: boolean;
   titleBar?: "default" | "hidden";
+  /** Fixed at exec (binfmt): an iframe lives in its surface for good. */
+  surface?: SurfaceKind;
 }
 
 export interface WindowRecord {
   id: WindowId;
   ownerPid: Pid;
+  kind: SurfaceKind;
+  /** Overlays only: not drawn (the realm inside keeps running). */
+  hidden: boolean;
   root: HTMLElement;
   titleEl: HTMLElement;
   bodyEl: HTMLElement;

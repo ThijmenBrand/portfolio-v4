@@ -35,6 +35,7 @@ import { eventsSyscalls } from "./events";
 import { fdSyscalls } from "./fd";
 import { shellSyscalls } from "./shell";
 import type { StatusItemInfo, StatusItemSpec } from "./status";
+import type { Hotkey } from "./hotkeys";
 import { fsSyscalls } from "./fs";
 import { netSyscalls, type NetRequest, type NetResponse } from "./net";
 import { processSyscalls, type Ids, type SpawnOptions } from "./process";
@@ -76,6 +77,18 @@ export interface SyscallTable {
   /** System processes only: user-space policy over snapping. */
   setWindowPolicy(callerPid: Pid, policy: WindowPolicy): Promise<void>;
   closeWindow(callerPid: Pid, windowId: WindowId): Promise<void>;
+  /** Your own window's size; an overlay is re-centred at it (`windows.setSize`). */
+  setWindowSize(
+    callerPid: Pid,
+    windowId: WindowId,
+    size: { width?: number; height?: number },
+  ): Promise<void>;
+  /** Show or hide your own overlay (`windows.setVisible`). */
+  setWindowVisible(
+    callerPid: Pid,
+    windowId: WindowId,
+    visible: boolean,
+  ): Promise<void>;
   onWindowCloseRequest(
     callerPid: Pid,
     windowId: WindowId,
@@ -99,6 +112,8 @@ export interface SyscallTable {
   removeStatusItem(callerPid: Pid, id: number): Promise<void>;
   listStatusItems(callerPid: Pid): Promise<StatusItemInfo[]>;
   activateStatusItem(callerPid: Pid, id: number, menuId: string): Promise<void>;
+  /** Privileged: be the one process a system hotkey goes to. */
+  claimHotkey(callerPid: Pid, name: Hotkey, onPress: () => void): Promise<void>;
   list(callerPid: Pid): Promise<ProcessInfo[]>;
   getSignal(callerPid: Pid): ProcessSignal;
   onSignal(

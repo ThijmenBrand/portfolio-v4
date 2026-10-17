@@ -21,4 +21,11 @@ todo
   Keys: N new todo, Up/Down move, Space done, E edit, T do it today,
   P plan, D deadline, Delete remove.
 
+  From anywhere, Cmd+K (Ctrl+K off a Mac) opens Spotlight: "New todo"
+  takes the whens from the line itself -- "call mum fri 14:00 for 30m",
+  "essay due 3/11 17:00", "15:00 dentist" (a time alone is today) -- and
+  without any it has no plan. Words in "quotes" are left alone. Typing part
+  of an open todo's title there offers to mark it done. The same program
+  runs in a terminal: todo.commands new "buy milk tomorrow".
+
   See also: calendar.

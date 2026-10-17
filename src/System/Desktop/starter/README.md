@@ -85,7 +85,7 @@ and window size from `app.json`. `--install` also adds it to the app menu.
 The window's look comes from `app.json` too: `"translucent": true` gives a
 frosted-glass window (make your `html, body` background transparent), and
 `"titleBar": "hidden"` lets your content run under the title bar. The top
-34px stays a drag strip with the window buttons on the right, so put only
+34px stays a drag strip with the window buttons on the left, so put only
 text there (see `style.css`).
 
 - Double-click the `.app.js` in Files to run it.
@@ -94,6 +94,39 @@ text there (see `style.css`).
 
 To move a whole project folder instead, pack it: `tar -czf proj.tgz proj`,
 and `tar -xzf proj.tgz` on the other side.
+
+## Spotlight commands
+
+Cmd+K (Ctrl+K off a Mac) opens Spotlight. Your installed app can offer
+actions there, like Todo's "New todo", without being open. Declare them in
+`app.json` and point `handler` at the module that runs them:
+
+```json
+{
+  "name": "Notes",
+  "commands": [{ "id": "new", "title": "New note", "keywords": ["jot"],
+                 "input": { "placeholder": "Note text" } }],
+  "handler": "commands.js",
+  "search": true
+}
+```
+
+```js
+// commands.js: runs headless, in a worker, so no DOM and no CSS imports.
+export async function command(os, id, input) {
+  await os.fs.writeTextFile(`${(await os.process.env()).HOME}/note.txt`, input);
+  return { message: `Saved “${input}”` }; // or { error: "..." }
+}
+
+// With "search": true, results while something is typed. Each runs one of
+// your commands with the input you give it.
+export async function search(os, query) {
+  return [{ title: `Jot down: ${query}`, command: "new", input: query }];
+}
+```
+
+`bundle` packs `commands.js` (and what it imports) along with the app.
+Spotlight shows your app's name beside everything it offers.
 
 ## More help
 

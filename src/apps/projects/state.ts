@@ -39,6 +39,8 @@ export interface App {
   showDone: boolean;
   /** Ended projects are listed in the area's column. */
   showEnded: boolean;
+  /** The area's column is put away, for more room on the page. */
+  listHidden: boolean;
   go(route: Route, pane?: Pane): void;
   render(): void;
   /** Fire and forget a store change; a failure shows in the status bar. */

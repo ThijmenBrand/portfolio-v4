@@ -1,4 +1,4 @@
-import type { Pid, WindowId } from "../types";
+import type { Pid, Rect, WindowId } from "../types";
 import type { Arrow, SnapTarget } from "./snap";
 import type {
   WindowInfo,
@@ -11,6 +11,9 @@ export interface WindowManagerInterface {
   createWindow(options: WindowOptions, ownerPid: Pid): WindowRecord;
   setTitle(windowId: WindowId, title: string): void;
   resizeTo(windowId: WindowId, width: number, height: number): void;
+  /** Overlays only: show or hide it (EINVAL for a window). */
+  setVisible(windowId: WindowId, visible: boolean): void;
+  frameOf(windowId: WindowId): Rect;
   setAppearance(windowId: WindowId, options: WindowOptions): void;
   destroy(windowId: WindowId): void;
   addCloseRequestHandler(windowId: WindowId, handler: () => void): void;

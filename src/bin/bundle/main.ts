@@ -17,6 +17,9 @@ Packs <entry.js> and every module it imports (from its folder) into one
 file that runs on its own: double-click it, download it, upload it anywhere.
 Name, icon, version and window size come from app.json next to the entry:
   {"name": "Hello", "icon": "icon.svg", "version": "1.0", "window": {"width": 480, "height": 320}}
+Spotlight (Cmd+K) commands too, run by the "handler" module's command(os, id, input):
+  "commands": [{"id": "new", "title": "New note", "input": {"placeholder": "Note"}}],
+  "handler": "commands.js"
 --install also copies it to ~/${USER_APPS_DIR}, so it shows in the app menu.
 `;
 
@@ -64,8 +67,17 @@ async function bundle(os: AppInterface, options: Options): Promise<string> {
   const entry = resolveFrom(cwd, options.entry!);
   const root = dirname(entry);
 
+  const manifest = await manifestFor(os, root, options);
+
   // ponytail: absolute imports (/home/…) inside the app aren't remapped; use ./ ones.
-  const graph = await collect((path) => os.fs.readTextFile(path), entry);
+  const read = (path: string) => os.fs.readTextFile(path);
+  const graph = await collect(read, entry);
+  // The Spotlight command handler (app.json "handler") and what it imports come along too.
+  if (manifest.handler) {
+    for (const [path, source] of await collect(read, join(`${root}/${manifest.handler}`))) {
+      graph.set(path, source);
+    }
+  }
   const modules: Record<string, string> = {};
   for (const [path, source] of graph) {
     if (!path.startsWith(`${root}/`)) {
@@ -74,7 +86,6 @@ async function bundle(os: AppInterface, options: Options): Promise<string> {
     modules[path.slice(root.length + 1)] = source;
   }
 
-  const manifest = await manifestFor(os, root, options);
   const source = graph.get(entry)!;
   const shebang = source.startsWith("#!") ? source.split("\n", 1)[0]! : "#!/ProgramFiles/jsapp";
   const data: Bundle = { v: 1, entry: basename(entry), modules };

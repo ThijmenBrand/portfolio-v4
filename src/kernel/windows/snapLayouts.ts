@@ -60,10 +60,10 @@ export class SnapLayouts {
     element.style.zIndex = String(this.host.topZ());
     this.layer.append(element);
 
-    // Under the button, right edges aligned, kept on screen.
+    // Under the button, left edges aligned, kept on screen.
     const anchor = button.getBoundingClientRect();
     const { width, height } = element.getBoundingClientRect();
-    const left = Math.max(4, Math.min(anchor.right - width, innerWidth - width - 4));
+    const left = Math.max(4, Math.min(anchor.left, innerWidth - width - 4));
     const below = anchor.bottom + 4;
     const top = below + height > innerHeight ? anchor.top - height - 4 : below;
     element.style.left = `${left}px`;

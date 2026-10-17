@@ -174,6 +174,160 @@ export function isForToday(todo: Todo, today: string): boolean {
   return Boolean((todo.date && todo.date <= today) || todo.deadline === today);
 }
 
+// ------------------------------------------------------------- quick add --
+
+/** What a line typed in one go means: the title, and the whens it named. */
+export interface QuickAdd {
+  title: string;
+  date?: string;
+  time?: string;
+  minutes?: number;
+  deadline?: string;
+  deadlineTime?: string;
+}
+
+const WEEKDAYS: Record<string, number> = {
+  sun: 0, sunday: 0,
+  mon: 1, monday: 1,
+  tue: 2, tues: 2, tuesday: 2,
+  wed: 3, weds: 3, wednesday: 3,
+  thu: 4, thur: 4, thurs: 4, thursday: 4,
+  fri: 5, friday: 5,
+  sat: 6, saturday: 6,
+};
+
+/** A day word, as a stored day: today, tomorrow, a weekday (the next one, today counting), d/m or YYYY-MM-DD. */
+function dayWord(word: string, now: Date): string | null {
+  if (word === "today" || word === "tod") return dateKey(now);
+  if (word === "tomorrow" || word === "tmr" || word === "tmrw" || word === "tom") {
+    return dateKey(addDays(now, 1));
+  }
+  if (word in WEEKDAYS) return dateKey(addDays(now, (WEEKDAYS[word]! - now.getDay() + 7) % 7));
+  if (parseDate(word)) return word;
+  const dm = /^(\d{1,2})\/(\d{1,2})$/.exec(word);
+  if (dm) {
+    // Day first. This year's, unless that has gone by: then next year's.
+    for (const year of [now.getFullYear(), now.getFullYear() + 1]) {
+      const key = `${year}-${dm[2]!.padStart(2, "0")}-${dm[1]!.padStart(2, "0")}`;
+      if (parseDate(key) && key >= dateKey(now)) return key;
+    }
+  }
+  return null;
+}
+
+/** A time of day: 14:00, 9:30, 2pm, 2:30pm. */
+function timeWord(word: string): string | null {
+  const m = /^(\d{1,2})(?::(\d{2}))?(am|pm)?$/.exec(word);
+  if (!m || (!m[2] && !m[3])) return null; // a bare number is not a time
+  let hours = Number(m[1]);
+  const minutes = Number(m[2] ?? 0);
+  if (m[3]) {
+    if (hours < 1 || hours > 12) return null;
+    hours = (hours % 12) + (m[3] === "pm" ? 12 : 0);
+  }
+  const time = `${pad(hours)}:${pad(minutes)}`;
+  return isTime(time) ? time : null;
+}
+
+/** A length: 30m, 45min, 2h, 1h30, 1h30m. */
+function lengthWord(word: string): number | null {
+  const m = /^(?:(\d+)h(?:(\d{1,2})m?)?|(\d+)(?:m|min|mins))$/.exec(word);
+  if (!m) return null;
+  const minutes = m[3] ? Number(m[3]) : Number(m[1]) * 60 + Number(m[2] ?? 0);
+  return minutes > 0 ? Math.min(minutes, MAX_MINUTES) : null;
+}
+
+/**
+ * Read the whens out of a line, the way Spotlight's "New todo" takes it:
+ *
+ *   buy milk tomorrow              planned tomorrow
+ *   call mum fri 14:00 for 30m     planned Friday at 14:00, for half an hour
+ *   essay due 3/11 17:00           due on 3 November at 17:00, no plan
+ *   15:00 dentist                  a time alone is today, as in the app
+ *
+ * The words it understands come out of the title; anything in "quotes" is
+ * left alone ("call "Sun" office" keeps its Sun). Nothing understood: no
+ * plan. Each when is taken once; a second one stays in the title.
+ */
+export function parseQuickAdd(line: string, now: Date): QuickAdd {
+  const tokens = [...line.matchAll(/"([^"]*)"|(\S+)/g)].map((m) =>
+    m[1] !== undefined ? { text: m[1], literal: true } : { text: m[2]!, literal: false },
+  );
+  const word = (i: number): string =>
+    tokens[i] && !tokens[i]!.literal ? tokens[i]!.text.toLowerCase().replace(/[,.;!?]+$/, "") : "";
+  const out: Omit<QuickAdd, "title"> = {};
+  const title: string[] = [];
+  /** Where "for <length>" was, to put it back if no time comes to go with it. */
+  let lengthAt: { index: number; words: string[] } | undefined;
+
+  for (let i = 0; i < tokens.length; i++) {
+    const w = word(i);
+    if (w === "due" && !out.deadline) {
+      let j = i + 1;
+      const day = dayWord(word(j), now);
+      if (day) j++;
+      if (word(j) === "at" && timeWord(word(j + 1))) j++;
+      const time = timeWord(word(j));
+      if (time) j++;
+      if (day || time) {
+        out.deadline = day ?? dateKey(now);
+        if (time) out.deadlineTime = time;
+        i = j - 1;
+        continue;
+      }
+    }
+    if (w === "for" && out.minutes === undefined) {
+      const minutes = lengthWord(word(i + 1));
+      if (minutes) {
+        out.minutes = minutes;
+        lengthAt = { index: title.length, words: [tokens[i]!.text, tokens[i + 1]!.text] };
+        i++;
+        continue;
+      }
+    }
+    if (w === "at" && !out.time) {
+      const time = timeWord(word(i + 1));
+      if (time) {
+        out.time = time;
+        i++;
+        continue;
+      }
+    }
+    if (!out.date) {
+      const day = dayWord(w, now);
+      if (day) {
+        out.date = day;
+        continue;
+      }
+    }
+    if (!out.time) {
+      const time = timeWord(w);
+      if (time) {
+        out.time = time;
+        continue;
+      }
+    }
+    title.push(tokens[i]!.text);
+  }
+
+  // As in the app: a time with no day means today, and a length needs a
+  // time (without one, "read for 30m" is just what it says).
+  if (out.time && !out.date) out.date = dateKey(now);
+  if (!out.time && lengthAt) {
+    delete out.minutes;
+    title.splice(lengthAt.index, 0, ...lengthAt.words);
+  }
+  const { date, time, minutes, deadline, deadlineTime } = out;
+  return {
+    title: title.join(" ").trim().slice(0, MAX_TITLE),
+    ...(date && { date }),
+    ...(time && { time }),
+    ...(minutes && { minutes }),
+    ...(deadline && { deadline }),
+    ...(deadlineTime && { deadlineTime }),
+  };
+}
+
 // ------------------------------------------------------------ validation --
 
 const text = (value: unknown): string => (typeof value === "string" ? value.trim() : "");

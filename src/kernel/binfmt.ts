@@ -1,5 +1,6 @@
 import type { Executable } from "./proc/exec";
 import type { WindowOptions } from "./windows/types";
+import type { CommandSpec } from "../utils/commands";
 
 /**
  * `privileged`: system powers (windows, signals). `setuid`: runs as root
@@ -33,12 +34,21 @@ export interface AppManifest {
   /** Shown in the taskbar's app menu (and pinnable to the desktop or dock). */
   launcher?: { name: string; icon: string };
   admin?: boolean;
+  /**
+   * Actions offered in Spotlight (Cmd+K), handled by src/apps/<name>/commands.ts
+   * -- see utils/commands.ts.
+   */
+  commands?: CommandSpec[];
+  /** Its commands.ts exports search(os, query): results while Spotlight is typed in. */
+  search?: boolean;
 }
 
 const SETUID = new Set(["su", "sudo", "passwd"]);
 
 const folder = (key: string) => key.split("/")[2];
 const bins = Object.keys(import.meta.glob("../bin/*/main.ts")).map(folder);
+/** Apps with a commands.ts: each gets a headless program for its commands. */
+const commandApps = Object.keys(import.meta.glob("../apps/*/commands.ts")).map(folder);
 
 const manifests: Record<string, AppManifest> = Object.fromEntries(
   Object.entries(
@@ -80,6 +90,19 @@ const files: Record<string, FileEntry> = {
     ]),
   ),
 
+  // An app's Spotlight commands, run headless: `<app>.commands <id> <input>`.
+  // Admin-only exactly when its app is.
+  ...Object.fromEntries(
+    commandApps.map((name): [string, FileEntry] => [
+      `/ProgramFiles/${name}.commands`,
+      {
+        format: "worker",
+        entry: `apps/${name}/commands`,
+        admin: manifests[name]?.admin === true,
+      },
+    ]),
+  ),
+
   // Interpreters for JS programs in the VFS: `#!/ProgramFiles/jsapp` (GUI)
   // and `#!/ProgramFiles/node` (CLI). See src/runtime/jsload.ts.
   "/ProgramFiles/jsapp": {
@@ -89,8 +112,27 @@ const files: Record<string, FileEntry> = {
     window: { title: "App", width: 640, height: 480, minWidth: 240, minHeight: 160 },
   },
   "/ProgramFiles/node": { format: "worker", host: "user", entry: "runtime/jsrun" },
+  // An installed app's Spotlight command: `jscommand <file.app.js> <id> <input>`.
+  "/ProgramFiles/jscommand": { format: "worker", host: "user", entry: "runtime/jscommand" },
 
   "/System/launcher": { format: "worker", entry: "System/Launcher/main" },
+
+  // Cmd+K: find and open apps, switch windows, run apps' commands.
+  "/System/Spotlight": {
+    format: "iframe",
+    entry: "System/Spotlight/main",
+    privileged: true,
+    window: {
+      title: "Spotlight",
+      surface: "overlay",
+      width: 640,
+      height: 58,
+      minWidth: 280,
+      minHeight: 58,
+      maxHeight: 520,
+      translucent: true,
+    },
+  },
 
   "/System/login": {
     load: () => import("../System/Login/main"),

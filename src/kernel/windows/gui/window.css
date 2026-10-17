@@ -33,7 +33,7 @@
     align-items: center;
     flex: none;
     height: 34px;
-    padding-left: 14px;
+    padding-right: 14px;
     background: var(--app-surface);
     border-bottom: 1px solid var(--app-border);
     color: var(--app-text-faint);
@@ -51,6 +51,7 @@
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
+    padding-left: 6px;
     font-size: 12.5px;
     font-weight: 600;
     letter-spacing: 0.01em;
@@ -246,14 +247,11 @@
     clip-path: inset(50%);
 }
 
-.window.titlebar-hidden .window-buttons {
-    margin-left: auto;
-}
-
 /* Maximized (fullscreen): the app fills the window and the bar tucks away like
    the topbar (taskbar.css), leaving a 2px hover strip at the top edge. When it
-   comes back it lies over the app instead of pushing it down. Not on phones:
-   no hover to bring it back. */
+   comes back it lies over the app instead of pushing it down, and the topbar's
+   pill comes out on its right end: one menu bar, window buttons left, clock
+   right. Not on phones: no hover to bring it back. */
 @media not ((max-width: 700px) or ((pointer: coarse) and (max-width: 1024px))) {
     .window.maximized > .top-bar,
     .window.maximized.focused > .top-bar {
@@ -271,6 +269,12 @@
 
     .window.maximized > .top-bar:is(:hover, :has(:focus-visible)) {
         transform: none;
+    }
+
+    /* The pill covers the bar's right end: a long title stops short of it. */
+    .window.maximized .window-title {
+        flex: 0 1 auto;
+        max-width: 50%;
     }
 
     /* The 2px strip sits right where the browser's own fullscreen bar (macOS menu bar)
@@ -398,5 +402,45 @@ body.wm-interacting iframe {
 
     .top-bar {
         height: 44px;
+    }
+}
+
+/* -------------------------------------------------------------- overlays */
+
+/* An overlay surface (manager.createOverlay): no title bar, no edges to
+   grab, just the app's content on a floating panel over everything. */
+#overlay-layer > .window.overlay {
+    pointer-events: auto;
+    border-radius: 14px;
+    box-shadow:
+        0 24px 70px rgba(0, 0, 0, 0.55),
+        0 4px 14px rgba(0, 0, 0, 0.35);
+    transition:
+        opacity 120ms ease,
+        transform 120ms ease;
+}
+
+.window.overlay > .top-bar,
+.window.overlay > .resize-handle {
+    display: none;
+}
+
+/* Hidden, its realm keeps running: visibility, not display, so the frame stays laid out. */
+.window.overlay.overlay-hidden {
+    visibility: hidden;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(-6px) scale(0.985);
+    transition:
+        opacity 120ms ease,
+        transform 120ms ease,
+        visibility 0s 120ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #overlay-layer > .window.overlay,
+    .window.overlay.overlay-hidden {
+        transition: none;
+        transform: none;
     }
 }

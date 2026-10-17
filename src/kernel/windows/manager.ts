@@ -53,6 +53,11 @@ const TITLE_BAR = 34;
 /** .window border width (window.css): floating windows are content-box, so it sits outside the frame. */
 const BORDER = 1;
 
+/** Overlays keep this far from the screen's edges. */
+const OVERLAY_MARGIN = 12;
+/** An overlay's top edge, as a share of the screen's height (phones: OVERLAY_MARGIN). */
+const OVERLAY_TOP = 0.18;
+
 const ARROWS: Record<string, Arrow> = {
   ArrowLeft: "left",
   ArrowRight: "right",
@@ -65,6 +70,7 @@ export class WindowManager implements WindowManagerInterface {
   private readonly WindowChrome: WindowChromeInterface;
 
   private readonly windowLayer: HTMLElement;
+  private readonly overlayLayer: HTMLElement;
   private readonly actions: WindowSystemActions;
   private readonly events: WindowEvents;
   private readonly workArea: WorkArea;
@@ -82,17 +88,21 @@ export class WindowManager implements WindowManagerInterface {
   private preview: HTMLElement | undefined;
   private previewOwner: WindowId | null = null;
   private readonly layouts: SnapLayouts;
+  /** The size each overlay's app asked for; placeOverlay fits it to the screen. */
+  private readonly overlaySizes = new Map<WindowId, { width: number; height: number }>();
 
   constructor(
     windowLayer: HTMLElement,
     actions: WindowSystemActions,
     events: WindowEvents,
     workArea: WorkArea,
+    overlayLayer: HTMLElement,
   ) {
     this.WindowGeometry = new WindowGeometry();
     this.WindowChrome = new WindowChrome();
 
     this.windowLayer = windowLayer;
+    this.overlayLayer = overlayLayer;
     this.actions = actions;
     this.events = events;
     this.workArea = workArea;
@@ -122,6 +132,20 @@ export class WindowManager implements WindowManagerInterface {
       this.keyTile(this.focusedId as WindowId, arrow);
     });
 
+    // A press anywhere in our document but on an overlay puts it away, like
+    // a popover. Presses inside app frames never get here: the overlay's own
+    // app sees its frame lose focus, and focusWindow below hides it too.
+    document.addEventListener(
+      "pointerdown",
+      (event) => {
+        for (const record of this.windows.values()) {
+          if (record.kind !== "overlay" || record.hidden) continue;
+          if (!record.root.contains(event.target as Node)) this.setVisible(record.id, false);
+        }
+      },
+      true,
+    );
+
     this.layouts = new SnapLayouts(windowLayer, {
       topZ: () => this.zCounter + 1,
       preview: (windowId, zone) => {
@@ -146,7 +170,7 @@ export class WindowManager implements WindowManagerInterface {
     // ponytail: no MRU switcher overlay; add one if round-robin feels wrong with many windows.
     let bottom: WindowRecord | undefined;
     for (const record of this.windows.values()) {
-      if (record.minimized) continue;
+      if (record.minimized || record.kind === "overlay") continue;
       if (!bottom || record.zIndex < bottom.zIndex) bottom = record;
     }
     if (bottom) this.focusWindow(bottom.id);
@@ -156,6 +180,7 @@ export class WindowManager implements WindowManagerInterface {
     if (!this.windowLayer.isConnected) {
       console.warn("WindowManager: window layer is detached from the document");
     }
+    if (options.surface === "overlay") return this.createOverlay(options, ownerPid);
 
     const initialFrame = this.WindowGeometry.initialFrame(options);
     const initialConstraints = this.WindowGeometry.initialConstraints(options);
@@ -165,6 +190,8 @@ export class WindowManager implements WindowManagerInterface {
     const record: WindowRecord = {
       id: this.nextWindowId++ as WindowId,
       ownerPid: ownerPid as Pid,
+      kind: "window",
+      hidden: false,
       root: elements.rootElement,
       titleEl: elements.titleElement,
       bodyEl: elements.bodyElement,
@@ -210,6 +237,10 @@ export class WindowManager implements WindowManagerInterface {
     }
 
     windowRecord.titleEl.textContent = title;
+    if (windowRecord.kind === "overlay") {
+      windowRecord.root.setAttribute("aria-label", title);
+      return;
+    }
 
     this.events.emit({
       type: "window.titleChanged",
@@ -250,8 +281,46 @@ export class WindowManager implements WindowManagerInterface {
 
   /** Change only the size, keeping the position (clamped like any resize). */
   public resizeTo(windowId: WindowId, width: number, height: number): void {
-    const { frame } = this.getWindowRecord(windowId);
-    this.resizeWindow(windowId, { ...frame, width, height });
+    const record = this.getWindowRecord(windowId);
+    if (record.kind === "overlay") {
+      this.overlaySizes.set(windowId, { width, height });
+      this.placeOverlay(record);
+      return;
+    }
+    this.resizeWindow(windowId, { ...record.frame, width, height });
+  }
+
+  /** Where the window is; for an overlay, at the size its app asked for (the screen may squeeze it). */
+  public frameOf(windowId: WindowId): Rect {
+    return { ...this.getWindowRecord(windowId).frame, ...this.overlaySizes.get(windowId) };
+  }
+
+  /**
+   * Show or hide an overlay. Shown, it takes the keyboard; hidden, the
+   * keyboard goes back to the focused window, which never changed meanwhile.
+   */
+  public setVisible(windowId: WindowId, visible: boolean): void {
+    const record = this.getWindowRecord(windowId);
+    if (record.kind !== "overlay") {
+      throw kernelError("EINVAL", `Window ${windowId} is not an overlay (minimize it instead)`);
+    }
+    if (record.hidden === !visible) return;
+    record.hidden = !visible;
+    const frame = record.bodyEl.querySelector("iframe");
+
+    if (visible) {
+      this.placeOverlay(record);
+      record.zIndex = ++this.zCounter;
+      record.root.style.zIndex = String(record.zIndex);
+      record.root.classList.remove("overlay-hidden");
+      frame?.focus();
+      return;
+    }
+
+    record.root.classList.add("overlay-hidden");
+    if (frame && document.activeElement === frame) frame.blur();
+    const active = this.focusedId === null ? undefined : this.windows.get(this.focusedId);
+    if (active) this.focusContent(active);
   }
 
   public setWindowState(
@@ -259,6 +328,7 @@ export class WindowManager implements WindowManagerInterface {
     state: "normal" | "maximized",
   ): void {
     const windowRecord = this.getWindowRecord(windowId);
+    if (windowRecord.kind === "overlay") return;
     // Phones have no floating windows: the title-bar double-click can't restore.
     if (state === "normal" && isPhone()) return;
     windowRecord.restoreFrame ??= { ...windowRecord.frame };
@@ -289,7 +359,7 @@ export class WindowManager implements WindowManagerInterface {
    */
   public tileWindow(windowId: WindowId, zone: TileZone): boolean {
     const record = this.getWindowRecord(windowId);
-    if (isPhone()) return false;
+    if (isPhone() || record.kind === "overlay") return false;
     const split = this.splitFor(record);
     const frame = tileFrame(zone, this.workArea.get(), split);
     if (!this.fits(record, frame)) return false;
@@ -310,6 +380,9 @@ export class WindowManager implements WindowManagerInterface {
   /** Tile, maximize or restore: `windows.tile`. Throws EINVAL where the window can't go. */
   public arrange(windowId: WindowId, target: SnapTarget | "restore"): void {
     const record = this.getWindowRecord(windowId);
+    if (record.kind === "overlay") {
+      throw kernelError("EINVAL", `Window ${windowId} is an overlay: it can't be arranged`);
+    }
     if (target === "restore") {
       if (record.state !== "normal") this.setWindowState(windowId, "normal");
     } else if (target === "maximize") {
@@ -323,6 +396,7 @@ export class WindowManager implements WindowManagerInterface {
   public keyTile(windowId: WindowId, arrow: Arrow): void {
     if (isPhone()) return;
     const record = this.getWindowRecord(windowId);
+    if (record.kind === "overlay") return;
     const current =
       record.state === "tiled" && record.tile
         ? record.tile
@@ -339,6 +413,9 @@ export class WindowManager implements WindowManagerInterface {
 
   public setMinimized(windowId: WindowId, minimized: boolean): void {
     const record = this.getWindowRecord(windowId);
+    if (record.kind === "overlay") {
+      throw kernelError("EINVAL", `Window ${windowId} is an overlay (hide it instead)`);
+    }
     record.minimized = minimized;
     if (minimized) this.animateMinimize(record);
 
@@ -373,6 +450,13 @@ export class WindowManager implements WindowManagerInterface {
 
     record.root.remove();
     this.windows.delete(windowId);
+    this.overlaySizes.delete(windowId);
+    if (record.kind === "overlay") {
+      // Gone while shown: the keyboard goes back where it was.
+      const active = this.focusedId === null ? undefined : this.windows.get(this.focusedId);
+      if (!record.hidden && active) this.focusContent(active);
+      return;
+    }
 
     if (this.focusedId === windowId) {
       this.focusedId = null;
@@ -406,7 +490,11 @@ export class WindowManager implements WindowManagerInterface {
     if (this.focusedId === windowId) return;
 
     const record = this.getWindowRecord(windowId);
+    // An overlay is never the focused window: it lies over whichever one is.
+    if (record.kind === "overlay") return;
     const previousId = this.focusedId;
+    // Another window coming forward (a click, a launch, windows.focus) puts overlays away.
+    this.hideOverlays();
 
     this.focusedId = windowId;
     record.minimized = false;
@@ -455,6 +543,8 @@ export class WindowManager implements WindowManagerInterface {
 
   public requestClose(windowId: WindowId): void {
     const record = this.getWindowRecord(windowId);
+    // Ctrl+W over an overlay dismisses it; its app keeps running for next time.
+    if (record.kind === "overlay") return this.setVisible(windowId, false);
 
     if (record.closeRequestHandlers.length === 0) {
       this.actions.defaultClose(windowId, record.ownerPid);
@@ -488,8 +578,11 @@ export class WindowManager implements WindowManagerInterface {
     ).length;
   }
 
+  /** Windows only: overlays aren't windows to the shell (no taskbar button). */
   public listWindows(): WindowInfo[] {
-    return Array.from(this.windows.values()).map((record) => ({
+    return Array.from(this.windows.values())
+      .filter((record) => record.kind === "window")
+      .map((record) => ({
       windowId: record.id,
       pid: record.ownerPid,
       title: record.titleEl.textContent || "",
@@ -505,6 +598,10 @@ export class WindowManager implements WindowManagerInterface {
   public reflowLayout(): void {
     const phone = isPhone();
     for (const record of this.windows.values()) {
+      if (record.kind === "overlay") {
+        this.placeOverlay(record);
+        continue;
+      }
       // Shrinking into phone mode (rotation, narrow browser) maximizes floating and tiled windows too.
       if (phone && record.state !== "maximized") {
         this.setWindowState(record.id, "maximized");
@@ -751,12 +848,63 @@ export class WindowManager implements WindowManagerInterface {
     let topmost: WindowRecord | null = null;
 
     for (const record of this.windows.values()) {
-      if (record.minimized) continue;
+      if (record.minimized || record.kind === "overlay") continue;
       if (!topmost || record.zIndex > topmost.zIndex) topmost = record;
     }
 
     if (topmost) {
       this.focusWindow(topmost.id);
+    }
+  }
+
+  /** An overlay surface: no chrome, hidden until its app shows it (see SurfaceKind). */
+  private createOverlay(options: WindowOptions, ownerPid: Pid): WindowRecord {
+    const elements = this.WindowChrome.buildWindowChrome(windowHTML);
+    const record: WindowRecord = {
+      id: this.nextWindowId++ as WindowId,
+      ownerPid,
+      kind: "overlay",
+      hidden: true,
+      root: elements.rootElement,
+      titleEl: elements.titleElement,
+      bodyEl: elements.bodyElement,
+      zIndex: 0,
+      closeRequestHandlers: [],
+      frame: this.WindowGeometry.initialFrame(options),
+      constraints: this.WindowGeometry.initialConstraints(options),
+      state: "normal",
+      minimized: false,
+      disposers: [],
+    };
+    record.root.classList.add("overlay", "overlay-hidden");
+    record.root.setAttribute("role", "dialog");
+    record.root.setAttribute("aria-label", options.title);
+    record.titleEl.textContent = options.title;
+
+    this.windows.set(record.id, record);
+    this.overlaySizes.set(record.id, { width: record.frame.width, height: record.frame.height });
+    this.overlayLayer.appendChild(record.root);
+    this.WindowChrome.applyAppearance(record, options);
+    this.placeOverlay(record);
+    return record;
+  }
+
+  /** Centred, near the top (at the top on phones), at the size its app asked for as far as the screen allows. */
+  private placeOverlay(record: WindowRecord): void {
+    const want = this.overlaySizes.get(record.id) ?? record.frame;
+    const { minWidth, minHeight, maxWidth, maxHeight } = record.constraints;
+    const top = isPhone() ? OVERLAY_MARGIN : Math.round(innerHeight * OVERLAY_TOP);
+    const fit = (value: number, min: number, max: number, room: number) =>
+      Math.round(Math.max(Math.min(min, room), Math.min(value, max, room)));
+    const width = fit(want.width, minWidth, maxWidth, innerWidth - 2 * OVERLAY_MARGIN);
+    const height = fit(want.height, minHeight, maxHeight, innerHeight - top - OVERLAY_MARGIN);
+    record.frame = { x: Math.round((innerWidth - width) / 2), y: top, width, height };
+    this.WindowChrome.applyFrameToWindow(record);
+  }
+
+  private hideOverlays(): void {
+    for (const record of this.windows.values()) {
+      if (record.kind === "overlay" && !record.hidden) this.setVisible(record.id, false);
     }
   }
 
