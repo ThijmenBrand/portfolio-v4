@@ -233,8 +233,9 @@ function openGroups(todos: readonly Todo[], now: Date): Group[] {
     Group, Group, Group, Group, Group, Group,
   ];
   for (const todo of [...todos].filter(isOpen).sort(byPlan)) {
-    // A todo ticked a moment ago is still on show, where it was.
-    if (!todo.done && deadlineState(todo, now) === "late") late.todos.push(todo);
+    // A todo ticked a moment ago is still on show, where it was: asked as if
+    // still open, since deadlineState says nothing about a done todo.
+    if (deadlineState({ ...todo, done: false }, now) === "late") late.todos.push(todo);
     else if (isForToday(todo, today)) onToday.todos.push(todo);
     else if (!todo.date) (todo.deadline ? unplanned : someday).todos.push(todo);
     else if (todo.date === tomorrow) onTomorrow.todos.push(todo);
@@ -661,6 +662,10 @@ function editorFor(todo: Todo): HTMLElement {
     pick(".notice-text").textContent = `Planned after the deadline (${dayLabel(due, now)}${
       next.deadlineTime ? ` ${timeFmt.format(due)}` : ""
     }).`;
+    // A deadline on a day already gone can't be planned before any more:
+    // today would still be after it, so there is nothing to offer.
+    fix.hidden = target > next.deadline!;
+    if (fix.hidden) return;
     const name = dayLabel(parseDate(target)!, now);
     fix.textContent = sameDay
       ? "Do it earlier that day"

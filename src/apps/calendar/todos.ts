@@ -13,7 +13,7 @@
 // The todo travels on the occurrence (`todo`), and which of these it is on
 // `todoPart`, which is what the views look for to draw a tick box or a flag
 // instead of a plain chip.
-import { dateKey, deadlineAt, parseDate, plannedAt, type Todo } from "../todo/store.ts";
+import { addDays, dateKey, deadlineAt, parseDate, plannedAt, type Todo } from "../todo/store.ts";
 import type { CalEvent } from "./parse.ts";
 import type { Occurrence } from "./query.ts";
 
@@ -56,8 +56,6 @@ function eventFor(todo: Todo, start: Date, allDay: boolean, durationMs: number):
   };
 }
 
-const nextDay = (at: Date): Date => new Date(at.getFullYear(), at.getMonth(), at.getDate() + 1);
-
 /** Every todo occurrence overlapping [from, to), unsorted. */
 export function todoOccurrences(
   todos: readonly Todo[],
@@ -89,20 +87,20 @@ export function todoOccurrences(
     if (plan) {
       const allDay = !todo.time;
       const end = allDay
-        ? nextDay(plan)
+        ? addDays(plan, 1)
         : new Date(plan.getTime() + (todo.minutes ?? TODO_MINUTES) * 60_000);
       const missed = !todo.done && todo.date! < today;
       add(todo, missed ? "missed" : "plan", todo.id, plan, end, allDay);
       if (missed) {
         const day = parseDate(today)!;
-        add(todo, "carried", `${todo.id}:today`, day, nextDay(day), true);
+        add(todo, "carried", `${todo.id}:today`, day, addDays(day, 1), true);
       }
     }
 
     const due = deadlineAt(todo);
     if (due && !todo.done) {
       const allDay = !todo.deadlineTime;
-      const end = allDay ? nextDay(due) : new Date(due.getTime() + DEADLINE_MS);
+      const end = allDay ? addDays(due, 1) : new Date(due.getTime() + DEADLINE_MS);
       add(todo, "deadline", `${todo.id}:due`, due, end, allDay);
     }
   }

@@ -123,8 +123,11 @@ let todos: TodoStore;
 let todoRev = 0;
 /** The todo ticked off a moment ago, drawn with a flourish on the next render. */
 let ticked = "";
-/** The day the views were last drawn on: a missed plan moves at midnight. */
-let drawnDay = "";
+/**
+ * When the views were last drawn: a missed plan moves at midnight, and a
+ * timed deadline turns red the moment it passes.
+ */
+let drawnAt = 0;
 let settings: Settings;
 let anchor = midnight(new Date());
 let focused = midnight(new Date());
@@ -291,13 +294,17 @@ function render(): void {
   const agenda = field("agenda");
   const empty = field("empty");
   const current = view();
-  drawnDay = dateKey(new Date());
+  drawnAt = Date.now();
 
   // Dated todos are something to look at too, calendars or not.
   const hasSources =
     mine.calendars.length > 0 ||
     store.data.sources.length > 0 ||
-    (store.data.todos && todos.data.todos.some((todo) => todo.date || todo.deadline));
+    (store.data.todos &&
+      todos.data.todos.some(
+        // A deadline is only drawn while its todo is open and deadlines are on.
+        (todo) => todo.date || (store.data.deadlines && todo.deadline && !todo.done),
+      ));
   empty.hidden = hasSources;
   month.hidden = !hasSources || current !== "month";
   const grid = current === "week" || current === "day";
@@ -897,7 +904,9 @@ function toggleTodo(occurrence: Occurrence): void {
       render();
     });
   todoRev++;
-  ticked = finishing ? occKey(occurrence) : "";
+  // On the plan, keyed by the todo's id: a done todo's carried-over copy and
+  // deadline are no longer drawn, so their own keys would light up nothing.
+  ticked = finishing ? occKey({ ...occurrence, key: todo.id }) : "";
   render();
   showStatus(finishing ? `Done: ${todo.title}` : `Not done: ${todo.title}`);
 }
@@ -994,7 +1003,8 @@ function todoOther(
 function wireTodoLinks(): void {
   let lit = "";
   const light = (id: string): void => {
-    if (id === lit) return;
+    // Unless a render has rebuilt the lit elements, unlit, in the meantime.
+    if (id === lit && (!id || document.querySelector(".is-linked"))) return;
     for (const node of document.querySelectorAll(".is-linked")) node.classList.remove("is-linked");
     lit = id;
     if (!id) return;
@@ -1005,7 +1015,8 @@ function wireTodoLinks(): void {
   document.addEventListener("pointerover", (event) => {
     light((event.target as HTMLElement).closest<HTMLElement>("[data-todo]")?.dataset.todo ?? "");
   });
-  document.addEventListener("pointerleave", () => light(""));
+  // On the root element: pointerleave doesn't bubble, so the document never sees it.
+  document.documentElement.addEventListener("pointerleave", () => light(""));
 }
 
 /** The occurrence the popover belongs to, so its chip can be found again. */
@@ -1847,8 +1858,14 @@ export async function main(appOs: AppInterface, args: string[] = []): Promise<vo
   });
 
   await os.timers.setInterval(() => {
-    // Past midnight a missed plan carries over to the new today.
-    if (drawnDay !== dateKey(new Date())) render();
+    // Past midnight a missed plan carries over to the new today; a timed
+    // deadline passed since the last draw is late now.
+    const now = new Date();
+    const passed = store.data.todos && todos.data.todos.some((todo) => {
+      const at = !todo.done && todo.deadlineTime ? deadlineAt(todo) : null;
+      return at !== null && at.getTime() > drawnAt && at <= now;
+    });
+    if (passed || dateKey(new Date(drawnAt)) !== dateKey(now)) render();
     if (view() === "week" || view() === "day") {
       const { start, days } = gridRange();
       placeNowLine(field("week"), start, days);

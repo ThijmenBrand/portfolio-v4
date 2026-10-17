@@ -5,7 +5,7 @@
 // bodies come off the internet and are never trusted as markup.
 import { columnLayout, minutesInto, packLanes, type Span } from "./layout.ts";
 import { occKey, type Occurrence } from "./query.ts";
-import { deadlineAt, deadlineState, plannedLate } from "../todo/store.ts";
+import { daysBetween, deadlineAt, deadlineState, plannedLate } from "../todo/store.ts";
 
 export const WEEK_START = 1; // ponytail: Monday, not derived from the locale
 const CHIP_H = 18;
@@ -142,12 +142,14 @@ function flagFor(): HTMLSpanElement {
 const markerFor = (occurrence: Occurrence, ctx: ViewContext): HTMLSpanElement =>
   occurrence.todoPart === "deadline" ? flagFor() : tickFor(occurrence, ctx);
 
-/** "Fri 17:00", "today 17:00", "Fri": when a todo is due, said short. */
+/** "Fri 17:00", "today 17:00", "Fri", "Tue 3 Nov": when a todo is due, said short. */
 function dueText(occurrence: Occurrence, ctx: ViewContext): string {
   const todo = occurrence.todo!;
   const at = deadlineAt(todo);
   if (!at) return "";
-  const day = sameDay(at, ctx.today) ? "today" : ctx.weekday(at);
+  // A bare weekday only names a day in the coming week.
+  const days = daysBetween(ctx.today, at);
+  const day = days === 0 ? "today" : days > 0 && days < 7 ? ctx.weekday(at) : ctx.dayMonth(at);
   return todo.deadlineTime ? `${day} ${ctx.time(at)}` : day;
 }
 
