@@ -34,11 +34,17 @@ services:
       NODE_ENV: production
       PORT: "8787"
       CLOUD_DB: /data/cloud.db
+      CLOUD_DOCS: /docs
     read_only: true
     volumes:
-      # The owner's synced files (/mnt/cloud). The only server-side state
-      # that isn't an environment variable, so the only thing to back up.
+      # The owner's synced files (/mnt/cloud). With /docs below, the only
+      # server-side state that isn't an environment variable, so the only
+      # things to back up.
       - cloud-data:/data
+      # The bytes of every synced file, one file each, named by an id the
+      # database holds. A plain host directory, so its size is
+      # one `du` away; the deploy script creates it and hands it to 65532.
+      - /srv/portfolio/documents:/docs
     tmpfs:
       - /tmp                     # SQLite wants somewhere to write temporaries
     user: "65532:65532"

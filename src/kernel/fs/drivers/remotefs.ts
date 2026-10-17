@@ -64,7 +64,7 @@ interface Entry {
 }
 
 /** Matches MAX_FILE in server/fsstore.ts; checked here to skip a doomed upload. */
-const MAX_FILE = 1024 * 1024;
+const MAX_FILE = 20 * 1024 * 1024;
 
 /**
  * How long a directory listing may be reused. The VFS resolves a path one

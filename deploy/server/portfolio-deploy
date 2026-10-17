@@ -19,6 +19,8 @@ SELF=/usr/local/sbin/portfolio-deploy
 COMPOSE=(docker compose --project-name portfolio -f "$APP_DIR/docker-compose.yml")
 # compose names it <project>_<volume>; holds the owner's synced files.
 DATA_VOLUME=portfolio_cloud-data
+# Every synced file's bytes; bind-mounted at /docs (docker-compose.yml).
+DOCS_DIR="$APP_DIR/documents"
 # Only images built by this repo's pipeline, pinned by digest.
 IMAGE_PATTERN='^ghcr\.io/thijmenbrand/portfolio-v4@sha256:[a-f0-9]{64}$'
 
@@ -32,11 +34,14 @@ log() { printf '[portfolio-deploy] %s\n' "$*"; }
 # that volume root-owned, and the container runs as 65532 with every
 # capability dropped, so it can't fix the ownership itself -- it would just
 # fail to open the database. Do it here, from the same image, as root.
+# The documents directory is a host path: left to Docker, a missing one
+# would be created root-owned just the same.
 # Idempotent: safe to repeat on every deploy and rollback.
 ensure_data() {  # ensure_data <image>
   docker volume create "$DATA_VOLUME" >/dev/null
   docker run --rm --user 0:0 --entrypoint chown \
     -v "$DATA_VOLUME:/data" "$1" 65532:65532 /data
+  install -d -o 65532 -g 65532 -m 700 "$DOCS_DIR"
 }
 
 # The server half of a deploy -- this script and the compose file it runs -- is
