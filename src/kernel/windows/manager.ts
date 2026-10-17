@@ -16,6 +16,7 @@ import {
   innerEdges,
   keyStep,
   splitBounds,
+  stretchFrame,
   tileFrame,
   unsnapFrame,
   zoneAt,
@@ -48,6 +49,9 @@ const FORCE_WINDOW_MS = 5000;
 
 /** Title bar height (window.css): a window dragged out of a tile is grabbed inside it. */
 const TITLE_BAR = 34;
+
+/** .window border width (window.css): floating windows are content-box, so it sits outside the frame. */
+const BORDER = 1;
 
 const ARROWS: Record<string, Arrow> = {
   ArrowLeft: "left",
@@ -677,6 +681,19 @@ export class WindowManager implements WindowManagerInterface {
     this.emitState(record);
   }
 
+  /** Double-click on an edge of a floating window: that edge goes to the work area's. */
+  private stretch(record: WindowRecord, edges: ReadonlySet<Edge>): void {
+    if (record.state !== "normal") return;
+    const frame = stretchFrame(
+      record.frame,
+      edges,
+      this.workArea.get(),
+      record.constraints,
+      BORDER,
+    );
+    this.resizeWindow(record.id, frame);
+  }
+
   private beginSplitResize(record: WindowRecord, edges: ReadonlySet<Edge>): boolean {
     this.splitDrag = undefined;
     if (record.state !== "tiled" || !record.tile || edges.size === 0) return false;
@@ -767,6 +784,7 @@ export class WindowManager implements WindowManagerInterface {
       beginSplitResize: (edges) => this.beginSplitResize(windowRecord, edges),
       moveSplit: (dx, dy) => this.moveSplit(dx, dy),
       float: () => this.float(windowRecord),
+      stretch: (edges) => this.stretch(windowRecord, edges),
       hoverLayouts: (button, over) => {
         if (!isPhone()) this.layouts.hover(windowRecord.id, button, over);
       },

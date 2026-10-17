@@ -169,6 +169,41 @@ export function unsnapFrame(
 }
 
 /**
+ * Double-click on a resize edge: that edge goes to the work area's, the
+ * opposite one stays put (within the size limits). Corners do both edges.
+ * Floating windows are content-box, so the border sits outside the frame.
+ */
+export function stretchFrame(
+  frame: Rect,
+  edges: ReadonlySet<Edge>,
+  area: Rect,
+  limits: { minWidth: number; maxWidth: number; minHeight: number; maxHeight: number },
+  border: number,
+): Rect {
+  const clamp = (value: number, min: number, max: number) =>
+    Math.max(min, Math.min(value, max));
+  const next = { ...frame };
+  const right = frame.x + frame.width + 2 * border;
+  const bottom = frame.y + frame.height + 2 * border;
+
+  if (edges.has("e")) {
+    next.width = clamp(area.x + area.width - frame.x - 2 * border, limits.minWidth, limits.maxWidth);
+  }
+  if (edges.has("w")) {
+    next.width = clamp(right - area.x - 2 * border, limits.minWidth, limits.maxWidth);
+    next.x = right - 2 * border - next.width;
+  }
+  if (edges.has("s")) {
+    next.height = clamp(area.y + area.height - frame.y - 2 * border, limits.minHeight, limits.maxHeight);
+  }
+  if (edges.has("n")) {
+    next.height = clamp(bottom - area.y - 2 * border, limits.minHeight, limits.maxHeight);
+    next.y = bottom - 2 * border - next.height;
+  }
+  return next;
+}
+
+/**
  * Ctrl+Alt+Arrow. Like Windows' Win+Arrow: halves from anywhere, then up or
  * down for the quarters; back the way you came restores; down off the bottom
  * minimizes. null: the key does nothing here.

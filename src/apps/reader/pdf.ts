@@ -1,4 +1,11 @@
-import { AnnotationEditorType, getDocument, PDFDateString, type PageViewport, type RenderTask } from "pdfjs-dist";
+import {
+  AnnotationEditorType,
+  getDocument,
+  PDFDateString,
+  type PageViewport,
+  type PDFDocumentProxy,
+  type RenderTask,
+} from "pdfjs-dist";
 import type { TextItem } from "pdfjs-dist/types/src/display/api";
 // @ts-expect-error pdfjs-dist ships no types for the worker module
 import * as pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs";
@@ -11,10 +18,17 @@ const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 5;
 const STEP = 1.25;
 const MAX_PIXELS = 16e6; // Safari refuses bigger canvases
+const THUMB = 120; // CSS px width of a sidebar thumbnail
+const PRESETS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
+const INKS = [["Red", "#ff3b30"], ["Blue", "#0a6cff"], ["Green", "#1f9d55"], ["Black", "#1c1c1e"]] as const;
+const SIZES = [["Fine", 1], ["Medium", 2], ["Thick", 4]] as const; // stroke width in PDF points
 
+type Fit = "width" | "page";
 type Point = [number, number]; // PDF user space, so ink and hits survive zoom and rotation
 type Stroke = { color: string; width: number; points: Point[] };
 type Hit = { page: number; from: Point; to: Point };
+type OutlineNode = Awaited<ReturnType<PDFDocumentProxy["getOutline"]>>[number];
+type Chapter = { row: HTMLElement; page: number; top: number | null; parent: Chapter | null; kids: HTMLElement | null };
 
 const svg = (body: string): string =>
   `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
@@ -33,20 +47,30 @@ export async function showPdf(data: Uint8Array, name: string, host: Host): Promi
   // PDFs stall the UI; allow worker-src 'self' for app-host in vite.config.ts realmCsp() if that bites.
   (globalThis as { pdfjsWorker?: unknown }).pdfjsWorker = pdfWorker;
   const pdf = await getDocument({ data }).promise;
-  const pages = await Promise.all(Array.from({ length: pdf.numPages }, (_, i) => pdf.getPage(i + 1)));
+  const [pages, outline, labels] = await Promise.all([
+    Promise.all(Array.from({ length: pdf.numPages }, (_, i) => pdf.getPage(i + 1))),
+    pdf.getOutline().catch(() => null),
+    pdf.getPageLabels().catch(() => null),
+  ]);
 
   let turn = 0;
   let pen = false;
-  let color = "#ff3b30";
+  let color: string = INKS[0][1];
+  let thickness: number = SIZES[1][1];
   let views: PageViewport[] = [];
   const ink: Stroke[][] = pages.map(() => []);
-  const drawn: number[] = []; // page of each stroke, newest last, for undo
+  const drawn: (number | Stroke[][])[] = []; // newest last, for undo: a stroke's page, or the ink a clear removed
   let hits: Hit[] = [];
   let current = -1;
   let query = "";
   let texts: TextItem[][] | null = null;
+  let page = -1; // the one in view, mirrored in the sidebar
+  let reading = 0; // where the reading line is in the scrolled pages, to pick the chapter
+  let pinned: Chapter | null = null; // the chapter last clicked, current until the user scrolls
+  let fit: Fit | null = "width"; // zoom follows the size of the view until zoomed by hand
 
   const scroller = el("div", "pages");
+  scroller.tabIndex = -1; // focused, so Space, arrows and Page Up/Down scroll the pages
   const sheets = pages.map((_, i) => {
     const sheet = { box: el("div", "page"), paper: el("canvas", "paper"), overlay: el("canvas", "ink") };
     sheet.box.append(sheet.paper, sheet.overlay);
@@ -56,61 +80,251 @@ export async function showPdf(data: Uint8Array, name: string, host: Host): Promi
   });
 
   // 100% zoom is the PDF's real size; open at "fit width" (capped at 150%) instead.
-  const fitWidth = (): number => {
-    const v = pages[0].getViewport({ scale: PT });
-    return Math.min(1.5, (scroller.clientWidth - 32) / v.width);
+  const fitZoom = (mode: Fit): number => {
+    const v = pages[0].getViewport({ scale: PT, rotation: (pages[0].rotate + turn * 90) % 360 });
+    const wide = (scroller.clientWidth - 32) / v.width;
+    const next = mode === "width" ? Math.min(1.5, wide) : Math.min(wide, (scroller.clientHeight - 32) / v.height);
+    return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, next));
   };
 
-  // ---- toolbar ----
+  // ---- toolbar: sidebar and page | zoom | markup, search and info ----
   const bar = el("div", "bar");
-  const button = (label: string, icon: string, action: () => void): HTMLButtonElement => {
-    const b = el("button");
+  const button = (label: string, icon: string, action: () => void, className = ""): HTMLButtonElement => {
+    const b = el("button", className);
     b.title = b.ariaLabel = label;
     b.innerHTML = icon;
     b.addEventListener("click", action);
     return b;
   };
-  const pct = button("Fit width (0)", "", () => setZoom(fitWidth()));
-  pct.className = "pct";
-  const penButton = button("Draw (D)", svg('<path d="M10.5 3.5l2 2L6 12H4v-2z"/><path d="M9 5l2 2"/>'), () => togglePen());
-  const swatch = el("input");
-  swatch.type = "color";
-  swatch.value = color;
-  swatch.title = swatch.ariaLabel = "Ink colour";
-  swatch.addEventListener("input", () => (color = swatch.value));
-  const find = el("input", "find");
+  const group = (className: string, ...children: Node[]): HTMLElement => {
+    const g = el("div", className);
+    g.append(...children);
+    return g;
+  };
+  const labelOf = (i: number): string => labels?.[i] || String(i + 1);
+
+  const sideButton = button("Sidebar (S)", svg('<rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M6.5 3v10"/>'), () =>
+    toggleSide(),
+  );
+
+  const pageField = el("input");
+  pageField.ariaLabel = "Page";
+  pageField.title = "Go to page";
+  pageField.inputMode = "numeric";
+  pageField.style.width = `${Math.max(...pages.map((_, i) => labelOf(i).length)) + 1}ch`;
+  pageField.addEventListener("focus", () => pageField.select());
+  pageField.addEventListener("blur", () => (pageField.value = labelOf(page)));
+  pageField.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") scroller.focus();
+    if (e.key !== "Enter") return;
+    const want = pageField.value.trim();
+    const byLabel = pages.findIndex((_, i) => labelOf(i).toLowerCase() === want.toLowerCase());
+    const i = byLabel >= 0 ? byLabel : Number(want) - 1;
+    if (Number.isInteger(i) && pages[i]) (pinned = null), goTo(i);
+    scroller.focus();
+  });
+  const pageCount = el("span", "of");
+  pageCount.textContent = `of ${labels ? labelOf(pages.length - 1) : pages.length}`;
+
+  const pct = el("button", "pct");
+  pct.title = "Zoom and rotation";
+  pct.ariaHasPopup = "menu";
+  const viewMenu = el("div", "menu");
+  viewMenu.popover = "auto";
+  viewMenu.role = "menu";
+  pct.popoverTargetElement = viewMenu;
+
+  const penButton = button(
+    "Markup (D)",
+    svg('<path d="M10.5 3.5l2 2L6 12H4v-2z"/><path d="M9 5l2 2"/>') + "<span>Markup</span>",
+    () => togglePen(),
+    "labelled",
+  );
+  const saveButton = button("Save markup into the PDF (⌘S)", "Save", () => void save(), "save");
+  const status = el("span", "status");
+  status.role = "status";
+
+  const find = el("input");
   find.type = "search";
   find.placeholder = "Search";
   find.ariaLabel = "Search document";
   const count = el("span", "count");
-  const status = el("span", "status");
-  status.role = "status";
+  const glass = el("span", "glass");
+  glass.innerHTML = svg('<circle cx="7" cy="7" r="4"/><path d="M10 10l3 3"/>');
+  const prevHit = button("Previous match (Shift+Enter)", svg('<path d="M4 10l4-4 4 4"/>'), () => step(-1));
+  const nextHit = button("Next match (Enter)", svg('<path d="M4 6l4 4 4-4"/>'), () => step(1));
+
   bar.append(
-    button("Zoom out (−)", svg('<path d="M4 8h8"/>'), () => setZoom(zoom / STEP)),
-    pct,
-    button("Zoom in (+)", svg('<path d="M4 8h8M8 4v8"/>'), () => setZoom(zoom * STEP)),
-    el("span", "sep"),
-    button("Rotate left (Shift+R)", svg('<path d="M3 3v3.5h3.5"/><path d="M3.4 6.5a5 5 0 1 1 .6 4.5"/>'), () => rotate(-1)),
-    button("Rotate right (R)", svg('<path d="M13 3v3.5H9.5"/><path d="M12.6 6.5a5 5 0 1 0-.6 4.5"/>'), () => rotate(1)),
-    el("span", "sep"),
-    penButton,
-    swatch,
-    button("Undo (⌘Z)", svg('<path d="M5 3L2.5 5.5 5 8"/><path d="M2.5 5.5H10a3.5 3.5 0 0 1 0 7H7"/>'), undo),
-    button("Clear drawing", svg('<path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.7 8.5h5.6l.7-8.5"/>'), clearInk),
-    button("Save drawing into the PDF (⌘S)", svg('<path d="M3 3h8l2 2v8H3z"/><path d="M5.5 3v3h4V3M5.5 13V9.5h5V13"/>'), () => void save()),
-    status,
-    el("span", "spacer"),
-    find,
-    count,
-    button("Previous match (Shift+Enter)", svg('<path d="M4 10l4-4 4 4"/>'), () => step(-1)),
-    button("Next match (Enter)", svg('<path d="M4 6l4 4 4-4"/>'), () => step(1)),
-    el("span", "sep"),
-    button("File info (I)", svg('<circle cx="8" cy="8" r="5.5"/><path d="M8 7.5V11M8 5.2v.1"/>'), () => void showInfo()),
+    group("start", sideButton, group("field pageno", pageField, pageCount)),
+    group(
+      "middle",
+      button("Zoom out (−)", svg('<path d="M4 8h8"/>'), () => setZoom(zoom / STEP)),
+      pct,
+      button("Zoom in (+)", svg('<path d="M4 8h8M8 4v8"/>'), () => setZoom(zoom * STEP)),
+    ),
+    group(
+      "end",
+      status,
+      saveButton,
+      penButton,
+      group("field search", glass, find, count, prevHit, nextHit),
+      button("File info (I)", svg('<circle cx="8" cy="8" r="5.5"/><path d="M8 7.5V11M8 5.2v.1"/>'), () => void showInfo()),
+    ),
   );
 
+  // The zoom menu: fits, presets, and rotation, with what's in effect ticked.
+  function fillViewMenu(): void {
+    const item = (label: string, keys: string, checked: boolean, action: () => void): HTMLButtonElement => {
+      const b = el("button");
+      b.role = "menuitemcheckbox";
+      b.ariaChecked = String(checked);
+      b.innerHTML = `${svg('<path d="M3.5 8.5l3 3 6-7"/>')}<span>${label}</span><kbd>${keys}</kbd>`;
+      b.addEventListener("click", () => {
+        viewMenu.hidePopover();
+        action();
+      });
+      return b;
+    };
+    const exact = (z: number): boolean => !fit && Math.abs(zoom - z) < 0.005;
+    viewMenu.replaceChildren(
+      item("Fit width", "0", fit === "width", () => fitTo("width")),
+      item("Fit page", "9", fit === "page", () => fitTo("page")),
+      el("hr"),
+      ...PRESETS.map((z) => item(`${z * 100}%`, z === 1 ? "1" : "", exact(z), () => setZoom(z))),
+      el("hr"),
+      item("Rotate left", "⇧R", false, () => rotate(-1)),
+      item("Rotate right", "R", false, () => rotate(1)),
+    );
+  }
+  viewMenu.addEventListener("beforetoggle", (e) => {
+    if ((e as ToggleEvent).newState !== "open") return;
+    fillViewMenu();
+    const r = pct.getBoundingClientRect();
+    viewMenu.style.top = `${r.bottom + 4}px`;
+    viewMenu.style.left = `${r.left + r.width / 2}px`;
+  });
+  viewMenu.addEventListener("toggle", (e) => {
+    if ((e as ToggleEvent).newState === "open")
+      (viewMenu.querySelector<HTMLElement>("[aria-checked=true]") ?? viewMenu.querySelector("button"))?.focus();
+  });
+  viewMenu.addEventListener("keydown", (e) => {
+    const items = [...viewMenu.querySelectorAll("button")];
+    const at = items.indexOf(document.activeElement as HTMLButtonElement);
+    const to = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: items.length - 1 }[e.key];
+    if (to === undefined) return;
+    e.preventDefault();
+    items[(to + items.length) % items.length].focus();
+  });
+
+  // ---- markup bar: shown while drawing ----
+  const markup = el("div", "markup");
+  markup.hidden = true;
+  markup.ariaLabel = "Markup";
+  const pick = (buttons: HTMLElement[], chosen: HTMLElement | null): void => {
+    for (const b of buttons) b.ariaPressed = String(b === chosen);
+  };
+  const inks = INKS.map(([label, value]) => {
+    const b = button(`${label} ink`, "", () => {
+      color = value;
+      pick([...inks, custom], b);
+    }, "ink");
+    b.style.setProperty("--ink", value);
+    return b;
+  });
+  const custom = el("label", "ink custom");
+  custom.title = "Other colour";
+  const picker = el("input");
+  picker.type = "color";
+  picker.value = "#ff9500";
+  picker.ariaLabel = "Other ink colour";
+  picker.addEventListener("input", () => {
+    color = picker.value;
+    custom.style.setProperty("--ink", color);
+    pick([...inks, custom], custom);
+  });
+  custom.append(picker);
+  pick([...inks, custom], inks[0]);
+  const sizes = SIZES.map(([label, width]) => {
+    const b = button(`${label} line`, `<i style="--size: ${width * 2 + 1}px"></i>`, () => {
+      thickness = width;
+      pick(sizes, b);
+    }, "size");
+    return b;
+  });
+  pick(sizes, sizes[1]);
+  const undoButton = button("Undo (⌘Z)", svg('<path d="M5 3L2.5 5.5 5 8"/><path d="M2.5 5.5H10a3.5 3.5 0 0 1 0 7H7"/>'), undo);
+  const clearButton = button("Clear all markup", svg('<path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.7 8.5h5.6l.7-8.5"/>'), clearInk);
+  const hint = el("span", "hint");
+  hint.textContent = "Draw on the page";
+  markup.append(
+    group("swatches", ...inks, custom),
+    el("span", "sep"),
+    group("swatches", ...sizes),
+    el("span", "sep"),
+    undoButton,
+    clearButton,
+    hint,
+    el("span", "spacer"),
+    button("Done (Esc)", "Done", () => togglePen(), "done"),
+  );
+
+  /** Enables what there's something to do for. */
+  function sync(): void {
+    undoButton.disabled = !drawn.length;
+    clearButton.disabled = !ink.some((strokes) => strokes.length);
+    saveButton.hidden = !dirty;
+    prevHit.disabled = nextHit.disabled = hits.length < 2;
+  }
+
+  // ---- sidebar: page thumbnails and the PDF's outline ----
+  const side = el("aside", "side");
+  const thumbList = el("div", "thumbs");
+  const thumbs = pages.map((_, i) => {
+    const thumb = { button: el("button", "thumb"), frame: el("div", "frame"), turn: -1 }; // turn it was drawn at
+    const label = el("span");
+    label.textContent = labels?.[i] || String(i + 1);
+    thumb.button.ariaLabel = `Page ${label.textContent}`;
+    thumb.button.append(thumb.frame, label);
+    thumb.button.addEventListener("click", () => {
+      pinned = null;
+      goTo(i);
+    });
+    thumbList.append(thumb.button);
+    return thumb;
+  });
+
+  const chapters: Chapter[] = [];
+  const outlineList = el("div", "outline");
+  if (outline?.length) {
+    const tabs = el("div", "tabs");
+    tabs.role = "tablist";
+    const tab = (label: string, panel: HTMLElement): HTMLButtonElement => {
+      const b = el("button");
+      b.role = "tab";
+      b.textContent = label;
+      b.addEventListener("click", () => {
+        for (const t of tabs.children) t.ariaSelected = String(t === b);
+        thumbList.hidden = panel !== thumbList;
+        outlineList.hidden = panel !== outlineList;
+        follow();
+      });
+      tabs.append(b);
+      return b;
+    };
+    const contents = tab("Contents", outlineList);
+    tab("Pages", thumbList);
+    side.append(tabs, outlineList, thumbList);
+    addChapters(outline, outlineList, 0, null);
+    contents.click();
+  } else side.append(thumbList);
+
+  const view = el("div", "view");
+  view.append(side, scroller);
   document.body.classList.add("pdf");
-  document.body.replaceChildren(bar, scroller);
-  let zoom = fitWidth();
+  document.body.replaceChildren(bar, markup, view, viewMenu);
+  side.hidden = innerWidth < 640; // a narrow window is better spent on the page
+  sideButton.ariaPressed = String(!side.hidden);
+  let zoom = fitZoom("width");
 
   // ---- zoom, rotate, render ----
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -122,9 +336,10 @@ export async function showPdf(data: Uint8Array, name: string, host: Host): Promi
       s.box.style.height = `${views[i].height}px`;
       s.overlay.width = Math.round(views[i].width * dpr);
       s.overlay.height = Math.round(views[i].height * dpr);
+      thumbs[i].frame.style.aspectRatio = `${views[i].width} / ${views[i].height}`;
       paint(i);
     });
-    pct.textContent = `${Math.round(zoom * 100)}%`;
+    pct.innerHTML = `<span>${Math.round(zoom * 100)}%</span>${svg('<path d="M5.5 7l2.5 2.5L10.5 7"/>')}`;
     // The old bitmaps stretch to the new size at once; sharp ones replace them when zooming settles.
     clearTimeout(timer);
     timer = setTimeout(() => void renderAll(), 150);
@@ -159,7 +374,14 @@ export async function showPdf(data: Uint8Array, name: string, host: Host): Promi
     }
   }
 
+  function fitTo(mode: Fit): void {
+    setZoom(fitZoom(mode));
+    fit = mode;
+    if (mode === "page" && page >= 0) goTo(page);
+  }
+
   function setZoom(next: number): void {
+    fit = null;
     next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, next));
     // Keep the centre of the view in place.
     const k = next / zoom;
@@ -173,8 +395,15 @@ export async function showPdf(data: Uint8Array, name: string, host: Host): Promi
 
   function rotate(dir: number): void {
     turn = (turn + dir + 4) % 4;
-    layout();
+    if (fit) fitTo(fit);
+    else layout();
+    void drawThumbs();
   }
+
+  // Opening the sidebar or resizing the window keeps "fit width" or "fit page" fitting.
+  new ResizeObserver(() => {
+    if (fit && Math.abs(fitZoom(fit) - zoom) > 0.005) fitTo(fit);
+  }).observe(scroller);
 
   scroller.addEventListener(
     "wheel",
@@ -185,6 +414,177 @@ export async function showPdf(data: Uint8Array, name: string, host: Host): Promi
     },
     { passive: false },
   );
+
+  // ---- sidebar ----
+  function toggleSide(): void {
+    side.hidden = !side.hidden;
+    sideButton.ariaPressed = String(!side.hidden);
+    follow();
+  }
+
+  /** Where a PDF-space height on page i (from an outline entry; null for its top) is in the scrolled pages. */
+  function offsetOf(i: number, top: number | null): number {
+    const v = views[i];
+    const y = top === null || v.rotation % 180 ? 0 : Math.max(0, v.convertToViewportPoint(0, top)[1]); // sideways, top is a left
+    return sheets[i].box.offsetTop + y;
+  }
+
+  function goTo(i: number, top: number | null = null): void {
+    scroller.scrollTo({ top: offsetOf(i, top) - 16 });
+    page = i; // at once, before the scroll is tracked, so pressing → twice turns two pages
+  }
+
+  function addChapters(items: OutlineNode[], into: HTMLElement, depth: number, parent: Chapter | null): void {
+    for (const item of items) {
+      const row = el("div", "row");
+      row.style.paddingLeft = `${depth * 12}px`;
+      const title = el("button", "title");
+      title.textContent = title.title = item.title;
+      if (item.bold) title.style.fontWeight = "600";
+      if (item.italic) title.style.fontStyle = "italic";
+      const chapter: Chapter = { row, page: -1, top: null, parent, kids: null };
+      chapters.push(chapter);
+      if (item.items.length) {
+        const kids = (chapter.kids = el("div"));
+        kids.hidden = !((item.count ?? 0) > 0); // the PDF says which entries start open
+        const twisty = el("button", "twisty");
+        twisty.ariaLabel = "Show subsections";
+        twisty.ariaExpanded = String(!kids.hidden);
+        twisty.innerHTML = svg('<path d="M6 4l4 4-4 4"/>');
+        twisty.addEventListener("click", () => {
+          kids.hidden = !kids.hidden;
+          twisty.ariaExpanded = String(!kids.hidden);
+          follow(false);
+        });
+        row.append(twisty);
+        into.append(row, kids);
+        addChapters(item.items, kids, depth + 1, chapter);
+      } else {
+        row.append(el("span", "twisty"));
+        into.append(row);
+      }
+      row.append(title);
+      const target = destination(item.dest);
+      void target.then((t) => {
+        if (!t) return void (title.disabled = true); // a web link or a broken entry
+        chapter.page = t.page;
+        chapter.top = t.top;
+        follow(false);
+      });
+      title.addEventListener("click", () =>
+        void target.then((t) => {
+          if (!t) return;
+          pinned = chapter;
+          goTo(t.page, t.top);
+          follow();
+        }),
+      );
+    }
+  }
+
+  async function destination(dest: OutlineNode["dest"]): Promise<{ page: number; top: number | null } | null> {
+    try {
+      const d = typeof dest === "string" ? await pdf.getDestination(dest) : dest;
+      if (!d) return null;
+      const [ref, kind, ...args] = d as [unknown, { name: string }, ...(number | null)[]];
+      const page = Number.isInteger(ref) ? (ref as number) : await pdf.getPageIndex(ref as never);
+      const top = kind?.name === "XYZ" ? args[1] : kind?.name === "FitH" || kind?.name === "FitBH" ? args[0] : null;
+      return pages[page] ? { page, top: top ?? null } : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Thumbnails draw lazily as they scroll into the sidebar, closest to the page in view first.
+  const near = new Set<number>();
+  const watcher = new IntersectionObserver(
+    (entries) => {
+      for (const e of entries) {
+        const i = thumbs.findIndex((t) => t.button === e.target);
+        if (e.isIntersecting) near.add(i);
+        else near.delete(i);
+      }
+      void drawThumbs();
+    },
+    { root: thumbList, rootMargin: "400px 0px" },
+  );
+  for (const t of thumbs) watcher.observe(t.button);
+
+  let drawing = false;
+  async function drawThumbs(): Promise<void> {
+    if (drawing) return;
+    drawing = true;
+    const dpr = devicePixelRatio || 1;
+    const next = (): number | undefined =>
+      [...near].filter((n) => thumbs[n].turn !== turn).sort((a, b) => Math.abs(a - page) - Math.abs(b - page))[0];
+    for (let i; (i = next()) !== undefined; ) {
+      const at = turn;
+      const rotation = views[i].rotation;
+      const base = pages[i].getViewport({ scale: 1, rotation });
+      const viewport = pages[i].getViewport({ scale: (THUMB * dpr) / base.width, rotation });
+      const canvas = el("canvas");
+      canvas.width = Math.floor(viewport.width);
+      canvas.height = Math.floor(viewport.height);
+      try {
+        await pages[i].render({ canvas, viewport }).promise;
+      } catch {
+        thumbs[i].turn = at; // a broken page stays blank
+        continue;
+      }
+      if (at !== turn) continue; // rotated meanwhile: drawn again next round
+      thumbs[i].frame.replaceChildren(canvas);
+      thumbs[i].turn = at;
+    }
+    drawing = false;
+  }
+
+  // The page in view is the one under the reading line, near the top of the window but sliding to the
+  // bottom over the last screenful, so the chapters there can become current too.
+  let tracking = 0;
+  const unpin = (): void => void (pinned = null);
+  for (const type of ["wheel", "pointerdown", "touchstart"]) scroller.addEventListener(type, unpin, { passive: true });
+  addEventListener("keydown", unpin);
+  scroller.addEventListener("scroll", () => {
+    cancelAnimationFrame(tracking);
+    tracking = requestAnimationFrame(track);
+  });
+  function track(): void {
+    const { scrollTop, clientHeight, scrollHeight } = scroller;
+    const line = Math.min(clientHeight / 4, 96);
+    const y = scrollTop + Math.max(line, clientHeight - (scrollHeight - clientHeight - scrollTop));
+    let i = 0;
+    while (i < sheets.length - 1 && sheets[i + 1].box.offsetTop <= y) i++;
+    page = i;
+    reading = y;
+    if (document.activeElement !== pageField) pageField.value = labelOf(page);
+    follow();
+  }
+
+  /** Marks the page in view, and the chapter it's in, in the sidebar; with reveal, scrolls them into sight. */
+  function follow(reveal = true): void {
+    for (const t of thumbList.querySelectorAll("[aria-current]")) t.removeAttribute("aria-current");
+    for (const r of outlineList.querySelectorAll("[aria-current]")) r.removeAttribute("aria-current");
+    if (page < 0) return;
+    thumbs[page].button.ariaCurrent = "page";
+    // The last chapter starting above the reading line; hidden in a closed parent, that parent.
+    let chapter = pinned;
+    if (!chapter) {
+      let best = -Infinity;
+      for (const c of chapters) {
+        const at = c.page < 0 ? Infinity : offsetOf(c.page, c.top);
+        if (at <= reading && at >= best) (chapter = c), (best = at);
+      }
+    }
+    for (let up = chapter?.parent; up; up = up.parent) if (up.kids?.hidden) chapter = up;
+    chapter?.row.setAttribute("aria-current", "true");
+    if (side.hidden || !reveal) return;
+    const shown = thumbList.hidden ? chapter?.row : thumbs[page].button;
+    const list = thumbList.hidden ? outlineList : thumbList;
+    if (!shown) return;
+    if (shown.offsetTop < list.scrollTop) list.scrollTop = shown.offsetTop - 8;
+    else if (shown.offsetTop + shown.offsetHeight > list.scrollTop + list.clientHeight)
+      list.scrollTop = shown.offsetTop + shown.offsetHeight - list.clientHeight + 8;
+  }
 
   // ---- overlay: search highlights + ink ----
   function paint(i: number): void {
@@ -220,7 +620,7 @@ export async function showPdf(data: Uint8Array, name: string, host: Host): Promi
     const overlay = sheets[i].overlay;
     overlay.setPointerCapture(e.pointerId);
     const at = (m: PointerEvent): Point => views[i].convertToPdfPoint(m.offsetX, m.offsetY) as Point;
-    const stroke: Stroke = { color, width: 2, points: [at(e)] };
+    const stroke: Stroke = { color, width: thickness, points: [at(e)] };
     ink[i].push(stroke);
     drawn.push(i);
     changed();
@@ -236,21 +636,23 @@ export async function showPdf(data: Uint8Array, name: string, host: Host): Promi
   function togglePen(): void {
     pen = !pen;
     penButton.ariaPressed = String(pen);
+    markup.hidden = !pen;
     document.body.classList.toggle("pen", pen);
   }
 
   function undo(): void {
-    const i = drawn.pop();
-    if (i === undefined) return;
-    ink[i].pop();
+    const last = drawn.pop();
+    if (last === undefined) return;
+    if (typeof last === "number") ink[last].pop();
+    else last.forEach((strokes, i) => ink[i].push(...strokes)); // undo a clear
     changed();
-    paint(i);
+    sheets.forEach((_, i) => paint(i));
   }
 
+  // Undoable, so it doesn't ask first.
   function clearInk(): void {
-    if (!drawn.length) return;
-    for (const strokes of ink) strokes.length = 0;
-    drawn.length = 0;
+    if (!ink.some((strokes) => strokes.length)) return;
+    drawn.push(ink.map((strokes) => strokes.splice(0)));
     changed();
     sheets.forEach((_, i) => paint(i));
   }
@@ -260,6 +662,7 @@ export async function showPdf(data: Uint8Array, name: string, host: Host): Promi
   function changed(): void {
     if (!dirty) host.setTitle(`${name} •`);
     dirty = true;
+    sync();
   }
 
   // Every save starts from the file as it was opened plus all current strokes, so saving
@@ -282,6 +685,7 @@ export async function showPdf(data: Uint8Array, name: string, host: Host): Promi
       dirty = false;
       host.setTitle(name);
       status.textContent = "Saved";
+      sync();
     } catch (error) {
       status.textContent = `Couldn't save (${errorCode(error)})`;
     } finally {
@@ -293,6 +697,11 @@ export async function showPdf(data: Uint8Array, name: string, host: Host): Promi
   }
 
   // ---- search ----
+  // Glyph widths aren't in the text content, so a match's share of its run is measured in a stand-in font.
+  const ruler = el("canvas").getContext("2d")!;
+  ruler.font = "100px serif";
+  const share = (str: string, upto: number): number => ruler.measureText(str.slice(0, upto)).width / ruler.measureText(str).width;
+
   async function search(next: string): Promise<void> {
     query = next;
     texts ??= await Promise.all(
@@ -305,19 +714,22 @@ export async function showPdf(data: Uint8Array, name: string, host: Host): Promi
       texts.forEach((items, page) => {
         for (const item of items) {
           const s = item.str.toLowerCase();
-          const per = item.width / item.str.length;
           const [, , c, d, x, y] = item.transform;
           const height = Math.hypot(c, d);
           for (let at = s.indexOf(q); at >= 0; at = s.indexOf(q, at + q.length)) {
-            const left = x + per * at;
-            hits.push({ page, from: [left, y - 0.25 * height], to: [left + per * q.length, y + 0.9 * height] });
+            const from = x + item.width * share(item.str, at);
+            const to = x + item.width * share(item.str, at + q.length);
+            hits.push({ page, from: [from, y - 0.25 * height], to: [to, y + 0.9 * height] });
           }
         }
       });
     }
-    current = hits.length ? 0 : -1;
+    // Start from the page in view rather than the top of the document.
+    const ahead = hits.findIndex((hit) => hit.page >= page);
+    current = hits.length ? Math.max(0, ahead) : -1;
     sheets.forEach((_, i) => paint(i));
     reveal();
+    sync();
   }
 
   function step(dir: number): void {
@@ -331,7 +743,8 @@ export async function showPdf(data: Uint8Array, name: string, host: Host): Promi
   }
 
   function reveal(): void {
-    count.textContent = !query ? "" : hits.length ? `${current + 1}/${hits.length}` : "No matches";
+    count.textContent = !query ? "" : hits.length ? `${current + 1} of ${hits.length}` : "No matches";
+    count.classList.toggle("none", !!query && !hits.length);
     const hit = hits[current];
     if (!hit) return;
     const box = sheets[hit.page].box;
@@ -345,12 +758,15 @@ export async function showPdf(data: Uint8Array, name: string, host: Host): Promi
 
   find.addEventListener("keydown", (e) => {
     if (e.key === "Enter") step(e.shiftKey ? -1 : 1);
-    else if (e.key === "Escape") (find.value = ""), void search(""), find.blur();
+    else if (e.key === "Escape") (find.value = ""), void search(""), scroller.focus();
     else return;
     e.preventDefault();
   });
-  find.addEventListener("search", () => {
-    if (!find.value) void search(""); // the field's clear button
+  // Searches as you type, once typing pauses.
+  let typing: ReturnType<typeof setTimeout> | undefined;
+  find.addEventListener("input", () => {
+    clearTimeout(typing);
+    typing = setTimeout(() => find.value !== query && void search(find.value), find.value ? 250 : 0);
   });
 
   // ---- file info ----
@@ -400,12 +816,20 @@ export async function showPdf(data: Uint8Array, name: string, host: Host): Promi
     const mod = e.metaKey || e.ctrlKey;
     if (mod && e.key.toLowerCase() === "f") return void (e.preventDefault(), find.focus(), find.select());
     if (mod && e.key.toLowerCase() === "s") return void (e.preventDefault(), save());
-    if (e.target instanceof HTMLInputElement || document.querySelector("dialog[open]")) return;
+    if (e.target instanceof HTMLInputElement || document.querySelector("dialog[open], :popover-open")) return;
+    // Left and right turn pages, unless they're needed to scroll a page wider than the view.
+    const across = scroller.scrollWidth > scroller.clientWidth;
     if (mod && e.key.toLowerCase() === "z") undo();
     else if (mod || e.altKey) return;
+    else if (e.key === "Escape" && pen) togglePen();
+    else if (e.key === "ArrowLeft" && !across) (pinned = null), goTo(Math.max(0, page - 1));
+    else if (e.key === "ArrowRight" && !across) (pinned = null), goTo(Math.min(pages.length - 1, page + 1));
     else if (e.key === "+" || e.key === "=") setZoom(zoom * STEP);
     else if (e.key === "-" || e.key === "_") setZoom(zoom / STEP);
-    else if (e.key === "0") setZoom(fitWidth());
+    else if (e.key === "0") fitTo("width");
+    else if (e.key === "9") fitTo("page");
+    else if (e.key === "1") setZoom(1);
+    else if (e.key.toLowerCase() === "s") toggleSide();
     else if (e.key.toLowerCase() === "r") rotate(e.shiftKey ? -1 : 1);
     else if (e.key.toLowerCase() === "d") togglePen();
     else if (e.key.toLowerCase() === "i") void showInfo();
@@ -414,6 +838,9 @@ export async function showPdf(data: Uint8Array, name: string, host: Host): Promi
   });
 
   layout();
+  track();
+  sync();
+  scroller.focus({ preventScroll: true });
   await renderAll();
 }
 

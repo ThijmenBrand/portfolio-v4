@@ -8,7 +8,7 @@ type Direction = (typeof DIRECTIONS)[number];
 /**
  * Resize from any edge or corner. On a tiled window, an edge it shares with
  * other tiles moves the split (every tile follows); any other edge lets the
- * window float first.
+ * window float first. Double-clicking an edge stretches it to the screen's.
  */
 export function enableResize(
   record: Readonly<WindowRecord>,
@@ -68,8 +68,16 @@ export function enableResize(
     );
     if (!handle) return [];
     const handler = (event: MouseEvent) => startResize(event, direction);
+    const stretch = (event: MouseEvent) => {
+      if (event.button !== 0) return;
+      commands.stretch(new Set(direction.split("") as Edge[]));
+    };
     handle.addEventListener("mousedown", handler);
-    return [() => handle.removeEventListener("mousedown", handler)];
+    handle.addEventListener("dblclick", stretch);
+    return [
+      () => handle.removeEventListener("mousedown", handler),
+      () => handle.removeEventListener("dblclick", stretch),
+    ];
   });
 
   return () => handlers.forEach((remove) => remove());
