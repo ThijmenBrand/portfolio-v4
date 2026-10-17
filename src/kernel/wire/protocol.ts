@@ -101,6 +101,7 @@ export const WIRE_CALLS = {
   "windows.list": "listWindows",
   "windows.focus": "focusWindow",
   "windows.setMinimized": "setMinimized",
+  "windows.tile": "tileWindow",
   "windows.setTitle": "setWindowTitle",
   "windows.close": "closeWindow",
   "windows.onCloseRequest": "onWindowCloseRequest",

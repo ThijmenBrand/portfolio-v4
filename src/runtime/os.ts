@@ -54,6 +54,7 @@ export function buildAppInterface(client: WireClient, pid: Pid): AppInterface {
       focus: (windowId) => call("windows.focus", windowId),
       setMinimized: (windowId, minimized) =>
         call("windows.setMinimized", windowId, minimized),
+      tile: (windowId, target) => call("windows.tile", windowId, target),
       setTitle: (windowId, title) => call("windows.setTitle", windowId, title),
       close: (windowId) => call("windows.close", windowId),
       onCloseRequest: (windowId, callback) =>

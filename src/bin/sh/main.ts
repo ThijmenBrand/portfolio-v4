@@ -1143,6 +1143,7 @@ export const HELP = [
   "text:      head  tail  wc  grep  sort  uniq  tee  diff  sed  less",
   "find:      tree  find [-name glob]  stat  which  xargs  du  df",
   "procs:     ps   kill [-SIGNAL] pid|-pgid   sleep N",
+  "windows:   wm (list)   wm <id> left|right|top-left|…|maximize|restore",
   "jobs:      cmd &   jobs   fg [%n]   bg [%n]   Ctrl-Z stops, Ctrl-C interrupts",
   "terminal:  stty [size | -a | [-]echo | [-]icanon | [-]isig]",
   "dev:       json [-m]  base64 [-d]  jwt  urlencode [-d]  uuid [-n N]  epoch [time]",

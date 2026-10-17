@@ -21,6 +21,7 @@ import {
 } from "../../utils/settings";
 import { shortcutsTo } from "../../utils/filetypes";
 import { confirmDialog } from "../../utils/confirm";
+import { SnapAssist, type AppLook } from "./snapassist";
 
 const DEFAULT_ICON = "/assets/icons/default-app.svg";
 const SETTINGS = "/ProgramFiles/settings";
@@ -69,6 +70,7 @@ class Taskbar {
   private apps: AppEntry[] = registry;
   private gid = -1;
   private readonly pinButtons = new Map<string, HTMLElement>();
+  private readonly snapAssist: SnapAssist;
 
   constructor(os: SystemInterface, root: HTMLElement) {
     this.os = os;
@@ -84,6 +86,7 @@ class Taskbar {
     this.bar = bar;
 
     this.pinList = this.require("#taskbar-pins");
+    this.snapAssist = new SnapAssist(os, root, (pid) => this.look(pid));
   }
 
   private require<T extends HTMLElement>(selector: string): T {
@@ -105,6 +108,7 @@ class Taskbar {
     await this.seed();
     await this.subscribe();
     await this.startStatusItems();
+    await this.snapAssist.start();
 
     await this.os.process.onSignal("SIGTERM", () => {
       clearInterval(this.clockTimer);
@@ -134,6 +138,7 @@ class Taskbar {
     let format = clockFormat(initial);
     this.animateMinimize = initial.animateMinimize;
     await this.applyDock(initial);
+    await this.applySnapping(initial);
     const tick = (): void => {
       const now = new Date();
       clock.textContent = format.format(now);
@@ -150,7 +155,11 @@ class Taskbar {
           tick();
           this.animateMinimize = settings.animateMinimize;
           for (const pid of this.groups.keys()) this.renderGroup(pid);
-          return Promise.all([this.applyDock(settings), this.loadPins()]);
+          return Promise.all([
+            this.applyDock(settings),
+            this.applySnapping(settings),
+            this.loadPins(),
+          ]);
         })
         .catch(logError);
     });
@@ -172,13 +181,20 @@ class Taskbar {
     });
   }
 
+  /** The kernel snaps windows; whether a drag to the edge does is the user's call. */
+  private async applySnapping(settings: Settings): Promise<void> {
+    this.snapAssist.enabled = settings.snapAssist;
+    if (!settings.snapAssist) this.snapAssist.dismiss();
+    await this.os.windows.setPolicy({ snap: settings.snapWindows });
+  }
+
   /** Alignment and auto-hide are CSS (data-align, data-hide); the strut follows auto-hide. */
   private async applyDock(settings: Settings): Promise<void> {
     this.bar.dataset.align = settings.dockAlign;
     this.bar.dataset.hide = settings.dockHide;
     this.bar.dataset.size = settings.dockSize;
     // ponytail: phones never hide the dock (taskbar.css), but "always" still drops the strut there
-    const size = settings.dockHide === "always" ? 0 : this.bar.offsetHeight || 64;
+    const size = settings.dockHide === "always" ? 0 : this.bar.offsetHeight || 76;
     if (size === (this.strut?.size ?? 0)) return;
     if (this.strut) await this.os.display.releaseStrut(this.strut.id);
     this.strut = size
@@ -605,15 +621,24 @@ class Taskbar {
     return group;
   }
 
+  /** An app's name and icon, from its process's exec path. */
+  private look(pid: Pid): AppLook {
+    const path = this.groups.get(pid)?.path ?? this.pathFor(pid);
+    const entry = this.apps.find((app) => app.exec === path);
+    return {
+      name: entry?.name ?? path.split("/").pop() ?? `pid ${pid}`,
+      icon: entry?.icon ?? DEFAULT_ICON,
+    };
+  }
+
   private renderGroup(pid: Pid): void {
     const group = this.groups.get(pid);
     if (!group) return;
 
-    const entry = this.apps.find((app) => app.exec === group.path);
-    const name = entry?.name ?? group.path.split("/").pop() ?? `pid ${pid}`;
+    const { name, icon } = this.look(pid);
     const windows = [...group.windows.values()];
 
-    group.icon.src = entry?.icon ?? DEFAULT_ICON;
+    group.icon.src = icon;
     group.icon.alt = ""; // the label is the button's name (and its hover tooltip)
     group.label.textContent = name;
     group.count.textContent = windows.length > 1 ? String(windows.length) : "";

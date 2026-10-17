@@ -6,10 +6,26 @@ import type {
   WindowEvents,
   WindowInfo,
   WindowOptions,
+  WindowPolicy,
   WindowRecord,
   WindowSystemActions,
   WorkArea,
 } from "./types";
+import {
+  EVEN_SPLIT,
+  innerEdges,
+  keyStep,
+  splitBounds,
+  tileFrame,
+  unsnapFrame,
+  zoneAt,
+  type Arrow,
+  type Edge,
+  type SnapTarget,
+  type Split,
+  type TileZone,
+} from "./snap";
+import { SnapLayouts } from "./snapLayouts";
 import { WindowGeometry, type WindowGeometryInterface } from "./geometry";
 import { WindowChrome, type WindowChromeInterface } from "./windowChrome";
 import { enableResize } from "./interactions/resize";
@@ -30,6 +46,16 @@ import { isPhone } from "../../utils/phone";
 const DOUBLE_CLICK_MS = 500;
 const FORCE_WINDOW_MS = 5000;
 
+/** Title bar height (window.css): a window dragged out of a tile is grabbed inside it. */
+const TITLE_BAR = 34;
+
+const ARROWS: Record<string, Arrow> = {
+  ArrowLeft: "left",
+  ArrowRight: "right",
+  ArrowUp: "up",
+  ArrowDown: "down",
+};
+
 export class WindowManager implements WindowManagerInterface {
   private readonly WindowGeometry: WindowGeometryInterface;
   private readonly WindowChrome: WindowChromeInterface;
@@ -43,6 +69,15 @@ export class WindowManager implements WindowManagerInterface {
   private nextWindowId: number = 1;
   private zCounter: number = 0;
   private focusedId: number | null = null;
+
+  /** Where tiles meet. Shared by every tiled window; reset when the first one tiles. */
+  private split: Split = { ...EVEN_SPLIT };
+  /** A shared-edge resize in progress: which edges, and the split it started from. */
+  private splitDrag: { edges: ReadonlySet<Edge>; start: Split } | undefined;
+  private policy: WindowPolicy = { snap: true };
+  private preview: HTMLElement | undefined;
+  private previewOwner: WindowId | null = null;
+  private readonly layouts: SnapLayouts;
 
   constructor(
     windowLayer: HTMLElement,
@@ -73,6 +108,33 @@ export class WindowManager implements WindowManagerInterface {
       event.preventDefault();
       this.cycleFocus();
     });
+
+    // Ctrl+Alt+Arrow snaps the focused window. App frames forward it (frame.ts → realm.ts).
+    document.addEventListener("keydown", (event) => {
+      const arrow = ARROWS[event.key];
+      if (!arrow || !event.ctrlKey || !event.altKey || event.metaKey || event.shiftKey) return;
+      if (this.focusedId === null) return;
+      event.preventDefault();
+      this.keyTile(this.focusedId as WindowId, arrow);
+    });
+
+    this.layouts = new SnapLayouts(windowLayer, {
+      topZ: () => this.zCounter + 1,
+      preview: (windowId, zone) => {
+        const record = this.windows.get(windowId);
+        // Over its own window: picking from the menu doesn't move the window out of the way.
+        if (record) this.showPreview(record, zone, true);
+      },
+      pick: (windowId, zone) => {
+        if (!this.windows.has(windowId)) return;
+        this.tileWindow(windowId, zone);
+        this.focusWindow(windowId);
+      },
+    });
+  }
+
+  public setPolicy(policy: WindowPolicy): void {
+    this.policy = { snap: policy.snap !== false };
   }
 
   /** Raise the bottom-most visible window: repeated presses round-robin through all of them. */
@@ -159,7 +221,7 @@ export class WindowManager implements WindowManagerInterface {
 
   public moveWindow(windowId: WindowId, x: number, y: number): void {
     const windowRecord = this.getWindowRecord(windowId);
-    if (windowRecord.state === "maximized") return;
+    if (windowRecord.state !== "normal") return;
 
     // prevent frame from going y negative (off the top of the screen)
     if (y < 0) y = 0;
@@ -172,7 +234,7 @@ export class WindowManager implements WindowManagerInterface {
 
   public resizeWindow(windowId: WindowId, frame: Rect): void {
     const windowRecord = this.getWindowRecord(windowId);
-    if (windowRecord.state === "maximized") return;
+    if (windowRecord.state !== "normal") return;
 
     windowRecord.frame = this.WindowGeometry.clampToConstraints(
       frame,
@@ -197,6 +259,8 @@ export class WindowManager implements WindowManagerInterface {
     if (state === "normal" && isPhone()) return;
     windowRecord.restoreFrame ??= { ...windowRecord.frame };
 
+    const before = windowRecord.state;
+
     if (state === "normal") {
       windowRecord.state = "normal";
       windowRecord.frame = { ...windowRecord.restoreFrame };
@@ -205,12 +269,68 @@ export class WindowManager implements WindowManagerInterface {
       windowRecord.frame = this.maximizedFrame();
       windowRecord.state = "maximized";
     }
+    windowRecord.tile = undefined;
 
     this.WindowChrome.applyFrameToWindow(windowRecord);
     this.WindowChrome.applyStateToWindow(
       windowRecord,
       this.focusedId === windowId,
     );
+    if (before !== windowRecord.state) this.emitState(windowRecord);
+  }
+
+  /**
+   * Snap a window into a tile of the work area. false if the window's
+   * minimum size doesn't fit there (or on a phone, where every window is full).
+   */
+  public tileWindow(windowId: WindowId, zone: TileZone): boolean {
+    const record = this.getWindowRecord(windowId);
+    if (isPhone()) return false;
+    const split = this.splitFor(record);
+    const frame = tileFrame(zone, this.workArea.get(), split);
+    if (!this.fits(record, frame)) return false;
+
+    this.split = split;
+    if (record.state === "normal") record.restoreFrame = { ...record.frame };
+    const changed = record.state !== "tiled" || record.tile !== zone;
+    record.state = "tiled";
+    record.tile = zone;
+    record.frame = frame;
+
+    this.WindowChrome.applyFrameToWindow(record);
+    this.WindowChrome.applyStateToWindow(record, this.focusedId === windowId);
+    if (changed) this.emitState(record);
+    return true;
+  }
+
+  /** Tile, maximize or restore: `windows.tile`. Throws EINVAL where the window can't go. */
+  public arrange(windowId: WindowId, target: SnapTarget | "restore"): void {
+    const record = this.getWindowRecord(windowId);
+    if (target === "restore") {
+      if (record.state !== "normal") this.setWindowState(windowId, "normal");
+    } else if (target === "maximize") {
+      this.setWindowState(windowId, "maximized");
+    } else if (!this.tileWindow(windowId, target)) {
+      throw kernelError("EINVAL", `Window ${windowId} doesn't fit the ${target} tile`);
+    }
+  }
+
+  /** Ctrl+Alt+Arrow on a window: see snap.ts keyStep. */
+  public keyTile(windowId: WindowId, arrow: Arrow): void {
+    if (isPhone()) return;
+    const record = this.getWindowRecord(windowId);
+    const current =
+      record.state === "tiled" && record.tile
+        ? record.tile
+        : record.state === "maximized"
+          ? "maximize"
+          : "normal";
+    const next = keyStep(current, arrow);
+    if (next === null) return;
+    if (next === "minimize") this.setMinimized(windowId, true);
+    else if (next === "normal") this.setWindowState(windowId, "normal");
+    else if (next === "maximize") this.setWindowState(windowId, "maximized");
+    else this.tileWindow(windowId, next);
   }
 
   public setMinimized(windowId: WindowId, minimized: boolean): void {
@@ -235,6 +355,8 @@ export class WindowManager implements WindowManagerInterface {
 
   public destroy(windowId: WindowId): void {
     const record = this.getWindowRecord(windowId);
+    this.layouts.close(windowId);
+    if (this.previewOwner === windowId) this.showPreview(record, null);
 
     record.disposers.forEach((dispose) => {
       try {
@@ -369,14 +491,17 @@ export class WindowManager implements WindowManagerInterface {
       title: record.titleEl.textContent || "",
       minimized: record.minimized,
       state: record.state,
+      tile: record.tile,
+      frame: { ...record.frame },
       focused: this.focusedId === record.id,
     }));
   }
 
-  public reflowMaximized(): void {
+  /** The work area changed: maximized and tiled windows follow it. */
+  public reflowLayout(): void {
     const phone = isPhone();
     for (const record of this.windows.values()) {
-      // Shrinking into phone mode (rotation, narrow browser) maximizes floating windows too.
+      // Shrinking into phone mode (rotation, narrow browser) maximizes floating and tiled windows too.
       if (phone && record.state !== "maximized") {
         this.setWindowState(record.id, "maximized");
         continue;
@@ -385,6 +510,7 @@ export class WindowManager implements WindowManagerInterface {
       record.frame = this.maximizedFrame();
       this.WindowChrome.applyFrameToWindow(record);
     }
+    this.reflowTiles();
   }
 
   public attachSheet(windowId: WindowId, el: HTMLElement): () => void {
@@ -432,6 +558,155 @@ export class WindowManager implements WindowManagerInterface {
       .finally(() => record.root.classList.remove("minimizing"));
   }
 
+  private emitState(record: WindowRecord): void {
+    this.layouts.close(record.id);
+    this.events.emit({
+      type: "window.stateChanged",
+      pid: record.ownerPid,
+      windowId: record.id,
+      state: record.state,
+      tile: record.tile,
+      frame: { ...record.frame },
+    });
+  }
+
+  private tiledRecords(except?: WindowRecord): WindowRecord[] {
+    return [...this.windows.values()].filter(
+      (record) => record.state === "tiled" && record !== except,
+    );
+  }
+
+  /** The split a window tiling now would use: the current one, or even if it's the first tile. */
+  private splitFor(record: WindowRecord): Split {
+    return this.tiledRecords(record).length > 0
+      ? { ...this.split }
+      : { ...EVEN_SPLIT };
+  }
+
+  private fits(record: WindowRecord, frame: Rect): boolean {
+    return (
+      frame.width >= record.constraints.minWidth &&
+      frame.height >= record.constraints.minHeight
+    );
+  }
+
+  /** Re-place every tile on the current split and work area. */
+  private reflowTiles(): void {
+    const area = this.workArea.get();
+    for (const record of this.tiledRecords()) {
+      if (!record.tile) continue;
+      record.frame = tileFrame(record.tile, area, this.split);
+      this.WindowChrome.applyFrameToWindow(record);
+    }
+  }
+
+  /** Where a snap target would put this window, or null if it can't go there. */
+  private targetFrame(record: WindowRecord, target: SnapTarget): Rect | null {
+    if (target === "maximize") return this.maximizedFrame();
+    const frame = tileFrame(target, this.workArea.get(), this.splitFor(record));
+    return this.fits(record, frame) ? frame : null;
+  }
+
+  /**
+   * The translucent outline of where a drag (or a layouts cell) would put
+   * the window. For a drag it is drawn under the window and over the rest: it
+   * shares the window's z-index and comes first in the layer, so the window
+   * paints on top. `above` puts it over every window instead.
+   */
+  private showPreview(
+    record: WindowRecord,
+    target: SnapTarget | null,
+    above = false,
+  ): void {
+    const frame = target ? this.targetFrame(record, target) : null;
+    const preview = this.preview;
+    if (!frame) {
+      preview?.classList.remove("visible");
+      this.previewOwner = null;
+      return;
+    }
+
+    const element = this.preview ?? document.createElement("div");
+    if (!this.preview) {
+      element.className = "snap-preview";
+      element.setAttribute("aria-hidden", "true");
+      this.preview = element;
+    }
+    if (element.parentElement !== this.windowLayer) this.windowLayer.prepend(element);
+    element.style.zIndex = String(above ? this.zCounter + 1 : record.zIndex);
+
+    // Grow out of the window itself, not from wherever the last preview was.
+    if (!element.classList.contains("visible") || this.previewOwner !== record.id) {
+      element.style.transition = "none";
+      this.placeElement(element, record.frame);
+      void element.offsetWidth;
+      element.style.transition = "";
+    }
+    this.previewOwner = record.id;
+    this.placeElement(element, frame);
+    element.classList.add("visible");
+  }
+
+  private placeElement(element: HTMLElement, frame: Rect): void {
+    element.style.left = `${frame.x}px`;
+    element.style.top = `${frame.y}px`;
+    element.style.width = `${frame.width}px`;
+    element.style.height = `${frame.height}px`;
+  }
+
+  /** A drag leaves a tile or maximize: float at the restore size under the pointer. */
+  private unsnapForDrag(record: WindowRecord, pointer: { x: number; y: number }): void {
+    if (record.state === "normal" || isPhone()) return;
+    const restore = record.restoreFrame ?? record.frame;
+    record.frame = unsnapFrame(restore, record.frame, pointer, TITLE_BAR);
+    record.state = "normal";
+    record.tile = undefined;
+    record.restoreFrame = undefined;
+    this.WindowChrome.applyFrameToWindow(record);
+    this.WindowChrome.applyStateToWindow(record, this.focusedId === record.id);
+    this.emitState(record);
+  }
+
+  /** A tiled window resized on an outer edge: it floats from here, at the frame it has. */
+  private float(record: WindowRecord): void {
+    if (record.state !== "tiled") return;
+    record.state = "normal";
+    record.tile = undefined;
+    record.restoreFrame = undefined;
+    this.WindowChrome.applyStateToWindow(record, this.focusedId === record.id);
+    this.emitState(record);
+  }
+
+  private beginSplitResize(record: WindowRecord, edges: ReadonlySet<Edge>): boolean {
+    this.splitDrag = undefined;
+    if (record.state !== "tiled" || !record.tile || edges.size === 0) return false;
+    const inner = innerEdges(record.tile);
+    if (![...edges].every((edge) => inner.has(edge))) return false;
+    this.splitDrag = { edges, start: { ...this.split } };
+    return true;
+  }
+
+  private moveSplit(dx: number, dy: number): void {
+    if (!this.splitDrag) return;
+    const { edges, start } = this.splitDrag;
+    const area = this.workArea.get();
+    const tiles = this.tiledRecords().flatMap((record) =>
+      record.tile ? [{ zone: record.tile, ...record.constraints }] : [],
+    );
+    const next = { ...this.split };
+    const clamp = (value: number, { min, max }: { min: number; max: number }) =>
+      min > max ? undefined : Math.min(Math.max(value, min), max);
+
+    if ((edges.has("e") || edges.has("w")) && area.width > 0) {
+      next.x = clamp(start.x + dx / area.width, splitBounds("x", tiles, area)) ?? next.x;
+    }
+    if ((edges.has("n") || edges.has("s")) && area.height > 0) {
+      next.y = clamp(start.y + dy / area.height, splitBounds("y", tiles, area)) ?? next.y;
+    }
+    this.split = next;
+    this.reflowTiles();
+  }
+
   /** Fullscreen: maximized windows cover the whole screen (topbar, dock and title bar auto-hide over them). */
   private maximizedFrame(): Rect {
     const area = this.workArea.get();
@@ -475,6 +750,27 @@ export class WindowManager implements WindowManagerInterface {
       resizeWindow: (frame: Rect) => this.resizeWindow(windowRecord.id, frame),
       setWindowState: (state: "normal" | "maximized") =>
         this.setWindowState(windowRecord.id, state),
+      unsnapForDrag: (pointer) => {
+        this.layouts.close();
+        this.unsnapForDrag(windowRecord, pointer);
+      },
+      snapTargetAt: (x, y) => {
+        if (!this.policy.snap || isPhone()) return null;
+        const target = zoneAt(x, y, { width: innerWidth, height: innerHeight });
+        return target && this.targetFrame(windowRecord, target) ? target : null;
+      },
+      previewSnap: (target) => this.showPreview(windowRecord, target),
+      snapTo: (target) => {
+        if (target === "maximize") this.setWindowState(windowRecord.id, "maximized");
+        else this.tileWindow(windowRecord.id, target);
+      },
+      beginSplitResize: (edges) => this.beginSplitResize(windowRecord, edges),
+      moveSplit: (dx, dy) => this.moveSplit(dx, dy),
+      float: () => this.float(windowRecord),
+      hoverLayouts: (button, over) => {
+        if (!isPhone()) this.layouts.hover(windowRecord.id, button, over);
+      },
+      closeLayouts: () => this.layouts.close(windowRecord.id),
       minimizeWindow: () => this.setMinimized(windowRecord.id, true),
       focusWindow: () => this.focusWindow(windowRecord.id),
       requestClose: () => this.requestClose(windowRecord.id),

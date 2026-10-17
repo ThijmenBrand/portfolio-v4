@@ -1,76 +1,57 @@
-import { selectElementFromTemplate } from "../../../utils/html";
+import type { Edge } from "../snap";
 import type { WindowCommmands, WindowRecord } from "../types";
 import { shieldIframes, unshieldIframes } from "./shield";
 
+const DIRECTIONS = ["n", "s", "e", "w", "ne", "nw", "se", "sw"] as const;
+type Direction = (typeof DIRECTIONS)[number];
+
+/**
+ * Resize from any edge or corner. On a tiled window, an edge it shares with
+ * other tiles moves the split (every tile follows); any other edge lets the
+ * window float first.
+ */
 export function enableResize(
   record: Readonly<WindowRecord>,
   commands: WindowCommmands,
 ): () => void {
-  const seResizeHandle = selectElementFromTemplate<HTMLElement>(
-    record.root,
-    "#se-resize-handle",
-  );
-  const eResizeHandle = selectElementFromTemplate<HTMLElement>(
-    record.root,
-    "#e-resize-handle",
-  );
-  const sResizeHandle = selectElementFromTemplate<HTMLElement>(
-    record.root,
-    "#s-resize-handle",
-  );
+  const startResize = (event: MouseEvent, direction: Direction) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    commands.closeLayouts();
 
-  let isResizing = false;
-  let initialMouseX = 0;
-  let initialMouseY = 0;
-  let initialWidth = 0;
-  let initialHeight = 0;
+    const edges = new Set(direction.split("") as Edge[]);
+    const splitting = commands.beginSplitResize(edges);
+    if (!splitting) commands.float();
 
-  const startResize = (event: MouseEvent, direction: "se" | "e" | "s") => {
-    isResizing = true;
-    initialMouseX = event.clientX;
-    initialMouseY = event.clientY;
-    initialWidth = record.frame.width;
-    initialHeight = record.frame.height;
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const start = { ...record.frame };
+    const { minWidth, maxWidth, minHeight, maxHeight } = record.constraints;
+    const clamp = (value: number, min: number, max: number) =>
+      Math.max(min, Math.min(value, max));
 
     const onMouseMove = (moveEvent: MouseEvent) => {
-      if (!isResizing) return;
+      const dx = moveEvent.clientX - startX;
+      const dy = moveEvent.clientY - startY;
+      if (splitting) return commands.moveSplit(dx, dy);
 
-      const deltaX = moveEvent.clientX - initialMouseX;
-      const deltaY = moveEvent.clientY - initialMouseY;
-
-      if (direction === "se") {
-        commands.resizeWindow({
-          ...record.frame,
-          width: Math.max(
-            record.constraints.minWidth,
-            Math.min(initialWidth + deltaX, record.constraints.maxWidth),
-          ),
-          height: Math.max(
-            record.constraints.minHeight,
-            Math.min(initialHeight + deltaY, record.constraints.maxHeight),
-          ),
-        });
-      } else if (direction === "e") {
-        commands.resizeWindow({
-          ...record.frame,
-          width: Math.max(
-            record.constraints.minWidth,
-            Math.min(initialWidth + deltaX, record.constraints.maxWidth),
-          ),
-        });
-      } else if (direction === "s") {
-        commands.resizeWindow({
-          ...record.frame,
-          height: Math.max(
-            record.constraints.minHeight,
-            Math.min(initialHeight + deltaY, record.constraints.maxHeight),
-          ),
-        });
+      const frame = { ...start };
+      if (edges.has("e")) frame.width = clamp(start.width + dx, minWidth, maxWidth);
+      if (edges.has("w")) {
+        frame.width = clamp(start.width - dx, minWidth, maxWidth);
+        frame.x = start.x + start.width - frame.width;
       }
+      if (edges.has("s")) frame.height = clamp(start.height + dy, minHeight, maxHeight);
+      if (edges.has("n")) {
+        // The title bar must stay reachable: the top edge stops at the screen's.
+        const bottom = start.y + start.height;
+        frame.height = clamp(start.height - dy, minHeight, Math.min(maxHeight, bottom));
+        frame.y = bottom - frame.height;
+      }
+      commands.resizeWindow(frame);
     };
 
     const onMouseUp = () => {
-      isResizing = false;
       unshieldIframes();
       document.removeEventListener("mousemove", onMouseMove);
       document.removeEventListener("mouseup", onMouseUp);
@@ -81,17 +62,15 @@ export function enableResize(
     document.addEventListener("mouseup", onMouseUp);
   };
 
-  const seResizeHandler = (event: MouseEvent) => startResize(event, "se");
-  const eResizeHandler = (event: MouseEvent) => startResize(event, "e");
-  const sResizeHandler = (event: MouseEvent) => startResize(event, "s");
+  const handlers = DIRECTIONS.flatMap((direction) => {
+    const handle = record.root.querySelector<HTMLElement>(
+      `.resize-handle[data-direction="${direction}"]`,
+    );
+    if (!handle) return [];
+    const handler = (event: MouseEvent) => startResize(event, direction);
+    handle.addEventListener("mousedown", handler);
+    return [() => handle.removeEventListener("mousedown", handler)];
+  });
 
-  seResizeHandle.addEventListener("mousedown", seResizeHandler);
-  eResizeHandle.addEventListener("mousedown", eResizeHandler);
-  sResizeHandle.addEventListener("mousedown", sResizeHandler);
-
-  return () => {
-    seResizeHandle.removeEventListener("mousedown", seResizeHandler);
-    eResizeHandle.removeEventListener("mousedown", eResizeHandler);
-    sResizeHandle.removeEventListener("mousedown", sResizeHandler);
-  };
+  return () => handlers.forEach((remove) => remove());
 }

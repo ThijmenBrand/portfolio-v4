@@ -21,6 +21,7 @@ export function enableControls(
   };
 
   const maximizeHandler = () => {
+    commands.closeLayouts();
     if (record.state === "maximized") {
       commands.setWindowState("normal");
     } else {
@@ -44,8 +45,14 @@ export function enableControls(
     closeButton.addEventListener("click", closeHandler);
   }
 
+  // Resting on maximize opens the snap layouts picker (snapLayouts.ts).
+  const layoutsOver = () => maximizeButton && commands.hoverLayouts(maximizeButton, true);
+  const layoutsOut = () => maximizeButton && commands.hoverLayouts(maximizeButton, false);
+
   if (maximizeButton) {
     maximizeButton.addEventListener("click", maximizeHandler);
+    maximizeButton.addEventListener("mouseenter", layoutsOver);
+    maximizeButton.addEventListener("mouseleave", layoutsOut);
   }
 
   if (minimizeButton) {
@@ -59,6 +66,8 @@ export function enableControls(
     }
     if (maximizeButton) {
       maximizeButton.removeEventListener("click", maximizeHandler);
+      maximizeButton.removeEventListener("mouseenter", layoutsOver);
+      maximizeButton.removeEventListener("mouseleave", layoutsOut);
     }
     if (minimizeButton) {
       minimizeButton.removeEventListener("click", minimizeHandler);

@@ -115,35 +115,34 @@
 
 /* --------------------------------------------------------- resize edges */
 
+/* Edges and corners (interactions/resize.ts). The top edge is thin: the
+   title bar under it is the drag handle. */
 .resize-handle {
+    position: absolute;
     z-index: 2;
 }
 
-.resize-handle[data-direction="se"] {
-    position: absolute;
-    width: 10px;
-    height: 10px;
-    right: 0;
-    bottom: 0;
-    cursor: se-resize;
+.resize-handle[data-direction="n"] { top: 0; left: 12px; right: 12px; height: 4px; cursor: n-resize; }
+.resize-handle[data-direction="s"] { bottom: 0; left: 12px; right: 12px; height: 8px; cursor: s-resize; }
+.resize-handle[data-direction="e"] { right: 0; top: 12px; bottom: 12px; width: 8px; cursor: e-resize; }
+.resize-handle[data-direction="w"] { left: 0; top: 12px; bottom: 12px; width: 8px; cursor: w-resize; }
+.resize-handle[data-direction="ne"] { top: 0; right: 0; width: 12px; height: 6px; cursor: ne-resize; }
+.resize-handle[data-direction="nw"] { top: 0; left: 0; width: 12px; height: 6px; cursor: nw-resize; }
+.resize-handle[data-direction="se"] { bottom: 0; right: 0; width: 12px; height: 12px; cursor: se-resize; }
+.resize-handle[data-direction="sw"] { bottom: 0; left: 0; width: 12px; height: 12px; cursor: sw-resize; }
+
+/* Fullscreen has nothing to resize (and the top edge is the title bar's hover strip). */
+.window.maximized .resize-handle {
+    display: none;
 }
 
-.resize-handle[data-direction="e"] {
-    position: absolute;
-    width: 10px;
-    height: 95%;
-    right: 0;
-    top: 0;
-    cursor: e-resize;
-}
+/* A tile's edges that face another tile move the split: say so with a column/row cursor. */
+.window.tiled .resize-handle:is([data-direction="e"], [data-direction="w"]) { cursor: col-resize; }
+.window.tiled .resize-handle:is([data-direction="n"], [data-direction="s"]) { cursor: row-resize; }
 
-.resize-handle[data-direction="s"] {
-    position: absolute;
-    width: 95%;
-    height: 10px;
-    bottom: 0;
-    left: 0;
-    cursor: s-resize;
+/* Tiles meet edge to edge: the border goes inside the frame (windows are content-box otherwise). */
+.window.tiled {
+    box-sizing: border-box;
 }
 
 .maximized {
@@ -272,6 +271,115 @@
 
     .window.maximized > .top-bar:is(:hover, :has(:focus-visible)) {
         transform: none;
+    }
+
+    /* The 2px strip sits right where the browser's own fullscreen bar (macOS menu bar)
+       reveals, so an invisible band below it widens the hover target to 12px. Gone once
+       the bar has slid out (it covers that band itself), not before: hiding it mid-slide
+       would drop the hover and flicker. */
+    .window.maximized > .top-bar::after {
+        content: "";
+        position: absolute;
+        inset: 100% 0 auto;
+        height: 10px;
+    }
+
+    .window.maximized > .top-bar:is(:hover, :has(:focus-visible))::after {
+        visibility: hidden;
+        transition: visibility 0s 150ms;
+    }
+}
+
+/* ------------------------------------------------------------ snapping */
+
+/* Where a drag (or a layouts cell) would put the window (manager.showPreview). */
+.snap-preview {
+    position: absolute;
+    box-sizing: border-box;
+    border: 1px solid color-mix(in srgb, var(--app-accent) 70%, transparent);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--app-accent) 18%, transparent);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    opacity: 0;
+    pointer-events: none;
+    transition:
+        left 160ms ease,
+        top 160ms ease,
+        width 160ms ease,
+        height 160ms ease,
+        opacity 120ms ease;
+}
+
+.snap-preview.visible {
+    opacity: 1;
+}
+
+/* The layouts picker under a maximize button (snapLayouts.ts). */
+.snap-layouts {
+    position: absolute;
+    display: flex;
+    gap: 8px;
+    padding: 8px;
+    border: 1px solid var(--app-border-hi);
+    border-radius: 10px;
+    background: rgba(22, 22, 26, 0.86);
+    -webkit-backdrop-filter: blur(24px) saturate(160%);
+    backdrop-filter: blur(24px) saturate(160%);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+    pointer-events: auto;
+}
+
+.snap-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 3px;
+    width: 64px;
+    height: 44px;
+}
+
+.snap-layout-quarters {
+    grid-template-rows: 1fr 1fr;
+}
+
+.snap-layout-mixed {
+    grid-template-rows: 1fr 1fr;
+}
+
+.snap-layout-mixed > :first-child {
+    grid-row: span 2;
+}
+
+.snap-cell {
+    padding: 0;
+    border: 1px solid var(--app-border-hi);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.06);
+    cursor: pointer;
+}
+
+.snap-cell:hover,
+.snap-cell:focus-visible {
+    border-color: var(--app-accent);
+    background: color-mix(in srgb, var(--app-accent) 45%, transparent);
+    outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .snap-preview {
+        transition: none;
+    }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+    .snap-preview,
+    .snap-layouts {
+        -webkit-backdrop-filter: none;
+        backdrop-filter: none;
+    }
+
+    .snap-layouts {
+        background: var(--app-surface-hi);
     }
 }
 

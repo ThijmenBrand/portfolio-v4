@@ -1,4 +1,6 @@
 import type { Pid, Rect, Termination, WindowId } from "../types";
+import type { TileZone } from "../windows/snap";
+import type { WindowState } from "../windows/types";
 
 type process_spawned = {
   type: "process.spawned";
@@ -43,6 +45,15 @@ type window_minimized = {
   windowId: WindowId;
   minimized: boolean;
 };
+/** Maximize, restore, tile or untile. Not sent when a tile only moves (work area, split). */
+type window_state_changed = {
+  type: "window.stateChanged";
+  pid: Pid;
+  windowId: WindowId;
+  state: WindowState;
+  tile?: TileZone;
+  frame: Rect;
+};
 type fs_changed = {
   type: "fs.changed";
   path: string;
@@ -64,6 +75,7 @@ export type KernelEvent =
   | window_title_changed
   | window_focused
   | window_minimized
+  | window_state_changed
   | display_work_area_changed
   | display_status_changed
   | fs_changed;

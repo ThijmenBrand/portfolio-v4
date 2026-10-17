@@ -1,0 +1,7 @@
+wm [list]
+wm <id> left|right|top-left|top-right|bottom-left|bottom-right|maximize|restore
+  List windows (* marks the focused one), or snap one into half or a quarter
+  of the screen, maximize it, or restore its floating size.
+  Reaches every window of a program running as you, like kill.
+  wm 3 left; wm 4 right. Dragging a window to a screen edge or corner does the
+  same, and so does Ctrl+Alt+Arrow on the focused window.

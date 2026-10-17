@@ -1,5 +1,11 @@
 import type { Pid, WindowId } from "../types";
-import type { WindowInfo, WindowOptions, WindowRecord } from "./types";
+import type { Arrow, SnapTarget } from "./snap";
+import type {
+  WindowInfo,
+  WindowOptions,
+  WindowPolicy,
+  WindowRecord,
+} from "./types";
 
 export interface WindowManagerInterface {
   createWindow(options: WindowOptions, ownerPid: Pid): WindowRecord;
@@ -16,6 +22,9 @@ export interface WindowManagerInterface {
   listWindows(): Array<WindowInfo>;
   focusWindow(windowId: WindowId): void;
   setMinimized(windowId: WindowId, minimized: boolean): void;
-  reflowMaximized(): void;
+  reflowLayout(): void;
+  arrange(windowId: WindowId, target: SnapTarget | "restore"): void;
+  keyTile(windowId: WindowId, arrow: Arrow): void;
+  setPolicy(policy: WindowPolicy): void;
   attachSheet(windowId: WindowId, el: HTMLElement): () => void;
 }

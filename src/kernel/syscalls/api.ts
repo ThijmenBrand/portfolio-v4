@@ -22,7 +22,9 @@ import type {
   WindowHandle,
   WindowInfo,
   WindowOptions,
+  WindowPolicy,
 } from "../windows/types";
+import type { SnapTarget } from "../windows/snap";
 import type { ApiRequest, ApiResponse } from "./api-fetch";
 import type { NetRequest, NetResponse } from "./net";
 import type { Ids, SpawnOptions } from "./process";
@@ -45,6 +47,11 @@ export interface AppInterface {
     list(): Promise<WindowInfo[]>;
     focus(windowId: WindowId): Promise<void>;
     setMinimized(windowId: WindowId, minimized: boolean): Promise<void>;
+    /**
+     * Snap a window into a tile (left, top-right…), maximize it, or restore
+     * its floating frame. Yours, or any window of a process running as you.
+     */
+    tile(windowId: WindowId, target: SnapTarget | "restore"): Promise<void>;
     /** Id-based handle operations: what a WindowHandle is built from over the wire. */
     setTitle(windowId: WindowId, title: string): Promise<void>;
     close(windowId: WindowId): Promise<void>;
@@ -156,6 +163,8 @@ export interface SystemInterface extends AppInterface {
   };
   windows: Omit<AppInterface["windows"], "create"> & {
     create(options: WindowOptions): Promise<ElementWindowHandle>;
+    /** Policy over the kernel's snapping (the Taskbar sets it from Settings). */
+    setPolicy(policy: WindowPolicy): Promise<void>;
   };
 }
 
@@ -181,6 +190,8 @@ export function bindSyscalls(target: SyscallTable, pid: Pid): SystemInterface {
       focus: (windowId) => target.focusWindow(pid, windowId),
       setMinimized: (windowId, minimized) =>
         target.setMinimized(pid, windowId, minimized),
+      tile: (windowId, layout) => target.tileWindow(pid, windowId, layout),
+      setPolicy: (policy) => target.setWindowPolicy(pid, policy),
       setTitle: (windowId, title) =>
         target.setWindowTitle(pid, windowId, title),
       close: (windowId) => target.closeWindow(pid, windowId),
