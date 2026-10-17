@@ -33,6 +33,7 @@ export function buildAppInterface(client: WireClient, pid: Pid): AppInterface {
       updateStatusItem: (id, patch) =>
         call("display.updateStatusItem", id, patch),
       removeStatusItem: (id) => call("display.removeStatusItem", id),
+      claimHotkey: (name, onPress) => call("display.claimHotkey", name, onPress),
     },
 
     windows: {
@@ -59,6 +60,9 @@ export function buildAppInterface(client: WireClient, pid: Pid): AppInterface {
       close: (windowId) => call("windows.close", windowId),
       onCloseRequest: (windowId, callback) =>
         call("windows.onCloseRequest", windowId, callback),
+      setSize: (windowId, size) => call("windows.setSize", windowId, size),
+      setVisible: (windowId, visible) =>
+        call("windows.setVisible", windowId, visible),
     },
 
     process: {

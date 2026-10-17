@@ -164,6 +164,12 @@ export interface Program {
   main(os: unknown, args: string[]): unknown;
 }
 
+/** An installed app's command handler (utils/commands.ts), loaded by jscommand. */
+export interface CommandModule {
+  command(os: unknown, id: string, input: string): unknown;
+  search?(os: unknown, query: string): unknown;
+}
+
 /**
  * Load `path` (a plain module or a bundle) and import it. Bundle modules
  * live under "/" in a graph of their own; nothing else is read from the VFS.
@@ -173,6 +179,36 @@ export async function loadProgram(
   path: string,
   builtins: Record<string, string> = {},
 ): Promise<Program> {
+  const module = (await importApp(readFs, path, builtins)) as Partial<Program>;
+  if (typeof module.main !== "function") {
+    throw new KernelError("ENOEXEC", `${path}: no exported main(os, args)`);
+  }
+  return module as Program;
+}
+
+/**
+ * Load an app's command handler: the module its manifest names as `handler`
+ * (relative to the app's folder; inside a bundle, one of its modules), or
+ * else its entry.
+ */
+export async function loadCommands(
+  readFs: Read,
+  path: string,
+  handler: string | undefined,
+): Promise<CommandModule> {
+  const module = (await importApp(readFs, path, {}, handler)) as Partial<CommandModule>;
+  if (typeof module.command !== "function") {
+    throw new KernelError("ENOEXEC", `${path}: no exported command(os, id, input)`);
+  }
+  return module as CommandModule;
+}
+
+async function importApp(
+  readFs: Read,
+  path: string,
+  builtins: Record<string, string>,
+  start?: string,
+): Promise<unknown> {
   const source = await readFs(path);
   const bundle = parseBundle(source);
   const read: Read = bundle
@@ -182,14 +218,14 @@ export async function loadProgram(
         return text;
       }
     : async (p) => (p === path ? source : readFs(p));
-  const entry = bundle ? join("/", bundle.entry) : path;
+  const entry = bundle
+    ? join("/", start ?? bundle.entry)
+    : start
+      ? join(dirname(path), start)
+      : path;
 
   const graph = await collect(read, entry);
-  const module = (await import(/* @vite-ignore */ link(graph, entry, builtins))) as Partial<Program>;
-  if (typeof module.main !== "function") {
-    throw new KernelError("ENOEXEC", `${path}: no exported main(os, args)`);
-  }
-  return module as Program;
+  return import(/* @vite-ignore */ link(graph, entry, builtins));
 }
 
 /**

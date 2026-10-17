@@ -5,6 +5,7 @@ import {
   type PageViewport,
   type PDFDocumentProxy,
   type RenderTask,
+  RenderingCancelledException,
 } from "pdfjs-dist";
 import type { TextItem } from "pdfjs-dist/types/src/display/api";
 // @ts-expect-error pdfjs-dist ships no types for the worker module
@@ -18,6 +19,7 @@ const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 5;
 const STEP = 1.25;
 const MAX_PIXELS = 16e6; // Safari refuses bigger canvases
+const KEEP_PIXELS = 48e6; // page bitmaps kept around off screen, ~190 MB
 const THUMB = 120; // CSS px width of a sidebar thumbnail
 const PRESETS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
 const INKS = [["Red", "#ff3b30"], ["Blue", "#0a6cff"], ["Green", "#1f9d55"], ["Black", "#1c1c1e"]] as const;
@@ -72,7 +74,8 @@ export async function showPdf(data: Uint8Array, name: string, host: Host): Promi
   const scroller = el("div", "pages");
   scroller.tabIndex = -1; // focused, so Space, arrows and Page Up/Down scroll the pages
   const sheets = pages.map((_, i) => {
-    const sheet = { box: el("div", "page"), paper: el("canvas", "paper"), overlay: el("canvas", "ink") };
+    // drawn: the scale and rotation the paper was rendered at, "" while it's blank
+    const sheet = { box: el("div", "page"), paper: el("canvas", "paper"), overlay: el("canvas", "ink"), drawn: "" };
     sheet.box.append(sheet.paper, sheet.overlay);
     scroller.append(sheet.box);
     sheet.overlay.addEventListener("pointerdown", (e) => draw(i, e));
@@ -327,50 +330,84 @@ export async function showPdf(data: Uint8Array, name: string, host: Host): Promi
   let zoom = fitZoom("width");
 
   // ---- zoom, rotate, render ----
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  // While zooming, the bitmaps stretch to the new size; sharp ones replace them once zooming settles.
+  let settling: ReturnType<typeof setTimeout> | undefined;
   function layout(): void {
     views = pages.map((p) => p.getViewport({ scale: zoom * PT, rotation: (p.rotate + turn * 90) % 360 }));
-    const dpr = devicePixelRatio || 1;
     sheets.forEach((s, i) => {
       s.box.style.width = `${views[i].width}px`;
       s.box.style.height = `${views[i].height}px`;
-      s.overlay.width = Math.round(views[i].width * dpr);
-      s.overlay.height = Math.round(views[i].height * dpr);
-      thumbs[i].frame.style.aspectRatio = `${views[i].width} / ${views[i].height}`;
-      paint(i);
     });
     pct.innerHTML = `<span>${Math.round(zoom * 100)}%</span>${svg('<path d="M5.5 7l2.5 2.5L10.5 7"/>')}`;
-    // The old bitmaps stretch to the new size at once; sharp ones replace them when zooming settles.
-    clearTimeout(timer);
-    timer = setTimeout(() => void renderAll(), 150);
+    task?.cancel(); // drawing at the old size
   }
 
-  let generation = 0;
+  function settle(): void {
+    settling = undefined;
+    sheets.forEach((_, i) => paint(i));
+    void renderNear();
+  }
+
+  /** The resolution page i should be drawn at now, as a key and a viewport. */
+  function target(i: number): { key: string; viewport: PageViewport } {
+    const { rotation } = views[i];
+    const base = pages[i].getViewport({ scale: 1, rotation });
+    const scale = Math.min(zoom * PT * (devicePixelRatio || 1), Math.sqrt(MAX_PIXELS / (base.width * base.height)));
+    return { key: `${scale}/${rotation}`, viewport: pages[i].getViewport({ scale, rotation }) };
+  }
+
+  // Only the pages within a screen of the view are drawn, closest first; scrolling draws the next ones.
+  const distance = (i: number): number => {
+    const { offsetTop, offsetHeight } = sheets[i].box;
+    const top = scroller.scrollTop;
+    return Math.max(0, offsetTop - (top + scroller.clientHeight), top - (offsetTop + offsetHeight));
+  };
+  const nextBlurry = (): number | undefined =>
+    sheets
+      .map((_, i) => i)
+      .filter((i) => distance(i) <= scroller.clientHeight && sheets[i].drawn !== target(i).key)
+      .sort((a, b) => distance(a) - distance(b) || Math.abs(a - page) - Math.abs(b - page))[0];
+
   let task: RenderTask | null = null;
-  // ponytail: renders every page at every zoom; virtualise with an IntersectionObserver if long PDFs eat memory.
-  async function renderAll(): Promise<void> {
-    const mine = ++generation;
-    task?.cancel();
-    const middle = scroller.scrollTop + scroller.clientHeight / 2;
-    const distance = (i: number): number => Math.abs(sheets[i].box.offsetTop + sheets[i].box.offsetHeight / 2 - middle);
-    const order = sheets.map((_, i) => i).sort((a, b) => distance(a) - distance(b)); // visible pages first
-    for (const i of order) {
-      const base = pages[i].getViewport({ scale: 1, rotation: views[i].rotation });
-      const scale = Math.min(zoom * PT * (devicePixelRatio || 1), Math.sqrt(MAX_PIXELS / (base.width * base.height)));
-      const viewport = pages[i].getViewport({ scale, rotation: views[i].rotation });
+  let rendering = false;
+  async function renderNear(): Promise<void> {
+    if (rendering) return; // the running loop picks up the change
+    rendering = true;
+    for (let i; !settling && (i = nextBlurry()) !== undefined; ) {
+      const { key, viewport } = target(i);
       const canvas = el("canvas", "paper");
       canvas.width = Math.floor(viewport.width);
       canvas.height = Math.floor(viewport.height);
       task = pages[i].render({ canvas, viewport });
       try {
         await task.promise;
-      } catch {
-        if (mine !== generation) return; // cancelled by a newer zoom
-        continue; // a broken page keeps its old bitmap
+      } catch (error) {
+        if (!(error instanceof RenderingCancelledException)) sheets[i].drawn = key; // a broken page keeps its old bitmap
+        continue;
       }
-      if (mine !== generation) return;
+      if (target(i).key !== key) continue; // zoomed or rotated meanwhile
       sheets[i].paper.replaceWith(canvas);
       sheets[i].paper = canvas;
+      sheets[i].drawn = key;
+      evict();
+    }
+    task = null;
+    rendering = false;
+  }
+
+  // Far pages give their bitmaps back, farthest first, so a long PDF doesn't hold every page at every zoom.
+  function evict(): void {
+    const pixels = (i: number): number => sheets[i].paper.width * sheets[i].paper.height;
+    let total = sheets.reduce((sum, _, i) => sum + pixels(i), 0);
+    const far = sheets
+      .map((_, i) => i)
+      .filter((i) => pixels(i) && distance(i) > scroller.clientHeight)
+      .sort((a, b) => distance(b) - distance(a));
+    for (const i of far) {
+      if (total <= KEEP_PIXELS) break;
+      total -= pixels(i);
+      sheets[i].paper.width = sheets[i].paper.height = 0;
+      sheets[i].drawn = "";
     }
   }
 
@@ -380,23 +417,31 @@ export async function showPdf(data: Uint8Array, name: string, host: Host): Promi
     if (mode === "page" && page >= 0) goTo(page);
   }
 
-  function setZoom(next: number): void {
+  /** Zooms keeping the spot at (x, y) in the view, the middle by default, on the same spot of its page. */
+  function setZoom(next: number, x = scroller.clientWidth / 2, y = scroller.clientHeight / 2): void {
     fit = null;
     next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, next));
-    // Keep the centre of the view in place.
-    const k = next / zoom;
-    const cx = scroller.scrollLeft + scroller.clientWidth / 2;
-    const cy = scroller.scrollTop + scroller.clientHeight / 2;
+    if (next === zoom) return;
+    const at = pageAt(scroller.scrollTop + y);
+    const box = sheets[at].box;
+    const fx = (scroller.scrollLeft + x - box.offsetLeft) / views[at].width;
+    const fy = (scroller.scrollTop + y - box.offsetTop) / views[at].height;
     zoom = next;
     layout();
-    scroller.scrollLeft = cx * k - scroller.clientWidth / 2;
-    scroller.scrollTop = cy * k - scroller.clientHeight / 2;
+    scroller.scrollLeft = box.offsetLeft + fx * views[at].width - x;
+    scroller.scrollTop = box.offsetTop + fy * views[at].height - y;
+    clearTimeout(settling);
+    settling = setTimeout(settle, 150);
   }
 
   function rotate(dir: number): void {
     turn = (turn + dir + 4) % 4;
-    if (fit) fitTo(fit);
-    else layout();
+    if (fit) zoom = fitZoom(fit);
+    layout();
+    shapeThumbs();
+    if (page >= 0) goTo(page);
+    clearTimeout(settling);
+    settle();
     void drawThumbs();
   }
 
@@ -405,12 +450,23 @@ export async function showPdf(data: Uint8Array, name: string, host: Host): Promi
     if (fit && Math.abs(fitZoom(fit) - zoom) > 0.005) fitTo(fit);
   }).observe(scroller);
 
+  // A pinch sends many events a frame: they're added up and applied once per frame, around the pointer.
+  let pinch: { factor: number; x: number; y: number } | null = null;
   scroller.addEventListener(
     "wheel",
     (e) => {
       if (!e.ctrlKey && !e.metaKey) return; // plain wheel scrolls; pinch arrives as ctrl+wheel
       e.preventDefault();
-      setZoom(zoom * Math.exp(-e.deltaY * 0.01));
+      const r = scroller.getBoundingClientRect();
+      if (!pinch)
+        requestAnimationFrame(() => {
+          const { factor, x, y } = pinch!;
+          pinch = null;
+          setZoom(zoom * factor, x, y);
+        });
+      // A mouse wheel notch is ~100: capped, so ctrl+wheel steps rather than leaps.
+      const delta = Math.max(-25, Math.min(25, e.deltaY));
+      pinch = { factor: (pinch?.factor ?? 1) * Math.exp(-delta * 0.01), x: e.clientX - r.left, y: e.clientY - r.top };
     },
     { passive: false },
   );
@@ -510,6 +566,10 @@ export async function showPdf(data: Uint8Array, name: string, host: Host): Promi
   );
   for (const t of thumbs) watcher.observe(t.button);
 
+  function shapeThumbs(): void {
+    thumbs.forEach((t, i) => (t.frame.style.aspectRatio = `${views[i].width} / ${views[i].height}`));
+  }
+
   let drawing = false;
   async function drawThumbs(): Promise<void> {
     if (drawing) return;
@@ -546,15 +606,22 @@ export async function showPdf(data: Uint8Array, name: string, host: Host): Promi
   addEventListener("keydown", unpin);
   scroller.addEventListener("scroll", () => {
     cancelAnimationFrame(tracking);
-    tracking = requestAnimationFrame(track);
+    tracking = requestAnimationFrame(() => {
+      track();
+      void renderNear();
+    });
   });
+  function pageAt(y: number): number {
+    let i = 0;
+    while (i < sheets.length - 1 && sheets[i + 1].box.offsetTop <= y) i++;
+    return i;
+  }
+
   function track(): void {
     const { scrollTop, clientHeight, scrollHeight } = scroller;
     const line = Math.min(clientHeight / 4, 96);
     const y = scrollTop + Math.max(line, clientHeight - (scrollHeight - clientHeight - scrollTop));
-    let i = 0;
-    while (i < sheets.length - 1 && sheets[i + 1].box.offsetTop <= y) i++;
-    page = i;
+    page = pageAt(y);
     reading = y;
     if (document.activeElement !== pageField) pageField.value = labelOf(page);
     follow();
@@ -590,9 +657,14 @@ export async function showPdf(data: Uint8Array, name: string, host: Host): Promi
   function paint(i: number): void {
     const { overlay } = sheets[i];
     const v = views[i];
+    // Only pages with something on them get a bitmap: one per page at every zoom adds up.
+    const used = ink[i].length > 0 || hits.some((hit) => hit.page === i);
+    const dpr = devicePixelRatio || 1;
+    const [width, height] = used ? [Math.round(v.width * dpr), Math.round(v.height * dpr)] : [0, 0];
+    if (overlay.width !== width || overlay.height !== height) [overlay.width, overlay.height] = [width, height];
+    if (!used) return;
     const ctx = overlay.getContext("2d")!;
-    const dpr = overlay.width / v.width;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.setTransform(width / v.width, 0, 0, width / v.width, 0, 0);
     ctx.clearRect(0, 0, v.width, v.height);
     hits.forEach((hit, n) => {
       if (hit.page !== i) return;
@@ -838,10 +910,12 @@ export async function showPdf(data: Uint8Array, name: string, host: Host): Promi
   });
 
   layout();
+  shapeThumbs();
+  sheets.forEach((_, i) => paint(i));
   track();
   sync();
   scroller.focus({ preventScroll: true });
-  await renderAll();
+  await renderNear();
 }
 
 /**

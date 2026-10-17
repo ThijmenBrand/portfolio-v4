@@ -36,6 +36,8 @@ export function windowSyscalls(
   | "setMinimized"
   | "tileWindow"
   | "setWindowPolicy"
+  | "setWindowSize"
+  | "setWindowVisible"
 > &
   WindowHandleCommands {
   const slice: Pick<
@@ -47,6 +49,8 @@ export function windowSyscalls(
     | "setMinimized"
     | "tileWindow"
     | "setWindowPolicy"
+    | "setWindowSize"
+    | "setWindowVisible"
   > &
     WindowHandleCommands = {
     createWindow: alive(ctx, (pid: Pid, windowOptions: WindowOptions) => {
@@ -139,6 +143,24 @@ export function windowSyscalls(
       // Closing your own surface window is exiting: the realm lives in it.
       if (closeSurface(ctx, windowId, pid)) return;
       ctx.windows.destroy(windowId);
+    }),
+    setWindowSize: alive(
+      ctx,
+      (pid: Pid, windowId: WindowId, size: { width?: unknown; height?: unknown }) => {
+        ctx.windows.validateWindowOwnership(windowId, pid);
+        const current = ctx.windows.frameOf(windowId);
+        const pick = (value: unknown, fallback: number) =>
+          typeof value === "number" && Number.isFinite(value) ? value : fallback;
+        ctx.windows.resizeTo(
+          windowId,
+          pick(size?.width, current.width),
+          pick(size?.height, current.height),
+        );
+      },
+    ),
+    setWindowVisible: alive(ctx, (pid: Pid, windowId: WindowId, visible: boolean) => {
+      ctx.windows.validateWindowOwnership(windowId, pid);
+      ctx.windows.setVisible(windowId, visible === true);
     }),
     onWindowCloseRequest: alive(
       ctx,

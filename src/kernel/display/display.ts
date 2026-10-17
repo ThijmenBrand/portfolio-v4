@@ -6,6 +6,7 @@ export interface DisplayInterface {
   getDesktopLayer(): HTMLElement;
   getWindowLayer(): HTMLElement;
   getTaskbarLayer(): HTMLElement;
+  getOverlayLayer(): HTMLElement;
   workArea(): Rect;
   addStrut(edge: StrutEdge, size: number): number;
   removeStrut(strutId: number): void;
@@ -45,6 +46,15 @@ export class Display {
       throw kernelError("ENODEV", "Taskbar layer not found");
     }
     return taskbarLayer;
+  }
+
+  /** Over everything else, the taskbar included: overlay surfaces (a palette). */
+  public getOverlayLayer(): HTMLElement {
+    const overlayLayer = this.screen.querySelector<HTMLElement>("#overlay-layer");
+    if (!overlayLayer) {
+      throw kernelError("ENODEV", "Overlay layer not found");
+    }
+    return overlayLayer;
   }
 
   public workArea(): Rect {

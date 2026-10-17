@@ -1,3 +1,4 @@
+import { hotkeyFor } from "../kernel/syscalls/hotkeys";
 import { isBoot, runApp, type AppLoaders } from "./boot";
 
 /**
@@ -31,7 +32,8 @@ export function bootFrame(apps: AppLoaders): void {
 
   // Same for the launcher shortcut (Ctrl/Cmd+Space, see the taskbar),
   // Ctrl+W / Ctrl/Cmd+` (close / cycle windows) and Ctrl+Alt+Arrow (snap, see
-  // the window manager): keys in this frame never reach the kernel's document either.
+  // the window manager), and the system hotkeys (Ctrl/Cmd+K, see
+  // kernel/syscalls/hotkeys.ts): keys in this frame never reach the kernel's document either.
   const arrows: Record<string, string> = {
     ArrowLeft: "left",
     ArrowRight: "right",
@@ -41,7 +43,12 @@ export function bootFrame(apps: AppLoaders): void {
   window.addEventListener(
     "keydown",
     (event) => {
-      if (event.code === "Space" && (event.ctrlKey || event.metaKey)) {
+      const hotkey = hotkeyFor(event);
+      if (hotkey) {
+        event.preventDefault();
+        event.stopPropagation();
+        window.parent.postMessage({ t: "realm-hotkey", name: hotkey }, "*");
+      } else if (event.code === "Space" && (event.ctrlKey || event.metaKey)) {
         event.preventDefault();
         window.parent.postMessage({ t: "realm-launcher" }, "*");
       } else if (event.key.toLowerCase() === "w" && event.ctrlKey && !event.metaKey) {

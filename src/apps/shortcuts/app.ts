@@ -10,4 +10,7 @@ export default {
     translucent: true,
   },
   launcher: { name: "Shortcuts", icon: "/assets/icons/shortcuts.svg" },
+  // Handled in commands.ts: typing a site's name in Spotlight opens it.
+  commands: [{ id: "open", title: "Open site", hidden: true }],
+  search: true,
 } satisfies AppManifest;

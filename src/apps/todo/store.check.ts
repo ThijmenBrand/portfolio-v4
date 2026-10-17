@@ -8,6 +8,7 @@
 // meets. The Calendar's view of the list, todoOccurrences, is checked last.
 import type { AppInterface } from "../../kernel/syscalls/api";
 import { todoOccurrences } from "../calendar/todos.ts";
+import { describe } from "./commands.ts";
 import {
   dateKey,
   deadlineAt,
@@ -15,6 +16,7 @@ import {
   isForToday,
   openTodos,
   parseData,
+  parseQuickAdd,
   plannedAt,
   plannedLate,
   type Todo,
@@ -247,6 +249,36 @@ const todo = (id: string, extra: Partial<Todo> = {}): Todo => ({
     ["plan", "deadline"],
     "a todo with both puts both on the calendar",
   );
+}
+
+// ---- quick add (Spotlight's "New todo"): Saturday 17 October 2026, 10:00
+{
+  const now = new Date(2026, 9, 17, 10, 0);
+  const q = (line: string) => parseQuickAdd(line, now);
+  ok(q("buy milk"), { title: "buy milk" }, "nothing understood: no plan");
+  ok(q("buy milk tomorrow"), { title: "buy milk", date: "2026-10-18" }, "tomorrow");
+  ok(q("Today: water plants"), { title: "Today: water plants" }, "a word with other punctuation stays");
+  ok(q("water plants today."), { title: "water plants", date: "2026-10-17" }, "trailing punctuation is fine");
+  ok(q("call mum fri 14:00 for 30m"), { title: "call mum", date: "2026-10-23", time: "14:00", minutes: 30 }, "weekday, time, length");
+  ok(q("standup sat at 9am"), { title: "standup", date: "2026-10-17", time: "09:00" }, "today's weekday is today; 9am");
+  ok(q("15:00 dentist"), { title: "dentist", date: "2026-10-17", time: "15:00" }, "a time alone is today");
+  ok(q("gym 6pm for 1h30"), { title: "gym", date: "2026-10-17", time: "18:00", minutes: 90 }, "pm and an hour and a half");
+  ok(q("read for 30m"), { title: "read for 30m" }, "a length with no time stays in the title");
+  ok(q("essay due 3/11 17:00"), { title: "essay", deadline: "2026-11-03", deadlineTime: "17:00" }, "a deadline, day first");
+  ok(q("essay due fri"), { title: "essay", deadline: "2026-10-23" }, "a deadline on a weekday");
+  ok(q("taxes due 1/4"), { title: "taxes", deadline: "2027-04-01" }, "a day gone by this year is next year's");
+  ok(q("report mon due wed at 12:00"), { title: "report", date: "2026-10-19", deadline: "2026-10-21", deadlineTime: "12:00" }, "plan and deadline");
+  ok(q("pay rent 2026-11-01"), { title: "pay rent", date: "2026-11-01" }, "an ISO day");
+  ok(q("due diligence"), { title: "due diligence" }, "due without a when is a word");
+  ok(q('call "Sun" office'), { title: "call Sun office" }, "quotes keep a word");
+  ok(q("fri sat"), { title: "sat", date: "2026-10-23" }, "only one plan day; the second stays");
+  ok(q("31/2 party"), { title: "31/2 party" }, "a day that doesn't exist is text");
+  ok(q("25:00 tomorrow"), { title: "25:00", date: "2026-10-18" }, "a time that doesn't exist is text");
+  ok(q("tomorrow"), { title: "", date: "2026-10-18" }, "only a when: no title (the command asks for one)");
+
+  ok(describe({}, now), "no plan", "describe: no plan");
+  ok(describe({ date: "2026-10-17", time: "14:00", minutes: 90 }, now), "today 14:00 for 1h30", "describe: today, timed");
+  ok(describe({ date: "2026-10-23", deadline: "2026-11-03" }, now), "Fri · due 3 Nov", "describe: weekday and a far deadline");
 }
 
 console.log(`todo store: ${count} checks passed`);

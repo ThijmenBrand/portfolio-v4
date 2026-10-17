@@ -7,11 +7,11 @@ form.row input { flex: 1; }
 html, body { background: transparent; }
 
 /* app.json asks for "titleBar": "hidden": the toolbar is the title bar now.
-   The window's drag strip (34px) and its buttons (~132px, top right) sit on
+   The window's drag strip (34px) and its buttons (~132px, top left) sit on
    top of it, so nothing clickable goes here. */
 .toolbar {
   height: 34px;
   padding-block: 0;
-  padding-right: 140px;
+  padding-left: 140px;
   background: transparent;
 }

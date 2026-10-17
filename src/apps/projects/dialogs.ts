@@ -16,6 +16,7 @@ import {
   isEnded,
   partsOf,
   projectById,
+  todoById,
   todosInArea,
 } from "./state.ts";
 import {
@@ -34,7 +35,20 @@ import {
   type Project,
   type Shortcut,
 } from "./store.ts";
-import { button, el, fmtDayMonth, fmtTime, hueColor, ICONS, projectLabel, slotLine } from "./ui.ts";
+import {
+  button,
+  dot,
+  dueText,
+  el,
+  fmtDayMonth,
+  fmtTime,
+  hueColor,
+  ICONS,
+  lengthText,
+  projectLabel,
+  slotLine,
+  withIcon,
+} from "./ui.ts";
 
 // ----------------------------------------------------------------- sheet --
 
@@ -157,12 +171,60 @@ function projectOptions(include?: string, areas = false): { value: string; label
   return out;
 }
 
+/**
+ * One line of a property list: an icon and a name on the left, the controls
+ * on the right. `clear`, when given, empties the line from an x at its end.
+ */
+function property(
+  icon: string,
+  label: string,
+  controls: HTMLElement[],
+  clear?: { label: string; onClear: () => void },
+): { node: HTMLDivElement; mark: HTMLSpanElement; clear?: HTMLButtonElement } {
+  const node = el("div", "prop");
+  const name = el("span", "prop-name");
+  const mark = el("span", "prop-icon");
+  mark.innerHTML = icon;
+  name.append(mark, el("span", "", label));
+  const value = el("div", "prop-value");
+  value.append(...controls);
+  node.append(name, value);
+  // The controls are named by the line they're on.
+  for (const control of controls) if (!control.hasAttribute("aria-label")) control.setAttribute("aria-label", label);
+  if (!clear) return { node, mark };
+  value.classList.add("is-when");
+  const x = button("icon-button prop-clear", ICONS.cross, clear.onClear);
+  x.setAttribute("aria-label", clear.label);
+  x.title = clear.label;
+  value.append(x);
+  return { node, mark, clear: x };
+}
+
 /** Edits a todo, or a goal (no plan, no goal of its own). */
 export function editTodo(todo: Todo): void {
   const isGoal = Boolean(todo.goal);
   const s = sheet(isGoal ? "Goal" : "Todo");
+  s.dialog.classList.add("is-todo");
+  s.dialog.classList.toggle("is-goal", isGoal);
 
-  const title = input(todo.title, { maxLength: MAX_TITLE });
+  // The title leads, with its tick, as it does in the lists.
+  const title = input(todo.title, { maxLength: MAX_TITLE, placeholder: isGoal ? "What the goal is" : "What to do", className: "title-input" });
+  title.setAttribute("aria-label", "Title");
+  const top = el("div", "sheet-title");
+  const done = { checked: todo.done };
+  const tick = button("tick", ICONS.check, () => {
+    done.checked = !done.checked;
+    showDone();
+  });
+  const showDone = (): void => {
+    top.classList.toggle("is-done", done.checked);
+    tick.setAttribute("aria-pressed", String(done.checked));
+    tick.title = done.checked ? "Done; mark not done" : "Mark done";
+    tick.setAttribute("aria-label", tick.title);
+  };
+  showDone();
+  top.append(tick, title);
+
   // A goal belongs to a project; any other todo may also sit in an area on its own.
   const place = select(
     [{ value: "", label: isGoal ? "No project" : "Nowhere", group: "" }, ...projectOptions(todo.project, !isGoal)],
@@ -172,15 +234,14 @@ export function editTodo(todo: Todo): void {
   const projectId = (): string => (place.value.startsWith(AREA) ? "" : place.value);
   const goal = select([], "");
   const fillGoals = (): void => {
-    goal.disabled = !projectId();
     const goals = projectId() ? goalsOf(projectId()).filter((each) => !each.done || each.id === todo.parent) : [];
+    goal.disabled = !goals.length;
     goal.replaceChildren();
-    goal.append(Object.assign(el("option", "", "None"), { value: "" }));
+    const none = !projectId() ? "Pick a project first" : goals.length ? "None" : "This project has no goals";
+    goal.append(Object.assign(el("option", "", none), { value: "" }));
     for (const each of goals) goal.append(Object.assign(el("option", "", each.title), { value: each.id }));
     goal.value = goals.some((each) => each.id === todo.parent) ? todo.parent! : "";
   };
-  fillGoals();
-  place.addEventListener("change", fillGoals);
 
   const date = input(todo.date ?? "", { type: "date" });
   const time = input(todo.time ?? "", { type: "time" });
@@ -188,31 +249,76 @@ export function editTodo(todo: Todo): void {
   // saving doesn't quietly change it.
   const lengths = LENGTHS.includes(todo.minutes ?? 0) ? LENGTHS : [...LENGTHS, todo.minutes!].sort((a, b) => a - b);
   const length = select(
-    lengths.map((minutes) => ({ value: String(minutes), label: minutes ? `${minutes >= 60 ? `${minutes / 60}h` : `${minutes}m`}` : "No length" })),
+    lengths.map((minutes) => ({ value: String(minutes), label: minutes ? lengthText(minutes) : "No length" })),
     String(todo.minutes ?? 0),
   );
+  date.setAttribute("aria-label", "Plan on");
+  time.setAttribute("aria-label", "Plan at");
+  length.setAttribute("aria-label", "Plan for");
+  length.className = "is-length";
   const deadline = input(todo.deadline ?? "", { type: "date" });
   const deadlineTime = input(todo.deadlineTime ?? "", { type: "time" });
-  const notes = el("textarea");
+  deadline.setAttribute("aria-label", "Due on");
+  deadlineTime.setAttribute("aria-label", "Due by");
+  const notes = el("textarea", "notes-input");
   notes.value = todo.notes ?? "";
   notes.maxLength = MAX_NOTES;
-  notes.rows = 4;
-  const done = toggle("Done", todo.done);
+  notes.rows = 3;
+  notes.placeholder = "Add notes";
+  notes.setAttribute("aria-label", "Notes");
 
-  s.body.append(labelled("Title", title));
-  const where = el("div", "field-row");
-  where.append(labelled(isGoal ? "Project" : "In", place));
-  if (!isGoal) where.append(labelled("Part of goal", goal));
-  s.body.append(where);
-  if (!isGoal) {
-    const plan = el("div", "field-row");
-    plan.append(labelled("Do on", date), labelled("At", time), labelled("For", length));
-    s.body.append(plan);
-  }
-  const due = el("div", "field-row");
-  due.append(labelled("Due", deadline), labelled("By", deadlineTime));
-  s.body.append(due);
-  s.body.append(labelled("Notes", notes), done.node);
+  const props = el("div", "props");
+  const where = property(ICONS.folder, "Project", [place]);
+  props.append(where.node);
+  const goalLine = property(ICONS.sub, "Goal", [goal]);
+  if (!isGoal) props.append(goalLine.node);
+  const plan = property(ICONS.calendar, "Plan", [date, time, length], {
+    label: "Clear the plan",
+    onClear: () => {
+      date.value = time.value = "";
+      length.value = "0";
+      sync();
+      date.focus();
+    },
+  });
+  if (!isGoal) props.append(plan.node);
+  const due = property(ICONS.flag, "Deadline", [deadline, deadlineTime], {
+    label: "Clear the deadline",
+    onClear: () => {
+      deadline.value = deadlineTime.value = "";
+      sync();
+      deadline.focus();
+    },
+  });
+  const goalDue = el("p", "prop-hint");
+  props.append(due.node, goalDue);
+
+  /** Shows what depends on what: a time needs a day, a length a time. */
+  const sync = (): void => {
+    for (const each of [date, time, deadline, deadlineTime]) each.classList.toggle("is-empty", !each.value);
+    time.disabled = !date.value;
+    length.disabled = !date.value || !time.value;
+    length.classList.toggle("is-empty", length.value === "0");
+    deadlineTime.disabled = !deadline.value;
+    // Hidden but kept in place, so the columns don't shift.
+    plan.clear!.style.visibility = date.value || time.value ? "" : "hidden";
+    due.clear!.style.visibility = deadline.value || deadlineTime.value ? "" : "hidden";
+    // The project's colour, or its area's, marks where the todo is.
+    const hue = projectById(projectId())?.hue ?? areaById(place.value.slice(AREA.length))?.hue;
+    where.mark.replaceChildren(hue === undefined ? el("span", "dot is-none") : dot(hue));
+    const parent = !isGoal && goal.value ? todoById(goal.value) : undefined;
+    const parentDue = parent ? dueText(parent, new Date()) : "";
+    goalDue.textContent = parentDue ? `The goal is due ${parentDue}.` : "";
+  };
+  fillGoals();
+  sync();
+  place.addEventListener("change", () => {
+    fillGoals();
+    sync();
+  });
+  for (const each of [goal, date, time, length, deadline, deadlineTime]) each.addEventListener("input", sync);
+
+  s.body.append(top, props, notes);
 
   const save = (): void => {
     const name = title.value.trim();
@@ -229,7 +335,7 @@ export function editTodo(todo: Todo): void {
     const next: Todo = {
       id: todo.id,
       title: name,
-      done: done.box.checked,
+      done: done.checked,
       createdAt: todo.createdAt,
       ...(!isGoal && day && { date: day }),
       ...(!isGoal && at && { time: at }),
@@ -237,7 +343,7 @@ export function editTodo(todo: Todo): void {
       ...(dueDay && { deadline: dueDay }),
       ...(dueAt && { deadlineTime: dueAt }),
       ...(notes.value.trim() && { notes: notes.value.trim() }),
-      ...(done.box.checked && { doneAt: todo.doneAt ?? Date.now() }),
+      ...(done.checked && { doneAt: todo.doneAt ?? Date.now() }),
       ...(projectId() && { project: projectId() }),
       ...(place.value.startsWith(AREA) && { area: place.value.slice(AREA.length) }),
       ...(isGoal && { goal: true }),
@@ -259,7 +365,7 @@ export function editTodo(todo: Todo): void {
     app.render();
   };
 
-  const remove = actionButton("Delete", "danger", () => {
+  const remove = actionButton(withIcon(ICONS.trash, "Delete"), "danger", () => {
     s.close();
     const parts = isGoal ? partsOf(todo).length : 0;
     removeTodos(

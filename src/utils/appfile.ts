@@ -1,9 +1,16 @@
+import { parseCommands, type CommandSpec } from "./commands";
+
 /**
  * The manifest of a user program: a `//@app {json}` comment in its first few
  * lines (line 2 of a `bundle` output, under the #!). Read as data, so Files,
  * the desktop and the launcher can show an app's name and icon without running
  * it. Everything in it is untrusted: validated here, and the icon is only
  * ever used as an <img src>.
+ *
+ * `commands` are what the app offers in Spotlight (utils/commands.ts);
+ * `handler` names the module, relative to the app's folder, whose
+ * `command(os, id, input)` runs them headless. Without one it is the entry,
+ * which then must load without a window (no CSS imports, no os:ui).
  */
 export interface AppFileManifest {
   name?: string;
@@ -16,11 +23,17 @@ export interface AppFileManifest {
     translucent?: true;
     titleBar?: "hidden";
   };
+  commands?: CommandSpec[];
+  handler?: string;
+  /** The handler also exports search(os, query) (utils/commands.ts). */
+  search?: true;
 }
 
 const PREFIX = "//@app ";
 const MAX_ICON = 64 * 1024;
 const ICON = /^data:image\/(?:svg\+xml|png|webp|gif|jpeg)(?:;base64)?,/;
+/** A module inside the app's folder: relative, no way up or out. */
+const HANDLER = /^(?:[\w.-]+\/)*[\w-][\w.-]*\.js$/;
 
 const text = (value: unknown, max: number): string | undefined =>
   typeof value === "string" && value.trim() ? value.trim().slice(0, max) : undefined;
@@ -59,6 +72,13 @@ export function parseManifest(source: string): AppFileManifest | null {
     };
     if (win.translucent === true) manifest.window.translucent = true;
     if (win.titleBar === "hidden") manifest.window.titleBar = "hidden";
+  }
+  const commands = parseCommands(raw.commands);
+  if (commands.length) manifest.commands = commands;
+  if (commands.length && raw.search === true) manifest.search = true;
+  const handler = typeof raw.handler === "string" ? raw.handler.replace(/^\.\//, "") : "";
+  if (handler.length <= 128 && HANDLER.test(handler) && !handler.split("/").includes("..")) {
+    manifest.handler = handler;
   }
   return manifest;
 }
