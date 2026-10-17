@@ -69,6 +69,10 @@ export interface Settings {
   /** When the dock slides out of view; "always" also gives its strip back to windows. */
   dockHide: "maximized" | "always" | "never";
   dockSize: keyof typeof ICON_SCALES;
+  /** Dragging a window to a screen edge or corner snaps it to half or a quarter of the screen. */
+  snapWindows: boolean;
+  /** After a window snaps to one half, offer the other windows for the rest. */
+  snapAssist: boolean;
   /** "" shows the name's initial; else an AVATARS key or CUSTOM_AVATAR. */
   avatar: string;
   /** Extension -> program path, overriding filetypes' built-in default app. */
@@ -86,6 +90,8 @@ export const DEFAULTS: Settings = {
   dockAlign: "center",
   dockHide: "maximized",
   dockSize: "medium",
+  snapWindows: true,
+  snapAssist: true,
   avatar: "",
   openWith: {},
 };

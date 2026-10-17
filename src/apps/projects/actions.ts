@@ -6,7 +6,9 @@ import { app, todoById } from "./state.ts";
 
 export interface NewTodo {
   title: string;
-  project: string;
+  /** Where it goes: a project, or else straight into an area. */
+  project?: string;
+  area?: string;
   parent?: string;
   goal?: boolean;
   date?: string;
@@ -23,7 +25,7 @@ export function addTodo(fields: NewTodo): string {
     title: fields.title.trim(),
     done: false,
     createdAt: Date.now(),
-    project: fields.project,
+    ...(fields.project ? { project: fields.project } : fields.area && { area: fields.area }),
     ...(fields.goal && { goal: true }),
     ...(fields.parent && { parent: fields.parent }),
     ...(fields.date && { date: fields.date }),

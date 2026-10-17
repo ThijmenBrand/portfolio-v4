@@ -29,9 +29,15 @@ export function bootFrame(apps: AppLoaders): void {
     true,
   );
 
-  // Same for the launcher shortcut (Ctrl/Cmd+Space, see the taskbar) and
-  // Ctrl+W / Ctrl/Cmd+` (close / cycle windows, see the window manager): keys in
-  // this frame never reach the kernel's document either.
+  // Same for the launcher shortcut (Ctrl/Cmd+Space, see the taskbar),
+  // Ctrl+W / Ctrl/Cmd+` (close / cycle windows) and Ctrl+Alt+Arrow (snap, see
+  // the window manager): keys in this frame never reach the kernel's document either.
+  const arrows: Record<string, string> = {
+    ArrowLeft: "left",
+    ArrowRight: "right",
+    ArrowUp: "up",
+    ArrowDown: "down",
+  };
   window.addEventListener(
     "keydown",
     (event) => {
@@ -44,6 +50,16 @@ export function bootFrame(apps: AppLoaders): void {
       } else if (event.code === "Backquote" && (event.ctrlKey || event.metaKey)) {
         event.preventDefault();
         window.parent.postMessage({ t: "realm-cycle" }, "*");
+      } else if (
+        arrows[event.key] &&
+        event.ctrlKey &&
+        event.altKey &&
+        !event.metaKey &&
+        !event.shiftKey
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        window.parent.postMessage({ t: "realm-tile", arrow: arrows[event.key] }, "*");
       }
     },
     true,

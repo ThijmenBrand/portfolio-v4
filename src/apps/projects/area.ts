@@ -1,14 +1,15 @@
-// An area's overview: Today for the area's courses and projects only -- what
-// to do now, beside the day or week -- and a card per course and project with
-// its next session, its open todos and how far along its goals are.
+// An area's overview: Today for the area only -- what to do now, beside the
+// day or week -- then the area's own todos, the ones in no project (an area
+// needs no projects: Private can be just a list), and a card per course and
+// project with its next session, its open todos and how far along its goals are.
 import { deadlineAt, deadlineState, type Todo } from "../todo/store.ts";
 import { composer } from "./composer.ts";
 import { editArea, editProject } from "./dialogs.ts";
 import { gridDays, renderGrid } from "./grid.ts";
-import { app, goalsOf, isEnded, partsOf, sessionsFor, todosInArea } from "./state.ts";
+import { app, areaTodos, goalsOf, isEnded, partsOf, sessionsFor, todosInArea } from "./state.ts";
 import type { Area, Project } from "./store.ts";
 import { dayLists, daySections, deadlinesAhead, open, rangeSwitch } from "./today.ts";
-import { backButton, button, dot, dueChip, el, fmtFull, fmtTime, fmtWeekday, heading, hueColor, ICONS, withIcon } from "./ui.ts";
+import { backButton, button, dot, dueChip, el, fmtFull, fmtTime, fmtWeekday, heading, hueColor, ICONS, todoRow, withIcon } from "./ui.ts";
 
 const plural = (count: number, word: string): string => `${count} ${word}${count === 1 ? "" : "s"}`;
 
@@ -78,33 +79,62 @@ function projectCard(project: Project, now: Date): HTMLElement {
   return card;
 }
 
-/** Nothing in the area yet: what it's for, and how to start. */
-function renderEmpty(page: HTMLElement, area: Area): void {
-  const box = el("div", "empty-state is-page");
-  const swatch = el("span", "rail-swatch is-big");
-  swatch.style.background = hueColor(area.hue);
-  box.append(
-    swatch,
-    el("h2", "", `Nothing in ${area.name} yet`),
-    el("p", "", "Add a course (it finds its lectures in your calendar by its code) or a project. Each gets its shortcuts, goals, todos and notes."),
-  );
-  const actions = el("div", "empty-actions");
-  actions.append(
-    button("button primary", withIcon(ICONS.plus, "New course or project"), () => editProject(undefined, area.id)),
-    button("button", withIcon(ICONS.gear, "Area settings"), () => editArea(area)),
-  );
-  box.append(actions);
-  page.replaceChildren(box);
+/** Done today, or open and on today's list: shown in the day's sections already. */
+const onDayLists = (lists: ReturnType<typeof dayLists>): Set<string> =>
+  new Set([...lists.late, ...lists.planned, ...lists.carried, ...lists.dueOnly, ...lists.doneToday].map((todo) => todo.id));
+
+/** The area's own todos, the ones in no project, that today's sections don't list. */
+function ownTodos(area: Area, lists: ReturnType<typeof dayLists>, now: Date): HTMLElement | null {
+  const above = onDayLists(lists);
+  const own = areaTodos(area.id);
+  const rest = own.filter((todo) => !above.has(todo.id));
+  const doneCount = rest.filter((todo) => todo.done).length;
+  if (!rest.length) return null;
+  const node = el("section", "group-list");
+  const toggleDone = doneCount
+    ? button("link", app.showDone ? "Hide done" : `Show done (${doneCount})`, () => {
+        app.showDone = !app.showDone;
+        app.render();
+      })
+    : "";
+  // Under today's sections these are the rest; on their own, simply the area's todos.
+  node.append(heading(own.some((todo) => above.has(todo.id)) ? "Other todos" : "Todos", toggleDone));
+  const order = (todo: Todo): string => `${Number(todo.done)}${todo.date ?? "9999"}${todo.time ?? ""}${todo.deadline ?? "9999"}`;
+  const shown = rest.filter((todo) => !todo.done || app.showDone).sort((a, b) => order(a).localeCompare(order(b)));
+  for (const todo of shown) node.append(todoRow(todo, now, { onOpen: open }));
+  if (!shown.length) node.append(el("p", "empty-line", "All done."));
+  return node;
+}
+
+/** The area's courses and projects as cards, and a card to add one. */
+function projectCards(area: Area, projects: Project[], now: Date): HTMLElement {
+  const active = projects.filter((project) => !isEnded(project, now));
+  const node = el("section", "group-list");
+  node.append(heading("Courses and projects"));
+  if (!projects.length) {
+    node.append(
+      el("p", "empty-line", "For bigger things: a course finds its lectures in your calendar, a project gets goals, shortcuts and notes."),
+    );
+  } else if (!active.length) {
+    node.append(el("p", "empty-line", "Every course and project here has ended."));
+  }
+  const grid = el("div", "area-cards");
+  // Courses first, as the list has them.
+  for (const project of [...active].sort((a, b) => Number(a.kind === "project") - Number(b.kind === "project"))) {
+    grid.append(projectCard(project, now));
+  }
+  grid.append(button("area-card is-add", withIcon(ICONS.plus, "New course or project"), () => editProject(undefined, area.id)));
+  node.append(grid);
+  return node;
 }
 
 export function renderArea(page: HTMLElement, area: Area): void {
   const now = new Date();
   const projects = app.projects.data.projects.filter((project) => project.area === area.id);
   const active = projects.filter((project) => !isEnded(project, now));
-  if (!projects.length) return renderEmpty(page, area);
-  const ids = new Set(projects.map((project) => project.id));
-  const inArea = (todo: Todo): boolean => todo.project !== undefined && ids.has(todo.project);
   const todos = todosInArea(area.id);
+  const ids = new Set(todos.map((todo) => todo.id));
+  const inArea = (todo: Todo): boolean => ids.has(todo.id);
   const lists = dayLists(todos, now);
 
   const head = el("header", "page-head");
@@ -137,25 +167,30 @@ export function renderArea(page: HTMLElement, area: Area): void {
   head.append(titles, rangeSwitch(), settings);
 
   const left = el("div", "page-main");
-  left.append(composer({ placeholder: "Add a todo, then # to file it", today: true }));
+  left.append(
+    composer({
+      area: area.id,
+      placeholder: active.length ? `Add a todo to ${area.name}, or # for a project` : `Add a todo to ${area.name}`,
+      today: true,
+    }),
+  );
   const none = el("div", "empty-state");
-  none.append(el("h2", "", `Nothing for today in ${area.name}`), el("p", "", "Plan something on today, or drag a todo onto the calendar."));
-  left.append(...daySections(lists, now, none));
-
-  const cards = el("section", "group-list");
-  cards.append(heading("Courses and projects"));
-  const grid = el("div", "area-cards");
-  // Courses first, as the list has them.
-  for (const project of [...active].sort((a, b) => Number(a.kind === "project") - Number(b.kind === "project"))) {
-    grid.append(projectCard(project, now));
+  if (!todos.length && !projects.length) {
+    none.append(
+      el("h2", "", `${area.name} is empty`),
+      el("p", "", `Add todos straight to ${area.name} above, no project needed. Start a course or project below when something needs goals, a schedule or notes.`),
+    );
+  } else {
+    none.append(el("h2", "", `Nothing for today in ${area.name}`), el("p", "", "Plan something on today, or drag a todo onto the calendar."));
   }
-  if (!active.length) cards.append(el("p", "empty-line", "Every course and project here has ended."));
-  else cards.append(grid);
-  left.append(cards);
+  left.append(...daySections(lists, now, none, area.id));
+  const own = ownTodos(area, lists, now);
+  if (own) left.append(own);
+  left.append(projectCards(area, projects, now));
 
   const side = el("aside", "page-side");
   const gridBox = el("div", "grid-box");
-  side.append(gridBox, deadlinesAhead(now, 30, todos));
+  side.append(gridBox, deadlinesAhead(now, 30, todos, area.id));
   renderGrid(gridBox, {
     days: gridDays(now, app.todayRange === "day" ? 1 : 7),
     now,

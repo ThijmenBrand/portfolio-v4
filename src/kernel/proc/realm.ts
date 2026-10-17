@@ -1,5 +1,6 @@
 import type { Host } from "../binfmt";
 import type { KernelContext, Process } from "../types";
+import { isArrow } from "../windows/snap";
 import type { WindowOptions } from "../windows/types";
 import { PROTOCOL_VERSION, type BootMessage } from "../wire/protocol";
 import type { PortServer } from "../wire/server";
@@ -194,7 +195,7 @@ export function executeIframe(
   // could already focus its own window with `windows.focus`.
   const onMessage = (event: MessageEvent) => {
     if (event.source !== iframe.contentWindow) return;
-    const data = event.data as { t?: unknown } | null;
+    const data = event.data as { t?: unknown; arrow?: unknown } | null;
     if (data?.t === "realm-pointerdown") ctx.windows.focusWindow(record.id);
     // Replay the launcher shortcut on our document, where the taskbar listens.
     if (data?.t === "realm-launcher") {
@@ -204,6 +205,8 @@ export function executeIframe(
     }
     if (data?.t === "realm-close") ctx.windows.requestClose(record.id);
     if (data?.t === "realm-cycle") ctx.windows.cycleFocus();
+    // Ctrl+Alt+Arrow: snap this frame's window. The arrow is untrusted, so only the four are accepted.
+    if (data?.t === "realm-tile" && isArrow(data.arrow)) ctx.windows.keyTile(record.id, data.arrow);
   };
   globalThis.addEventListener("message", onMessage);
 

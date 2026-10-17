@@ -4,7 +4,7 @@
   right: 0;
   bottom: 0;
   /* Settings > Taskbar > Size; the rest of the dock is sized from the button. */
-  --dock-button: 44px;
+  --dock-button: 56px;
   --dock-height: calc(var(--dock-button) + 8px);
   --bar-height: calc(var(--dock-height) + 12px);
   height: var(--bar-height); /* reserved as the bottom strut: the dock floating 6px above the edge */
@@ -15,8 +15,8 @@
   padding: 0 8px 6px;
 }
 
-.taskbar[data-size="small"] { --dock-button: 36px; }
-.taskbar[data-size="large"] { --dock-button: 56px; }
+.taskbar[data-size="small"] { --dock-button: 44px; }
+.taskbar[data-size="large"] { --dock-button: 70px; }
 .taskbar[data-align="left"] { justify-content: flex-start; }
 
 #taskbar-layer {
@@ -337,6 +337,19 @@
 }
 #screen:has(.window.maximized:not(.minimized)) .topbar:is(:hover, :focus-within, :has(:popover-open)) {
   transform: none;
+}
+/* Widen the hover target to 12px with an invisible band under the pill, clear of the
+   browser's own fullscreen bar at the very edge (same as the window title bar, window.css). */
+#screen:has(.window.maximized:not(.minimized)) .topbar-pill { position: relative; }
+#screen:has(.window.maximized:not(.minimized)) .topbar-pill::after {
+  content: "";
+  position: absolute;
+  inset: 100% 0 auto;
+  height: 10px;
+}
+#screen:has(.window.maximized:not(.minimized)) .topbar:is(:hover, :focus-within, :has(:popover-open)) .topbar-pill::after {
+  visibility: hidden;
+  transition: visibility 0s 150ms; /* after the slide, or the hover drops mid-way */
 }
 
 /* Same for the dock, sliding down (Settings > Taskbar picks when). The bar is the hover target,

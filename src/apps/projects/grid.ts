@@ -15,7 +15,7 @@ import { columnLayout } from "../calendar/layout.ts";
 import { addDays, dateKey, deadlineAt, plannedAt, type Todo } from "../todo/store.ts";
 import { planTodo } from "./actions.ts";
 import { freeSlots, hhmm, type Span } from "./match.ts";
-import { app, courseOfEvent, eventsIn, projectOf } from "./state.ts";
+import { app, courseOfEvent, eventsIn, hueOfTodo } from "./state.ts";
 import { dropTarget, el, fmtTime, fmtWeekday, hueColor, ICONS, lengthText, withIcon } from "./ui.ts";
 
 export interface GridOptions {
@@ -94,7 +94,7 @@ export function renderGrid(root: HTMLElement, options: GridOptions): void {
       }
       continue;
     }
-    const hue = projectOf(todo)?.hue;
+    const hue = hueOfTodo(todo);
     if (plan && !todo.done && todo.date! < today) {
       const at = indexOf(now);
       if (at !== -1) allDay[at]!.push({ kind: "carried", title: todo.title, hue, todo });
@@ -181,7 +181,7 @@ export function renderGrid(root: HTMLElement, options: GridOptions): void {
     for (const { todo, at } of deadlines[index]!) {
       const line = el("div", "g-dueline");
       line.style.top = `${(minutes(at) / 60) * hourPx}px`;
-      const hue = projectOf(todo)?.hue;
+      const hue = hueOfTodo(todo);
       if (hue !== undefined) line.style.setProperty("--c", hueColor(hue));
       const label = button(line, todo, options);
       label.innerHTML = withIcon(ICONS.flag, `${fmtTime(at)} ${todo.title}`);

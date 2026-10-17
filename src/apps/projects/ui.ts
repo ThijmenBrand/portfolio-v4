@@ -10,8 +10,8 @@ import {
   type Todo,
 } from "../todo/store.ts";
 import type { Slot } from "./match.ts";
-import { app, goalOf, projectOf } from "./state.ts";
-import type { Project } from "./store.ts";
+import { app, areaOfLoose, goalOf, projectOf } from "./state.ts";
+import type { Area, Project } from "./store.ts";
 
 export function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -168,6 +168,8 @@ export function dueText(todo: Todo, now: Date): string {
 export interface RowOptions {
   /** Show which project it is in (on pages that mix projects). */
   tag?: boolean;
+  /** The area the page is about: its own todos need no tag saying so. */
+  area?: string;
   /** Show which goal it is part of. */
   goal?: boolean;
   /** Leave the day out of the plan (the row sits under that day's heading). */
@@ -228,6 +230,18 @@ export function projectTag(project: Project): HTMLSpanElement {
   return tag;
 }
 
+/** Where a todo is filed, as a tag: its project, or the area it sits in on its own. */
+export function placeTag(todo: Todo, hideArea?: string): HTMLSpanElement | null {
+  const project = projectOf(todo);
+  if (project) return projectTag(project);
+  const area: Area | undefined = areaOfLoose(todo);
+  if (!area || area.id === hideArea) return null;
+  const tag = el("span", "tag");
+  tag.append(dot(area.hue, "dot is-square"), el("span", "", area.name));
+  tag.title = `${area.name}, not in a project`;
+  return tag;
+}
+
 export function todoRow(todo: Todo, now: Date, options: RowOptions): HTMLDivElement {
   const row = el("div", "row");
   row.dataset.id = todo.id;
@@ -255,8 +269,8 @@ export function todoRow(todo: Todo, now: Date, options: RowOptions): HTMLDivElem
     }
   }
   if (options.tag) {
-    const project = projectOf(todo);
-    if (project) row.append(projectTag(project));
+    const tag = placeTag(todo, options.area);
+    if (tag) row.append(tag);
   }
 
   const plan = plannedAt(todo);

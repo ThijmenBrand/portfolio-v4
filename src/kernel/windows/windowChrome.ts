@@ -79,6 +79,7 @@ export class WindowChrome implements WindowChromeInterface {
     root.style.zIndex = windowRecord.zIndex.toString();
 
     root.classList.toggle("maximized", windowRecord.state === "maximized");
+    root.classList.toggle("tiled", windowRecord.state === "tiled");
     root.classList.toggle("minimized", windowRecord.minimized);
     // Restored while still flying into the taskbar: snap back.
     if (!windowRecord.minimized && root.classList.contains("minimizing")) {

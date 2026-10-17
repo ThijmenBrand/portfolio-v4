@@ -23,7 +23,9 @@ import type {
   ElementWindowHandle,
   WindowInfo,
   WindowOptions,
+  WindowPolicy,
 } from "../windows/types";
+import type { SnapTarget } from "../windows/snap";
 import { apiSyscalls, type ApiRequest, type ApiResponse } from "./api-fetch";
 import type { DialogOptions } from "../dialog/list";
 import { clipboardSyscalls } from "./clipboard";
@@ -65,6 +67,14 @@ export interface SyscallTable {
     windowId: WindowId,
     minimized: boolean,
   ): Promise<void>;
+  /** Snap a window into a tile, maximize it or restore it (`windows.tile`). */
+  tileWindow(
+    callerPid: Pid,
+    windowId: WindowId,
+    target: SnapTarget | "restore",
+  ): Promise<void>;
+  /** System processes only: user-space policy over snapping. */
+  setWindowPolicy(callerPid: Pid, policy: WindowPolicy): Promise<void>;
   closeWindow(callerPid: Pid, windowId: WindowId): Promise<void>;
   onWindowCloseRequest(
     callerPid: Pid,

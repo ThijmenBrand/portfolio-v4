@@ -136,10 +136,18 @@ const actionButton = (label: string, className: string, onClick: () => void): HT
 
 const LENGTHS = [0, 15, 30, 45, 60, 90, 120, 180, 240];
 
-/** The open projects, by area, for a project picker. */
-function projectOptions(include?: string): { value: string; label: string; group: string }[] {
+/** An area itself, as a value of the place picker: "area:<id>". */
+const AREA = "area:";
+
+/**
+ * The open projects, by area, for a place picker; with `areas`, each area
+ * itself first ("Private — no project"), for a todo kept straight in it.
+ */
+function projectOptions(include?: string, areas = false): { value: string; label: string; group: string }[] {
   const out: { value: string; label: string; group: string }[] = [];
   for (const area of app.projects.data.areas) {
+    // Named in full: a closed select doesn't show its group.
+    if (areas) out.push({ value: AREA + area.id, label: `${area.name} — no project`, group: area.name });
     for (const project of app.projects.data.projects) {
       if (project.area !== area.id) continue;
       if (isEnded(project) && project.id !== include) continue;
@@ -155,20 +163,24 @@ export function editTodo(todo: Todo): void {
   const s = sheet(isGoal ? "Goal" : "Todo");
 
   const title = input(todo.title, { maxLength: MAX_TITLE });
-  const project = select(
-    [{ value: "", label: "No project", group: "" }, ...projectOptions(todo.project)],
-    projectById(todo.project) ? todo.project! : "",
+  // A goal belongs to a project; any other todo may also sit in an area on its own.
+  const place = select(
+    [{ value: "", label: isGoal ? "No project" : "Nowhere", group: "" }, ...projectOptions(todo.project, !isGoal)],
+    projectById(todo.project) ? todo.project! : !isGoal && areaById(todo.area) ? AREA + todo.area : "",
   );
+  /** The project picked, or "" for an area on its own or nowhere. */
+  const projectId = (): string => (place.value.startsWith(AREA) ? "" : place.value);
   const goal = select([], "");
   const fillGoals = (): void => {
-    const goals = project.value ? goalsOf(project.value).filter((each) => !each.done || each.id === todo.parent) : [];
+    goal.disabled = !projectId();
+    const goals = projectId() ? goalsOf(projectId()).filter((each) => !each.done || each.id === todo.parent) : [];
     goal.replaceChildren();
     goal.append(Object.assign(el("option", "", "None"), { value: "" }));
     for (const each of goals) goal.append(Object.assign(el("option", "", each.title), { value: each.id }));
     goal.value = goals.some((each) => each.id === todo.parent) ? todo.parent! : "";
   };
   fillGoals();
-  project.addEventListener("change", fillGoals);
+  place.addEventListener("change", fillGoals);
 
   const date = input(todo.date ?? "", { type: "date" });
   const time = input(todo.time ?? "", { type: "time" });
@@ -189,7 +201,7 @@ export function editTodo(todo: Todo): void {
 
   s.body.append(labelled("Title", title));
   const where = el("div", "field-row");
-  where.append(labelled("Project", project));
+  where.append(labelled(isGoal ? "Project" : "In", place));
   if (!isGoal) where.append(labelled("Part of goal", goal));
   s.body.append(where);
   if (!isGoal) {
@@ -226,15 +238,16 @@ export function editTodo(todo: Todo): void {
       ...(dueAt && { deadlineTime: dueAt }),
       ...(notes.value.trim() && { notes: notes.value.trim() }),
       ...(done.box.checked && { doneAt: todo.doneAt ?? Date.now() }),
-      ...(project.value && { project: project.value }),
+      ...(projectId() && { project: projectId() }),
+      ...(place.value.startsWith(AREA) && { area: place.value.slice(AREA.length) }),
       ...(isGoal && { goal: true }),
       ...(!isGoal && goal.value && { parent: goal.value }),
     };
     saveTodo(todo, next);
     // A goal moved to another project takes its parts along.
-    if (isGoal && project.value && project.value !== todo.project) {
+    if (isGoal && projectId() && projectId() !== todo.project) {
       const parts = partsOf(todo).map((part) => part.id);
-      const to = project.value;
+      const to = projectId();
       app.save(
         app.todos.update((data) => {
           for (const part of data.todos) if (parts.includes(part.id)) part.project = to;
@@ -382,7 +395,9 @@ export async function deleteArea(area: Area, onConfirmed?: () => void): Promise<
   const ok = await confirmDialog(
     count
       ? `${area.name} and its ${count} course${count === 1 ? "" : "s"} and projects go. Their ${todos} todo${todos === 1 ? "" : "s"} stay in the Todo app, and notes stay in their folders.`
-      : `${area.name} goes.`,
+      : todos
+        ? `${area.name} goes. Its ${todos} todo${todos === 1 ? "" : "s"} stay in the Todo app.`
+        : `${area.name} goes.`,
     { title: `Delete ${area.name}?`, ok: "Delete", danger: true },
   );
   if (!ok) return;

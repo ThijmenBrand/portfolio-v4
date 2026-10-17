@@ -506,7 +506,8 @@ export function fromShortcuts(body: string, taken: ReadonlySet<string>): { areas
 export const projectFiles = (home: string): string[] => [CLOUD_FILE, `${home}/.config/projects.json`];
 
 /**
- * Each project's colour, by id, for the Calendar to draw its todos in. Read
+ * Each project's and area's colour, by id, for the Calendar to draw their
+ * todos in (ids never repeat across the two: parseData sees to it). Read
  * only -- the cloud copy if the mount lets us read it, else this browser's --
  * and never made or written: opening the Calendar mustn't start a Projects store.
  */
@@ -514,7 +515,9 @@ export async function readProjectHues(os: AppInterface): Promise<Map<string, num
   const home = (await os.process.env()).HOME ?? "/";
   for (const path of projectFiles(home)) {
     const body = await os.fs.readTextFile(path).catch(() => null);
-    if (body !== null) return new Map(parseData(body).projects.map((project) => [project.id, project.hue]));
+    if (body === null) continue;
+    const data = parseData(body);
+    return new Map([...data.areas, ...data.projects].map((each) => [each.id, each.hue]));
   }
   return new Map();
 }

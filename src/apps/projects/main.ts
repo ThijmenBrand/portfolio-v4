@@ -236,7 +236,7 @@ function renderList(areaId: string | undefined): void {
   };
   group("Courses", open.filter((project) => project.kind === "course"));
   group("Projects", open.filter((project) => project.kind === "project"));
-  if (!open.length) list.append(el("p", "list-empty", "Nothing here yet. Add the courses or projects of this area."));
+  if (!open.length) list.append(el("p", "list-empty", "No courses or projects. Todos can go straight on the Overview."));
   if (ended.length) {
     const toggle = button("list-group is-toggle", withIcon(app.showEnded ? ICONS.down : ICONS.right, `Ended · ${ended.length}`), () => {
       app.showEnded = !app.showEnded;
@@ -373,7 +373,8 @@ function renderKeys(): void {
   const list = [hint("todo", "N"), hint("today", "T"), hint("upcoming", "U")];
   if (view === "project") list.unshift(hint("open site", "1", "9"), hint("goal", "G"));
   if (view === "goal" || view === "note") list.unshift(hint("back", "Esc"));
-  if (currentArea()) list.push(hint("project", "[", "]"));
+  const area = currentArea();
+  if (area && app.projects.data.projects.some((each) => each.area === area)) list.push(hint("project", "[", "]"));
   keys.replaceChildren(...list);
 }
 

@@ -1,10 +1,24 @@
-import { einval, enosys } from "../errors";
-import type { KernelContext, Pid, WindowId } from "../types";
+import { einval, enosys, eperm, kernelError } from "../errors";
+import type { KernelContext, Pid, Process, WindowId } from "../types";
 import { closeSurface } from "../windows/windowPolicy";
-import type { WindowOptions } from "../windows/types";
+import { isTileZone, type SnapTarget } from "../windows/snap";
+import type { WindowOptions, WindowPolicy } from "../windows/types";
 import { bindWindowHandle } from "./api";
-import { alive, requireAlive } from "./guards";
+import { alive, requireAlive, requirePrivilege } from "./guards";
 import type { SyscallTable } from "./table";
+
+/**
+ * Arranging and listing go as far as kill does: your own windows, those of
+ * any process running as you, and everything for root and system processes.
+ * (`wm` in a terminal owns no windows, but runs as the user whose apps it arranges.)
+ */
+function mayArrange(ctx: KernelContext, caller: Process, ownerPid: Pid): boolean {
+  if (caller.pid === ownerPid || caller.privileged || caller.euid === 0) return true;
+  const owner = ctx.processes.get(ownerPid);
+  return owner !== undefined && (owner.uid === caller.uid || owner.uid === caller.euid);
+}
+
+const SNAP_TARGETS = new Set<unknown>(["maximize", "restore"]);
 
 export type WindowHandleCommands = Pick<
   SyscallTable,
@@ -20,6 +34,8 @@ export function windowSyscalls(
   | "listWindows"
   | "focusWindow"
   | "setMinimized"
+  | "tileWindow"
+  | "setWindowPolicy"
 > &
   WindowHandleCommands {
   const slice: Pick<
@@ -29,6 +45,8 @@ export function windowSyscalls(
     | "listWindows"
     | "focusWindow"
     | "setMinimized"
+    | "tileWindow"
+    | "setWindowPolicy"
   > &
     WindowHandleCommands = {
     createWindow: alive(ctx, (pid: Pid, windowOptions: WindowOptions) => {
@@ -68,13 +86,27 @@ export function windowSyscalls(
     }),
     listWindows: async (pid: Pid) => {
       const proc = requireAlive(ctx, pid);
-      const windows = ctx.windows.listWindows();
-      if (proc.privileged) {
-        return windows;
-      }
-
-      return windows.filter((w) => w.pid === pid);
+      return ctx.windows
+        .listWindows()
+        .filter((w) => mayArrange(ctx, proc, w.pid));
     },
+    tileWindow: alive(
+      ctx,
+      (pid: Pid, windowId: WindowId, target: SnapTarget | "restore") => {
+        if (!isTileZone(target) && !SNAP_TARGETS.has(target)) {
+          throw einval(`windows.tile: unknown target ${String(target)}`);
+        }
+        const proc = requireAlive(ctx, pid);
+        const info = ctx.windows.listWindows().find((w) => w.windowId === windowId);
+        if (!info) throw kernelError("ENODEV", `Window with ID ${windowId} not found`);
+        if (!mayArrange(ctx, proc, info.pid)) throw eperm(pid, "windows.tile");
+        ctx.windows.arrange(windowId, target);
+      },
+    ),
+    setWindowPolicy: alive(ctx, (pid: Pid, policy: WindowPolicy) => {
+      requirePrivilege(ctx, pid, "windows.setPolicy");
+      ctx.windows.setPolicy({ snap: policy?.snap !== false });
+    }),
     focusWindow: async (pid: Pid, windowId: WindowId) => {
       const proc = requireAlive(ctx, pid);
       if (proc.privileged) {

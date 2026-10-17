@@ -97,6 +97,8 @@ kbd {
 }
 
 .dot { flex: none; width: 9px; height: 9px; border-radius: 50%; }
+/* An area, as the rail draws it, rather than a project. */
+.dot.is-square { border-radius: 2.5px; }
 
 .back-button {
   display: none;
@@ -506,6 +508,18 @@ kbd {
   text-align: left;
 }
 .area-card:hover { border-color: var(--app-border-hi); background: var(--app-surface-hi); }
+.area-card.is-add {
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 52px;
+  border-style: dashed;
+  background: none;
+  color: var(--app-text-dim);
+}
+.area-card.is-add:hover { color: var(--app-text); }
+.area-card.is-add svg { width: 13px; height: 13px; }
 .area-card-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .area-card-head .list-name { flex: 1; }
 .area-card-counts { display: inline-flex; flex: none; gap: 8px; color: var(--app-text-dim); font-size: 11.5px; }
