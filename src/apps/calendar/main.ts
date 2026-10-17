@@ -1,16 +1,62 @@
-// Calendar — subscribed calendars, read-only.
+// Calendar — your own calendars, and the ones you subscribe to.
 //
-// Two kinds of source: an https .ics link, fetched through os.net.fetch, and
-// an .ics file imported from the VFS. The syscall is admin-only, so for most
-// people a link simply fails; sync.ts makes sure that failure is worded
-// exactly like any other network failure, and importing a file works for
-// everyone. Nothing in this file may branch on who is running it.
+// Your own calendars (mine.ts) are the ones you can write in: make events,
+// edit and delete them. They live in cloud storage where that mount will have
+// us and in ~/.config otherwise, decided by trying the mount.
+//
+// Subscriptions stay read-only. Two kinds: an https .ics link, fetched
+// through os.net.fetch, and an .ics file imported from the VFS. The syscall
+// is admin-only, so for most people a link simply fails; sync.ts makes sure
+// that failure is worded exactly like any other network failure, and
+// importing a file works for everyone. A subscribed event can be copied into
+// a calendar of your own, and edited there. Nothing in this file may branch
+// on who is running it.
+//
+// The Todo app's dated todos are drawn here too, from the same file the Todo
+// app keeps, and can be ticked off from any view.
 import type { AppInterface } from "../../kernel/syscalls/api";
 import { isPhone, PHONE_QUERY } from "../../utils/phone";
 import { applyAccent, loadSettings, type Settings } from "../../utils/settings";
+import { hueOf } from "../../utils/hue";
 import type { CalEvent } from "./parse.ts";
 import { parseIcs } from "./parse.ts";
-import { occKey, occurrencesIn, type Occurrence, type QuerySource } from "./query.ts";
+import { pling } from "../todo/pling.ts";
+import {
+  dateKey,
+  isTime,
+  openTodos,
+  parseDate,
+  saveProblem,
+  type TodoStore,
+} from "../todo/store.ts";
+import {
+  buildEvent,
+  cleanUrl,
+  deviceZone,
+  FREQS,
+  MAX_INTERVAL,
+  repeatOf,
+  wallOf,
+  type Draft,
+} from "./draft.ts";
+import { wireGrid } from "./gestures.ts";
+import {
+  DEFAULT_NAME,
+  MAX_CALENDARS,
+  MAX_NAME,
+  mineProblem,
+  openMine,
+  type MineStore,
+  type OwnCalendar,
+} from "./mine.ts";
+import type { Freq } from "./rrule.ts";
+import {
+  compareOccurrences,
+  occKey,
+  occurrencesIn,
+  type Occurrence,
+  type QuerySource,
+} from "./query.ts";
 import {
   guessFeedName,
   hueFor,
@@ -24,6 +70,7 @@ import {
   type View,
 } from "./store.ts";
 import { due, IMPORT_HINT, syncMany, syncOne, type SyncDeps } from "./sync.ts";
+import { todoOccurrences } from "./todos.ts";
 import {
   addDays,
   AGENDA_DAYS,
@@ -36,6 +83,7 @@ import {
   startOfWeek,
   type ViewContext,
 } from "./views.ts";
+import { addDays as addNaiveDays, fields, naive, startOfDay, type Naive } from "./zone.ts";
 import calendarHTML from "./calendar.html?raw";
 import "../../ui/theme.css";
 import "./calendar.css";
@@ -54,10 +102,19 @@ const SHEET_QUERY = "(max-width: 760px)";
 const EDGE = 8;
 const GAP = 4;
 /** Expansion slack each side, so stepping a period is a filter, not a re-expand. */
-const PAD: Record<View, number> = { month: 31, week: 7, agenda: 0 };
+const PAD: Record<View, number> = { month: 31, week: 7, day: 7, agenda: 0 };
 
 let os: AppInterface;
 let store: Store;
+let mine: MineStore;
+/** mine.calendars as last expanded; it is replaced on every change. */
+let mineSeen: readonly OwnCalendar[] = [];
+let mineRev = 0;
+let todos: TodoStore;
+/** Bumped whenever the todo list changes, which invalidates the expansion. */
+let todoRev = 0;
+/** The todo ticked off a moment ago, drawn with a flourish on the next render. */
+let ticked = "";
 let settings: Settings;
 let anchor = midnight(new Date());
 let focused = midnight(new Date());
@@ -69,6 +126,7 @@ const revisions = new Map<string, number>();
 
 let timeFmt: Intl.DateTimeFormat;
 let weekdayFmt: Intl.DateTimeFormat;
+let longWeekdayFmt: Intl.DateTimeFormat;
 let dayMonthFmt: Intl.DateTimeFormat;
 let monthFmt: Intl.DateTimeFormat;
 let fullFmt: Intl.DateTimeFormat;
@@ -84,6 +142,7 @@ function buildFormats(): void {
   const hour12 = !settings.clock24h;
   timeFmt = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit", hour12 });
   weekdayFmt = new Intl.DateTimeFormat(undefined, { weekday: "short" });
+  longWeekdayFmt = new Intl.DateTimeFormat(undefined, { weekday: "long" });
   dayMonthFmt = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short" });
   monthFmt = new Intl.DateTimeFormat(undefined, { month: "long", year: "numeric" });
   fullFmt = new Intl.DateTimeFormat(undefined, {
@@ -109,8 +168,27 @@ function weekTitle(start: Date, days: number): string {
 const view = (): View => store.data.view;
 const weekDays = (): number => (isPhone() ? 3 : 7);
 
+/** The columns the hour grid draws: a week (3 days on a phone), or one day. */
+function gridRange(): { start: Date; days: number } {
+  if (view() === "day") return { start: anchor, days: 1 };
+  const days = weekDays();
+  // On a phone the anchor day leads; a 7-column week starts on Monday.
+  return { start: days === 7 ? startOfWeek(anchor) : anchor, days };
+}
+
+const calendarHue = (calendar: OwnCalendar): number => calendar.hue ?? hueOf(calendar.id);
+
 function enabledSources(): QuerySource[] {
-  return store.data.sources
+  const own = mine.calendars
+    .filter((calendar) => !calendar.hidden)
+    .map((calendar) => ({
+      id: calendar.id,
+      name: calendar.name,
+      hue: calendarHue(calendar),
+      events: calendar.events,
+      mine: true,
+    }));
+  const subscribed = store.data.sources
     .filter((source) => source.enabled)
     .map((source) => ({
       id: source.id,
@@ -118,15 +196,20 @@ function enabledSources(): QuerySource[] {
       hue: hueFor(source),
       events: parsed.get(source.id) ?? [],
     }));
+  return [...own, ...subscribed];
 }
 
 let cacheKey = "";
 const windows = new Map<string, Occurrence[]>();
 
 function revKey(): string {
-  return store.data.sources
+  if (mine.calendars !== mineSeen) {
+    mineSeen = mine.calendars;
+    mineRev++;
+  }
+  return `mine:${mineRev}|${store.data.sources
     .map((s) => `${s.id}:${s.enabled ? 1 : 0}:${revisions.get(s.id) ?? 0}`)
-    .join(",");
+    .join(",")}|todos:${store.data.todos ? todoRev : "off"}`;
 }
 
 /**
@@ -147,32 +230,40 @@ function occurrences(from: Date, to: Date): Occurrence[] {
   let items = windows.get(windowKey);
   if (!items) {
     items = occurrencesIn(enabledSources(), lo, hi);
+    if (store.data.todos) {
+      items = [...items, ...todoOccurrences(todos.data.todos, lo, hi, "Todos")].sort(
+        compareOccurrences,
+      );
+    }
     if (windows.size >= 4) windows.delete(windows.keys().next().value!);
     windows.set(windowKey, items);
   }
   return items.filter((o) => o.start < to && o.end > from);
 }
 
+function openDay(day: Date): void {
+  anchor = midnight(day);
+  focused = anchor;
+  setView("day");
+}
+
 function context(): ViewContext {
   return {
     occurrences,
     time,
-    weekday: (at) => weekdayFmt.format(at),
+    weekday: (at, long) => (long ? longWeekdayFmt : weekdayFmt).format(at),
     dayMonth: (at) => dayMonthFmt.format(at),
     today: midnight(new Date()),
     focused,
-    weekDays: weekDays(),
     openDetail,
-    openDay: (day) => {
-      anchor = midnight(day);
-      focused = anchor;
-      agendaSpan = AGENDA_DAYS;
-      setView("agenda");
-    },
+    toggleTodo,
+    ticked,
+    openDay,
     focusDay: (day) => {
       focused = midnight(day);
       render();
     },
+    newEvent: (start, end, allDay) => openEventEditor({ start, end, allDay }),
   };
 }
 
@@ -185,10 +276,16 @@ function render(): void {
   const empty = field("empty");
   const current = view();
 
-  const hasSources = store.data.sources.length > 0;
+  // Dated todos are something to look at too, calendars or not.
+  const hasSources =
+    mine.calendars.length > 0 ||
+    store.data.sources.length > 0 ||
+    (store.data.todos && todos.data.todos.some((todo) => todo.date));
   empty.hidden = hasSources;
   month.hidden = !hasSources || current !== "month";
-  week.hidden = !hasSources || current !== "week";
+  const grid = current === "week" || current === "day";
+  week.hidden = !hasSources || !grid;
+  week.setAttribute("aria-label", current === "day" ? "Day" : "Week");
   agenda.hidden = !hasSources || current !== "agenda";
 
   for (const name of VIEWS) {
@@ -200,12 +297,11 @@ function render(): void {
     if (current === "month") {
       field("title").textContent = monthFmt.format(anchor);
       renderMonth(month, anchor, ctx);
-    } else if (current === "week") {
-      const days = weekDays();
-      const start = days === 7 ? startOfWeek(anchor) : midnight(anchor);
-      field("title").textContent = weekTitle(start, days);
-      renderWeek(week, template("week-chrome"), anchor, ctx);
-      placeNowLine(week, anchor, ctx);
+    } else if (grid) {
+      const { start, days } = gridRange();
+      field("title").textContent = days === 1 ? fullFmt.format(start) : weekTitle(start, days);
+      renderWeek(week, template("week-chrome"), start, days, ctx);
+      placeNowLine(week, start, days);
     } else {
       field("title").textContent = `From ${fullFmt.format(anchor)}`;
       renderAgenda(agenda, anchor, agendaSpan, ctx, () => {
@@ -216,6 +312,8 @@ function render(): void {
   } else {
     field("title").textContent = monthFmt.format(anchor);
   }
+  // Only the render right after the tick plays it; a resize must not replay it.
+  ticked = "";
 
   renderSources();
 }
@@ -265,7 +363,30 @@ function ago(at: number): string {
   return format.format(Math.round(value), "week");
 }
 
+/** The colour swatches in both editors; clicking the chosen one again unsets it. */
+function paintHues(
+  container: HTMLElement,
+  current: () => number | undefined,
+  pick: (hue: number | undefined) => void,
+): void {
+  container.replaceChildren();
+  for (const value of HUES) {
+    const swatch = document.createElement("button");
+    swatch.type = "button";
+    swatch.className = "hue";
+    swatch.style.setProperty("--hue", String(value));
+    swatch.setAttribute("aria-label", `Colour ${value}`);
+    swatch.setAttribute("aria-pressed", String(current() === value));
+    swatch.addEventListener("click", () => {
+      pick(current() === value ? undefined : value);
+      paintHues(container, current, pick);
+    });
+    container.append(swatch);
+  }
+}
+
 function renderSources(): void {
+  renderMine();
   const list = field("sources");
   const frag = document.createDocumentFragment();
 
@@ -308,6 +429,7 @@ function renderSources(): void {
     });
     row.querySelector<HTMLElement>('[data-action="menu"]')!.addEventListener("click", () => {
       editing = source;
+      closeMineEditor();
       renderSources();
     });
     frag.append(row);
@@ -316,6 +438,23 @@ function renderSources(): void {
   if (editing === "new") frag.append(editorFor(null));
   list.replaceChildren(frag);
   action("add").hidden = editing !== null || store.data.sources.length >= MAX_SOURCES;
+
+  const open = todos.data.todos.filter((todo) => !todo.done);
+  const today = dateKey(new Date());
+  // Kept apart, as the Todo app groups them: last week's todos aren't due today.
+  const overdue = open.filter((todo) => todo.date && todo.date < today).length;
+  const dueToday = open.filter((todo) => todo.date === today).length;
+  field("todo-note").textContent = !open.length
+    ? "All done"
+    : [
+        overdue ? `${overdue} overdue` : "",
+        dueToday ? `${dueToday} due today` : "",
+        `${open.length} open`,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+  (action("show-todos") as HTMLInputElement).checked = store.data.todos;
+  action("show-todos").closest(".source")!.classList.toggle("is-off", !store.data.todos);
 }
 
 function editorFor(existing: Source | null): HTMLLIElement {
@@ -346,24 +485,7 @@ function editorFor(existing: Source | null): HTMLLIElement {
   };
   showKind();
 
-  const hues = pick('[data-field="hues"]');
-  const paintHues = (): void => {
-    hues.replaceChildren();
-    for (const value of HUES) {
-      const swatch = document.createElement("button");
-      swatch.type = "button";
-      swatch.className = "hue";
-      swatch.style.setProperty("--hue", String(value));
-      swatch.setAttribute("aria-label", `Colour ${value}`);
-      swatch.setAttribute("aria-pressed", String(hue === value));
-      swatch.addEventListener("click", () => {
-        hue = hue === value ? undefined : value;
-        paintHues();
-      });
-      hues.append(swatch);
-    }
-  };
-  paintHues();
+  paintHues(pick('[data-field="hues"]'), () => hue, (next) => (hue = next));
 
   const close = (): void => {
     editing = null;
@@ -454,6 +576,176 @@ function editorFor(existing: Source | null): HTMLLIElement {
 
   queueMicrotask(() => (kind === "url" ? urlInput : nameInput).focus());
   return node;
+}
+
+// -------------------------------------------------------- your calendars --
+
+/** The calendar of your own being edited in the list: its id, or "new". */
+let editingMine: string | null = null;
+/**
+ * The editor's row, kept across re-renders: the list is redrawn on every
+ * minute tick, and rebuilding the row would wipe a half-typed name.
+ */
+let mineEditor: { key: string; node: HTMLLIElement } | null = null;
+
+function closeMineEditor(): void {
+  editingMine = null;
+  mineEditor = null;
+}
+
+function eventCount(calendar: OwnCalendar): string {
+  const count = calendar.events.filter((event) => event.recurrenceId === null).length;
+  return count === 0 ? "No events" : count === 1 ? "1 event" : `${count} events`;
+}
+
+function renderMine(): void {
+  const list = field("mine");
+  // Moving the kept editor row through the fragment would drop its focus.
+  const active = mineEditor?.node.contains(document.activeElement)
+    ? (document.activeElement as HTMLElement)
+    : null;
+  const frag = document.createDocumentFragment();
+
+  for (const calendar of mine.calendars) {
+    if (editingMine === calendar.id) {
+      frag.append(calendarEditor(calendar));
+      continue;
+    }
+    const row = template("source-row").content.firstElementChild!.cloneNode(true) as HTMLLIElement;
+    row.style.setProperty("--hue", String(calendarHue(calendar)));
+    if (calendar.hidden) row.classList.add("is-off");
+    row.querySelector<HTMLElement>('[data-field="name"]')!.textContent = calendar.name;
+    row.querySelector<HTMLElement>('[data-field="note"]')!.textContent = eventCount(calendar);
+
+    const toggle = row.querySelector<HTMLInputElement>('[data-action="toggle"]')!;
+    toggle.checked = !calendar.hidden;
+    toggle.setAttribute("aria-label", `Show ${calendar.name}`);
+    toggle.addEventListener("change", () => {
+      const hidden = !toggle.checked;
+      void saveMine(calendar.id, (target) => {
+        target.hidden = hidden;
+      });
+      render();
+    });
+    row.querySelector<HTMLElement>('[data-action="menu"]')!.addEventListener("click", () => {
+      editing = null;
+      closeMineEditor();
+      editingMine = calendar.id;
+      renderSources();
+    });
+    frag.append(row);
+  }
+
+  if (editingMine === "new") frag.append(calendarEditor(null));
+  list.replaceChildren(frag);
+  active?.focus();
+  action("new-calendar").hidden = editingMine !== null || mine.calendars.length >= MAX_CALENDARS;
+}
+
+function calendarEditor(existing: OwnCalendar | null): HTMLLIElement {
+  const key = existing?.id ?? "new";
+  if (mineEditor?.key === key) return mineEditor.node;
+
+  const node = template("calendar-editor").content.firstElementChild!.cloneNode(true) as HTMLLIElement;
+  const pick = <T extends HTMLElement>(selector: string) => node.querySelector<T>(selector)!;
+  const nameInput = pick<HTMLInputElement>('input[name="name"]');
+  let hue = existing?.hue;
+
+  if (existing) {
+    nameInput.value = existing.name;
+    pick<HTMLButtonElement>('[data-action="save"]').textContent = "Save";
+    pick<HTMLElement>('[data-action="remove"]').hidden = false;
+  }
+  paintHues(pick('[data-field="hues"]'), () => hue, (next) => (hue = next));
+
+  const close = (): void => {
+    closeMineEditor();
+    renderSources();
+  };
+
+  const commit = (): void => {
+    const name = nameInput.value.trim().slice(0, MAX_NAME) || DEFAULT_NAME;
+    if (existing) {
+      void saveMine(existing.id, (target) => {
+        target.name = name;
+        if (hue === undefined) delete target.hue;
+        else target.hue = hue;
+      });
+    } else {
+      const calendar: OwnCalendar = {
+        id: mine.newId(),
+        name,
+        ...(hue !== undefined && { hue }),
+        hidden: false,
+        events: [],
+      };
+      void mine.put(calendar).then(() => render(), failMine);
+      // The calendar just made is the one the next event most likely goes in.
+      store.data.lastCalendar = calendar.id;
+      store.save();
+    }
+    close();
+    render();
+  };
+
+  pick('[data-action="save"]').addEventListener("click", commit);
+  pick('[data-action="cancel"]').addEventListener("click", close);
+  pick('[data-action="remove"]').addEventListener("click", () => {
+    if (!existing) return;
+    close();
+    // The editor row outlives re-renders, so `existing` may predate events
+    // added since; Undo has to bring back the calendar as it is now.
+    removeCalendar(mine.calendars.find((c) => c.id === existing.id) ?? existing);
+  });
+  node.addEventListener("keydown", (event) => {
+    event.stopPropagation();
+    if (event.key === "Escape") close();
+    else if (event.key === "Enter" && event.target instanceof HTMLInputElement) {
+      event.preventDefault();
+      commit();
+    }
+  });
+
+  queueMicrotask(() => nameInput.focus());
+  mineEditor = { key, node };
+  return node;
+}
+
+/** A store write failed: say why, and redraw from what is really on disk. */
+function failMine(error: unknown): void {
+  console.error("[calendar]", error);
+  showStatus(mineProblem(error, mine.backing), true);
+  render();
+}
+
+/** Change one of your calendars. Resolves false (having said why) on failure. */
+function saveMine(id: string, change: (calendar: OwnCalendar) => void): Promise<boolean> {
+  return mine.update(id, change).then(
+    () => {
+      render();
+      return true;
+    },
+    (error: unknown) => {
+      failMine(error);
+      return false;
+    },
+  );
+}
+
+function removeCalendar(calendar: OwnCalendar): void {
+  void mine.remove(calendar.id).catch(failMine);
+  render();
+  showStatus(`Deleted ${calendar.name}.`, false, () => {
+    // The object itself: the store replaces calendars, it never edits one.
+    void mine.put(calendar).then(() => render(), failMine);
+    render();
+  });
+}
+
+/** Another browser, or another Calendar window, changed one of your calendars. */
+async function pullMine(): Promise<void> {
+  if (!(await mine.reload().catch(() => false))) return;
+  render();
 }
 
 function remove(source: Source): void {
@@ -555,6 +847,43 @@ async function pullShared(): Promise<void> {
   await refresh(needsSync());
 }
 
+// ----------------------------------------------------------------- todos --
+
+/** Tick a todo off (or back on) in the Todo app's own file. */
+function toggleTodo(occurrence: Occurrence): void {
+  const todo = occurrence.todo;
+  if (!todo) return;
+  const finishing = !todo.done;
+  const at = Date.now();
+  // From the click itself, or the browser keeps the audio muted.
+  if (finishing && todos.data.sound) pling();
+  void todos
+    .update((data) => {
+      const target = data.todos.find((t) => t.id === todo.id);
+      if (!target) return;
+      target.done = finishing;
+      if (finishing) target.doneAt = at;
+      else delete target.doneAt;
+    })
+    .catch((error: unknown) => {
+      console.error("[calendar]", error);
+      showStatus(saveProblem(error, todos.backing), true);
+      todoRev++;
+      render();
+    });
+  todoRev++;
+  ticked = finishing ? occKey(occurrence) : "";
+  render();
+  showStatus(finishing ? `Done: ${todo.title}` : `Not done: ${todo.title}`);
+}
+
+/** The Todo app (or another browser) changed the list. */
+async function pullTodos(): Promise<void> {
+  if (!(await todos.reload().catch(() => false))) return;
+  todoRev++;
+  render();
+}
+
 // ---------------------------------------------------------------- detail --
 
 /** "45 min", "1 hr", "4 hr 5 min" — the headline's quiet second half. */
@@ -636,16 +965,21 @@ function placeDetail(): void {
 
 function openDetail(occurrence: Occurrence): void {
   const dialog = field("detail") as HTMLDialogElement;
+  const todo = occurrence.todo;
   dialog.style.setProperty("--hue", String(occurrence.hue));
+  dialog.classList.toggle("is-todo", Boolean(todo));
   field("detail-title").textContent = occurrence.event.summary || "(no title)";
 
   // The headline is the time — what you came to the popover for — with the
   // date below it in support.
   const sameStartDay = sameDay(occurrence.start, addDays(occurrence.end, occurrence.allDay ? -1 : 0));
   const span = spanLabel(occurrence.end.getTime() - occurrence.start.getTime());
+  // A todo is due at a moment, so it gets no end time and no length.
   const when = occurrence.allDay
-    ? "All day"
-    : `${time(occurrence.start)} – ${time(occurrence.end)}${span ? ` · ${span}` : ""}`;
+    ? todo ? "Any time" : "All day"
+    : todo
+      ? `Due ${time(occurrence.start)}`
+      : `${time(occurrence.start)} – ${time(occurrence.end)}${span ? ` · ${span}` : ""}`;
   const day =
     occurrence.allDay && !sameStartDay
       ? `${dayMonthFmt.format(occurrence.start)} – ${fullFmt.format(addDays(occurrence.end, -1))}`
@@ -660,7 +994,53 @@ function openDetail(occurrence: Occurrence): void {
   field("detail-desc").textContent = occurrence.event.description;
 
   field("detail-swatch").style.setProperty("--hue", String(occurrence.hue));
-  field("detail-calendar").textContent = occurrence.sourceName;
+  field("detail-swatch").classList.toggle("is-todo", Boolean(todo));
+  field("detail-calendar").textContent = todo
+    ? `${occurrence.sourceName}${todo.done ? " · done" : ""}`
+    : occurrence.sourceName;
+
+  const mark = action("detail-todo") as HTMLButtonElement;
+  mark.hidden = !todo;
+  mark.textContent = todo?.done ? "Mark as not done" : "Mark as done";
+  mark.classList.toggle("primary", !todo?.done);
+  mark.onclick = () => {
+    closeDetail();
+    toggleTodo(occurrence);
+  };
+  // One of your own events: edit or delete it. Anyone else's: copy it into a
+  // calendar of yours, where it can be edited.
+  const own = occurrence.mine && mine.calendars.some((c) => c.id === occurrence.sourceId);
+  const edit = action("detail-edit") as HTMLButtonElement;
+  edit.hidden = !own;
+  edit.onclick = () =>
+    openEventEditor({
+      editing: occurrence,
+      start: occurrence.start,
+      end: occurrence.end,
+      allDay: occurrence.allDay,
+    });
+  const remove = action("detail-delete") as HTMLButtonElement;
+  remove.hidden = !own;
+  remove.onclick = () => {
+    closeDetail();
+    deleteEvent(occurrence.sourceId, occurrence.event);
+  };
+  const copyToMine = action("copy-to-mine") as HTMLButtonElement;
+  copyToMine.hidden = Boolean(todo || occurrence.mine);
+  copyToMine.onclick = () =>
+    openEventEditor({
+      from: occurrence,
+      start: occurrence.start,
+      end: occurrence.end,
+      allDay: occurrence.allDay,
+    });
+
+  const openTodo = action("open-todo") as HTMLButtonElement;
+  openTodo.hidden = !todo;
+  openTodo.onclick = () => {
+    closeDetail();
+    void os.process.spawn("/ProgramFiles/todo");
+  };
 
   field("prop-url").hidden = !occurrence.event.url;
   const link = field("detail-url") as HTMLAnchorElement;
@@ -697,6 +1077,384 @@ function openDetail(occurrence: Occurrence): void {
   detailFor = occKey(occurrence);
   dialog.showModal();
   placeDetail();
+}
+
+// ---------------------------------------------------------- event editor --
+
+interface EditorInit {
+  /** An occurrence of one of your own events, to edit (its whole series). */
+  editing?: Occurrence;
+  /** Someone else's event to start from, saved as a new one of yours. */
+  from?: Occurrence;
+  start: Date;
+  /** Exclusive, like an occurrence's: an all-day event ends at a midnight. */
+  end: Date;
+  allDay: boolean;
+}
+
+/** What the open editor is changing; null for a new event. */
+let eventEditing: { calendarId: string; event: CalEvent; occurrence: Date } | null = null;
+/** The id a first calendar will get if this save has to make one. */
+let pendingCalendarId = "";
+/** End minus start as last entered, kept when the start moves. */
+let eeSpan = 0;
+
+const input = (name: string) => field(name) as HTMLInputElement;
+const pad2 = (n: number): string => String(n).padStart(2, "0");
+const dayOf = (at: Date): Naive => naive(at.getFullYear(), at.getMonth() + 1, at.getDate());
+const dayKeyOf = (n: Naive): string => {
+  const f = fields(n);
+  return `${f.y}-${pad2(f.mo)}-${pad2(f.d)}`;
+};
+const timeKeyOf = (at: Date): string => `${pad2(at.getHours())}:${pad2(at.getMinutes())}`;
+
+const newUid = (): string => `${Date.now().toString(36)}-${newId()}${newId()}`;
+
+/** One date field, plus its time field unless all-day, as a wall clock. */
+function readWall(dateName: string, timeName: string): Naive | null {
+  const day = parseDate(input(dateName).value);
+  if (!day) return null;
+  if (input("ee-allday").checked) return dayOf(day);
+  const time = input(timeName).value;
+  if (!isTime(time)) return null;
+  const [h, m] = time.split(":").map(Number);
+  return dayOf(day) + (h! * 60 + m!) * 60_000;
+}
+
+/** All-day ends are shown inclusive (the last day) but kept exclusive. */
+function readEnd(): Naive | null {
+  const end = readWall("ee-end-date", "ee-end-time");
+  return end !== null && input("ee-allday").checked ? addNaiveDays(end, 1) : end;
+}
+
+function writeEnd(end: Naive): void {
+  const allDay = input("ee-allday").checked;
+  const shown = allDay ? addNaiveDays(end, -1) : end;
+  input("ee-end-date").value = dayKeyOf(shown);
+  if (!allDay) {
+    const f = fields(shown);
+    input("ee-end-time").value = `${pad2(f.h)}:${pad2(f.mi)}`;
+  }
+}
+
+function showAllDay(): void {
+  const allDay = input("ee-allday").checked;
+  input("ee-start-time").hidden = allDay;
+  input("ee-end-time").hidden = allDay;
+}
+
+const UNITS: Record<Freq, [string, string]> = {
+  DAILY: ["day", "days"],
+  WEEKLY: ["week", "weeks"],
+  MONTHLY: ["month", "months"],
+  YEARLY: ["year", "years"],
+};
+
+function showRepeat(): void {
+  const freq = (field("ee-repeat") as HTMLSelectElement).value as Freq | "";
+  field("ee-repeat-more").hidden = !freq;
+  field("ee-until-field").hidden = !freq;
+  if (freq) field("ee-unit").textContent = UNITS[freq][Number(input("ee-interval").value) === 1 ? 0 : 1];
+}
+
+function paintCalendarSwatch(): void {
+  const id = (field("ee-calendar") as HTMLSelectElement).value;
+  const calendar = mine.calendars.find((c) => c.id === id);
+  // On the dialog, not the swatch: the colour bar along its top follows too.
+  field("event-editor").style.setProperty("--hue", String(calendar ? calendarHue(calendar) : hueOf(pendingCalendarId)));
+}
+
+/** Every calendar of yours, the likeliest one chosen; a first one to make if there are none. */
+function fillCalendars(chosen?: string): void {
+  const select = field("ee-calendar") as HTMLSelectElement;
+  pendingCalendarId = mine.newId();
+  const options = mine.calendars.map(
+    (calendar) => new Option(calendar.hidden ? `${calendar.name} (hidden)` : calendar.name, calendar.id),
+  );
+  if (!options.length) options.push(new Option(DEFAULT_NAME, ""));
+  select.replaceChildren(...options);
+  const exists = (id: string | undefined): id is string =>
+    id !== undefined && mine.calendars.some((c) => c.id === id);
+  select.value =
+    [chosen, store.data.lastCalendar, mine.calendars.find((c) => !c.hidden)?.id].find(exists) ??
+    options[0]!.value;
+  paintCalendarSwatch();
+}
+
+function eeError(message: string, culprit?: HTMLElement): void {
+  const error = field("ee-error");
+  error.textContent = message;
+  error.hidden = false;
+  if (culprit) {
+    culprit.setAttribute("aria-invalid", "true");
+    culprit.focus();
+  }
+}
+
+function openEventEditor(init: EditorInit): void {
+  closeDetail();
+  const dialog = field("event-editor") as HTMLDialogElement;
+  const editing = init.editing;
+  const event = (editing ?? init.from)?.event;
+  eventEditing = editing
+    ? { calendarId: editing.sourceId, event: editing.event, occurrence: editing.start }
+    : null;
+
+  field("ee-heading").textContent = editing ? "Edit event" : init.from ? "Copy to my calendar" : "New event";
+  input("ee-title").value = event?.summary ?? "";
+  input("ee-location").value = event?.location ?? "";
+  input("ee-url").value = event?.url ?? "";
+  (field("ee-notes") as HTMLTextAreaElement).value = event?.description ?? "";
+
+  input("ee-allday").checked = init.allDay;
+  input("ee-start-date").value = dateKey(init.start);
+  input("ee-start-time").value = init.allDay ? "09:00" : timeKeyOf(init.start);
+  input("ee-end-time").value = init.allDay ? "10:00" : timeKeyOf(init.end);
+  const start = wallOf(init.start);
+  // An occurrence's end is exclusive, all-day or not; writeEnd shows it right.
+  writeEnd(Math.max(wallOf(init.end), init.allDay ? addNaiveDays(start, 1) : start));
+  eeSpan = Math.max(0, (readEnd() ?? start) - start);
+  showAllDay();
+
+  // A subscribed event is copied as the one occurrence that was opened.
+  const repeat = editing ? repeatOf(editing.event) : null;
+  (field("ee-repeat") as HTMLSelectElement).value = repeat?.freq ?? "";
+  input("ee-interval").value = String(repeat?.interval ?? 1);
+  input("ee-until").value = repeat?.until != null ? dayKeyOf(repeat.until) : "";
+  showRepeat();
+
+  fillCalendars(editing?.sourceId);
+  action("ee-delete").hidden = !editing;
+  field("ee-error").hidden = true;
+  for (const node of dialog.querySelectorAll("[aria-invalid]")) node.removeAttribute("aria-invalid");
+
+  dialog.querySelector(".ee-scroll")!.scrollTop = 0;
+  dialog.showModal();
+  input("ee-title").focus();
+}
+
+function closeEventEditor(): void {
+  (field("event-editor") as HTMLDialogElement).close();
+  eventEditing = null;
+}
+
+/** The form -> a Draft, or null having pointed at what's wrong. */
+function readDraft(): Draft | null {
+  field("ee-error").hidden = true;
+  for (const node of field("event-editor").querySelectorAll("[aria-invalid]")) {
+    node.removeAttribute("aria-invalid");
+  }
+  const allDay = input("ee-allday").checked;
+
+  const start = readWall("ee-start-date", "ee-start-time");
+  if (start === null) {
+    const culprit = parseDate(input("ee-start-date").value) ? input("ee-start-time") : input("ee-start-date");
+    eeError(allDay || culprit === input("ee-start-date") ? "Enter the day it starts." : "Enter the time it starts.", culprit);
+    return null;
+  }
+  const end = readEnd();
+  if (end === null) {
+    const culprit = parseDate(input("ee-end-date").value) ? input("ee-end-time") : input("ee-end-date");
+    eeError(allDay || culprit === input("ee-end-date") ? "Enter the day it ends." : "Enter the time it ends.", culprit);
+    return null;
+  }
+  if (end < start || (allDay && end <= start)) {
+    eeError("It ends before it starts.", input("ee-end-date"));
+    return null;
+  }
+
+  const url = cleanUrl(input("ee-url").value);
+  if (url === null) {
+    eeError("Links have to be https addresses, like https://example.com.", input("ee-url"));
+    return null;
+  }
+
+  const freq = (field("ee-repeat") as HTMLSelectElement).value as Freq | "";
+  let repeat: Draft["repeat"] = null;
+  if (freq && FREQS.includes(freq)) {
+    const interval = Number(input("ee-interval").value);
+    if (!Number.isInteger(interval) || interval < 1 || interval > MAX_INTERVAL) {
+      eeError(`Repeat every 1 to ${MAX_INTERVAL} ${UNITS[freq][1]}.`, input("ee-interval"));
+      return null;
+    }
+    const untilText = input("ee-until").value;
+    const untilDay = untilText ? parseDate(untilText) : null;
+    if (untilText && !untilDay) {
+      eeError("Enter the last day it repeats, or leave it empty.", input("ee-until"));
+      return null;
+    }
+    const until = untilDay ? dayOf(untilDay) : null;
+    if (until !== null && until < startOfDay(start)) {
+      eeError("It can't stop repeating before it starts.", input("ee-until"));
+      return null;
+    }
+    repeat = { freq, interval, until };
+  }
+
+  return {
+    summary: input("ee-title").value,
+    location: input("ee-location").value,
+    description: (field("ee-notes") as HTMLTextAreaElement).value,
+    url,
+    allDay,
+    start,
+    end,
+    repeat,
+  };
+}
+
+function saveEvent(): void {
+  const draft = readDraft();
+  if (!draft) return;
+  const was = eventEditing;
+  const stamp = Date.now();
+
+  let calendarId = (field("ee-calendar") as HTMLSelectElement).value;
+  let calendarName = mine.calendars.find((c) => c.id === calendarId)?.name ?? DEFAULT_NAME;
+  if (!mine.calendars.some((c) => c.id === calendarId)) {
+    // A first event, before any calendar of your own: make one to hold it.
+    const calendar: OwnCalendar = { id: pendingCalendarId || mine.newId(), name: DEFAULT_NAME, hidden: false, events: [] };
+    void mine.put(calendar).catch(failMine);
+    calendarId = calendar.id;
+    calendarName = calendar.name;
+  }
+
+  const event = buildEvent(draft, {
+    uid: was?.event.uid ?? newUid(),
+    stamp,
+    zone: deviceZone(),
+    base: was?.event,
+    occurrence: was?.occurrence,
+  });
+  const same = (other: CalEvent): boolean =>
+    other.uid === event.uid && other.recurrenceId === event.recurrenceId;
+
+  const moving = was !== null && was.calendarId !== calendarId;
+  // A series moves with its modified occurrences, which would otherwise stay
+  // behind as stray one-off events (see groupByUid's orphans).
+  const leaving = (other: CalEvent): boolean =>
+    event.recurrenceId === null ? other.uid === event.uid : same(other);
+  const carried = moving
+    ? (mine.calendars.find((c) => c.id === was.calendarId)?.events ?? []).filter(
+        (other) => leaving(other) && !same(other),
+      )
+    : [];
+
+  const into = saveMine(calendarId, (calendar) => {
+    // Saving into a hidden calendar would make the event vanish on the spot.
+    calendar.hidden = false;
+    const at = calendar.events.findIndex(same);
+    if (at >= 0) calendar.events[at] = event;
+    else calendar.events.push(event);
+    for (const extra of carried) {
+      const there = calendar.events.some(
+        (other) => other.uid === extra.uid && other.recurrenceId === extra.recurrenceId,
+      );
+      if (!there) calendar.events.push(extra);
+    }
+  });
+  if (moving) {
+    // Moved to another calendar: only taken out of the old one once it is
+    // safely in the new one.
+    void into.then((ok) => {
+      if (!ok) return;
+      void saveMine(was.calendarId, (calendar) => {
+        calendar.events = calendar.events.filter((other) => !leaving(other));
+      });
+    });
+  }
+
+  store.data.lastCalendar = calendarId;
+  store.save();
+  closeEventEditor();
+  render();
+  showStatus(was ? `Saved ${event.summary || "(no title)"}.` : `Added to ${calendarName}.`);
+}
+
+function deleteEvent(calendarId: string, event: CalEvent): void {
+  // A whole series goes with its modified occurrences, which would otherwise
+  // linger as stray one-off events (see groupByUid's orphans).
+  const same = (other: CalEvent): boolean =>
+    other.uid === event.uid &&
+    (event.recurrenceId === null || other.recurrenceId === event.recurrenceId);
+  const removed = mine.calendars.find((c) => c.id === calendarId)?.events.filter(same) ?? [event];
+  void saveMine(calendarId, (calendar) => {
+    calendar.events = calendar.events.filter((other) => !same(other));
+  });
+  render();
+  showStatus(`Deleted ${event.summary || "(no title)"}.`, false, () => {
+    void saveMine(calendarId, (calendar) => {
+      if (!calendar.events.some(same)) calendar.events.push(...removed);
+    });
+  });
+}
+
+/**
+ * The toolbar's New event: today when today is on screen, otherwise the day
+ * in focus; at the next whole hour today, at nine on any other day.
+ */
+function newEventNow(): void {
+  const today = midnight(new Date());
+  let day: Date;
+  if (view() === "month") day = focused;
+  else if (view() === "agenda") day = anchor;
+  else {
+    const { start, days } = gridRange();
+    day = today >= start && today < addDays(start, days) ? today : start;
+  }
+  const hour = sameDay(day, today) ? Math.min(23, new Date().getHours() + 1) : 9;
+  const start = new Date(day.getFullYear(), day.getMonth(), day.getDate(), hour);
+  openEventEditor({ start, end: new Date(start.getTime() + 3_600_000), allDay: false });
+}
+
+function wireEventEditor(): void {
+  const dialog = field("event-editor") as HTMLDialogElement;
+  action("ee-save").addEventListener("click", saveEvent);
+  action("ee-cancel").addEventListener("click", closeEventEditor);
+  action("ee-delete").addEventListener("click", () => {
+    const was = eventEditing;
+    closeEventEditor();
+    if (was) deleteEvent(was.calendarId, was.event);
+  });
+  dialog.addEventListener("close", () => (eventEditing = null));
+
+  // Moving the start carries the end along with it, as in every calendar.
+  const startMoved = (): void => {
+    const start = readWall("ee-start-date", "ee-start-time");
+    if (start !== null) writeEnd(start + eeSpan);
+  };
+  const endMoved = (): void => {
+    const start = readWall("ee-start-date", "ee-start-time");
+    const end = readEnd();
+    if (start !== null && end !== null && end >= start) eeSpan = end - start;
+  };
+  input("ee-start-date").addEventListener("change", startMoved);
+  input("ee-start-time").addEventListener("change", startMoved);
+  input("ee-end-date").addEventListener("change", endMoved);
+  input("ee-end-time").addEventListener("change", endMoved);
+  // The fields keep their values either way: the dates read the same for
+  // both, and the hidden times come back when all-day is switched off.
+  input("ee-allday").addEventListener("change", () => {
+    showAllDay();
+    const start = readWall("ee-start-date", "ee-start-time");
+    const end = readEnd();
+    if (start === null) return;
+    if (end === null || end <= start) {
+      eeSpan = input("ee-allday").checked ? 86_400_000 : 3_600_000;
+      writeEnd(start + eeSpan);
+    } else eeSpan = end - start;
+  });
+  field("ee-repeat").addEventListener("change", showRepeat);
+  input("ee-interval").addEventListener("input", showRepeat);
+  field("ee-calendar").addEventListener("change", paintCalendarSwatch);
+
+  // ponytail: no <form> submit; the realm sandbox lacks allow-forms (see apps/code)
+  dialog.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && event.target instanceof HTMLInputElement && event.target.type !== "checkbox") {
+      event.preventDefault();
+      saveEvent();
+    }
+  });
 }
 
 // ---------------------------------------------------------------- status --
@@ -738,6 +1496,9 @@ function step(direction: number): void {
   } else if (current === "week") {
     anchor = addDays(anchor, direction * weekDays());
     focused = anchor;
+  } else if (current === "day") {
+    anchor = addDays(anchor, direction);
+    focused = anchor;
   } else {
     anchor = addDays(anchor, direction * 7);
     focused = anchor;
@@ -758,7 +1519,7 @@ function moveFocus(days: number): void {
   focused = addDays(focused, days);
   if (view() === "month" && focused.getMonth() !== anchor.getMonth()) {
     anchor = new Date(focused.getFullYear(), focused.getMonth(), 1);
-  } else if (view() === "week") {
+  } else if (view() === "week" || view() === "day") {
     anchor = focused;
   }
   render();
@@ -782,10 +1543,15 @@ function onKey(event: KeyboardEvent): void {
     case "PageDown": event.preventDefault(); step(1); break;
     case "m": case "M": setView("month"); break;
     case "w": case "W": setView("week"); break;
+    case "d": case "D": setView("day"); break;
     case "a": case "A": setView("agenda"); break;
     case "r": case "R": void refresh(store.data.sources); break;
+    case "n": case "N": newEventNow(); break;
+    // Double-clicking a day makes an event, so this is the keyboard's way in.
+    case "Enter": if (view() === "month" && target?.classList.contains("cell")) openDay(focused); else return; break;
     case "Escape": {
       if (editing !== null) { editing = null; renderSources(); }
+      else if (editingMine !== null) { closeMineEditor(); renderSources(); }
       else if (isSheet() && !field("side").hidden) closeSources();
       break;
     }
@@ -806,6 +1572,8 @@ export async function main(appOs: AppInterface, args: string[] = []): Promise<vo
   document.body.innerHTML = calendarHTML;
 
   store = await openStore(os, (message) => showStatus(message, true));
+  mine = await openMine(os);
+  todos = await openTodos(os);
 
   // One SIGHUP handler, not followAccent's: a process gets a single handler
   // per signal, and we need the clock preference re-read as well as the
@@ -851,9 +1619,39 @@ export async function main(appOs: AppInterface, args: string[] = []): Promise<vo
       });
     }
   };
-  action("add").addEventListener("click", () => startAdd("url"));
-  action("add-link").addEventListener("click", () => startAdd("url"));
-  action("add-file").addEventListener("click", () => startAdd("file"));
+  action("add").addEventListener("click", () => {
+    closeMineEditor();
+    startAdd("url");
+  });
+  action("new-calendar").addEventListener("click", () => {
+    showSources(true);
+    editing = null;
+    closeMineEditor();
+    editingMine = "new";
+    renderSources();
+  });
+  action("new-event").addEventListener("click", newEventNow);
+  action("empty-new-event").addEventListener("click", newEventNow);
+  wireEventEditor();
+  wireGrid(field("week"), {
+    range: gridRange,
+    create: (start, end, allDay) => openEventEditor({ start, end, allDay }),
+    time,
+  });
+  action("show-todos").addEventListener("change", () => {
+    store.data.todos = (action("show-todos") as HTMLInputElement).checked;
+    store.save();
+    render();
+  });
+  action("open-todo-app").addEventListener("click", () => void os.process.spawn("/ProgramFiles/todo"));
+  action("add-link").addEventListener("click", () => {
+    closeMineEditor();
+    startAdd("url");
+  });
+  action("add-file").addEventListener("click", () => {
+    closeMineEditor();
+    startAdd("file");
+  });
   action("close-detail").addEventListener("click", () =>
     (field("detail") as HTMLDialogElement).close(),
   );
@@ -922,11 +1720,23 @@ export async function main(appOs: AppInterface, args: string[] = []): Promise<vo
 
   void refresh(needsSync());
 
+  // The Todo app writes the same file the todos come from; follow it.
+  // Your own calendars may be written by another Calendar window too.
+  await os.events.subscribe(["fs.changed"], (event) => {
+    if (event.path === todos.path) void pullTodos();
+    else if (event.path.startsWith(`${mine.dir}/`)) void pullMine();
+  });
+
   await os.timers.setInterval(() => {
-    if (view() === "week") placeNowLine(field("week"), anchor, context());
+    if (view() === "week" || view() === "day") {
+      const { start, days } = gridRange();
+      placeNowLine(field("week"), start, days);
+    }
     renderSources();
     void syncDue();
     void pullShared();
+    void pullMine(); // nor do another browser's edits
+    void pullTodos(); // another browser's ticks raise no event here
   }, TICK_MS);
 }
 

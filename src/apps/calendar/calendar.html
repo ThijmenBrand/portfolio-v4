@@ -17,10 +17,16 @@
       <button type="button" class="view" data-action="view-week" aria-pressed="false">
         <span class="long">Week</span><span class="short">W</span>
       </button>
+      <button type="button" class="view" data-action="view-day" aria-pressed="false">
+        <span class="long">Day</span><span class="short">D</span>
+      </button>
       <button type="button" class="view" data-action="view-agenda" aria-pressed="false">
         <span class="long">Agenda</span><span class="short">A</span>
       </button>
     </div>
+    <button type="button" class="icon-button" data-action="new-event" aria-label="New event" title="New event (N)">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" /></svg>
+    </button>
     <button type="button" class="icon-button" data-action="refresh" aria-label="Refresh calendars" title="Refresh calendars">
       <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.8-4.1M13 1.5V5H9.5" /></svg>
     </button>
@@ -32,13 +38,30 @@
   <div class="body">
     <aside class="side" data-field="side">
       <div class="side-top">
-        <h2 class="side-head">Calendars</h2>
+        <h2 class="side-head">My calendars</h2>
         <button type="button" class="icon-button side-close" data-action="close-sources" aria-label="Hide calendars">
           <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" /></svg>
         </button>
       </div>
+      <ul class="sources" data-field="mine"></ul>
+      <button type="button" class="link add" data-action="new-calendar">+ New calendar</button>
+
+      <h2 class="side-head side-sub">Subscriptions</h2>
       <ul class="sources" data-field="sources"></ul>
-      <button type="button" class="link add" data-action="add">+ Add calendar</button>
+      <button type="button" class="link add" data-action="add">+ Add subscription</button>
+
+      <h2 class="side-head side-sub">Todos</h2>
+      <div class="source todo-source">
+        <span class="swatch is-todo" aria-hidden="true"></span>
+        <div class="source-main">
+          <span class="source-name">Todo</span>
+          <span class="source-note" data-field="todo-note"></span>
+        </div>
+        <input type="checkbox" role="switch" class="toggle" data-action="show-todos" aria-label="Show todos" />
+        <button type="button" class="icon-button row-menu" data-action="open-todo-app" aria-label="Open Todo" title="Open Todo">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5h6.5V10M12.5 3.5l-9 9" /></svg>
+        </button>
+      </div>
       <p class="side-note" data-field="storage"></p>
     </aside>
 
@@ -49,9 +72,10 @@
     <section class="stage" data-field="stage">
       <section class="empty" data-field="empty" hidden>
         <h2>Your calendars, side by side</h2>
-        <p>Subscribe to a calendar link, or import an <code>.ics</code> file. Everything stays read-only.</p>
+        <p>Make events of your own, subscribe to a calendar link, or import an <code>.ics</code> file.</p>
         <div class="empty-actions">
-          <button type="button" class="button primary" data-action="add-link">Add a link</button>
+          <button type="button" class="button primary" data-action="empty-new-event">New event</button>
+          <button type="button" class="button" data-action="add-link">Add a link</button>
           <button type="button" class="button" data-action="add-file">Import a file</button>
         </div>
       </section>
@@ -64,9 +88,10 @@
 
   <footer class="bar">
     <p class="keys">
+      <span><kbd>N</kbd> new</span>
       <span><kbd>T</kbd> today</span>
       <span><kbd>&larr;</kbd><kbd>&rarr;</kbd> move</span>
-      <span><kbd>M</kbd><kbd>W</kbd><kbd>A</kbd> view</span>
+      <span><kbd>M</kbd><kbd>W</kbd><kbd>D</kbd><kbd>A</kbd> view</span>
       <span><kbd>R</kbd> refresh</span>
     </p>
     <output class="status" aria-live="polite" data-field="status">
@@ -126,6 +151,29 @@
   </li>
 </template>
 
+<template id="calendar-editor">
+  <li class="editor">
+    <div class="editor-fields">
+      <label class="field">
+        <span>Name</span>
+        <input type="text" name="name" placeholder="Calendar" maxlength="60" />
+      </label>
+      <div class="field">
+        <span>Colour</span>
+        <div class="hues" role="group" aria-label="Colour" data-field="hues"></div>
+      </div>
+    </div>
+
+    <p class="editor-error" role="alert" data-field="error" hidden></p>
+    <div class="editor-actions">
+      <button type="button" class="link danger" data-action="remove" hidden>Delete</button>
+      <span class="spacer"></span>
+      <button type="button" class="button" data-action="cancel">Cancel</button>
+      <button type="button" class="button primary" data-action="save">Create</button>
+    </div>
+  </li>
+</template>
+
 <template id="week-chrome">
   <div class="week-head">
     <div class="week-gutter-head"></div>
@@ -181,9 +229,108 @@
   </div>
 
   <div class="detail-actions">
+    <button type="button" class="button primary" data-action="detail-todo" hidden>Mark as done</button>
+    <button type="button" class="button primary" data-action="detail-edit" hidden>Edit</button>
     <button type="button" class="link" data-action="copy">Copy</button>
+    <button type="button" class="link" data-action="copy-to-mine" hidden>Copy to my calendar</button>
+    <button type="button" class="link" data-action="open-todo" hidden>Open in Todo</button>
     <button type="button" class="link" data-action="open-link" hidden>Open link</button>
+    <button type="button" class="link danger" data-action="detail-delete" hidden>Delete</button>
     <span class="spacer"></span>
     <button type="button" class="button" data-action="close-detail">Close</button>
+  </div>
+</dialog>
+
+<!-- The event editor. A dialog rather than a row in the list: it is about a
+     moment on the calendar, not about a calendar. No <form>: the realm
+     sandbox lacks allow-forms, so Enter is handled in main.ts. -->
+<dialog class="event-editor" data-field="event-editor" aria-labelledby="ee-heading">
+  <div class="detail-bar" aria-hidden="true"></div>
+
+  <div class="ee-scroll">
+    <header class="ee-head">
+      <h2 class="ee-heading" id="ee-heading" data-field="ee-heading">New event</h2>
+      <input type="text" class="ee-title" data-field="ee-title" placeholder="Event title" maxlength="200" aria-label="Title" />
+    </header>
+
+    <!-- Label/value rows on one shared label column, as in the detail
+         popover: the editor reads as that popover made editable. -->
+    <div class="ee-group">
+      <label class="ee-row">
+        <span class="ee-label">All day</span>
+        <span class="ee-ctl"><input type="checkbox" role="switch" data-field="ee-allday" /></span>
+      </label>
+      <div class="ee-row">
+        <span class="ee-label" id="ee-starts">Starts</span>
+        <span class="ee-ctl">
+          <input type="date" data-field="ee-start-date" aria-labelledby="ee-starts" />
+          <input type="time" data-field="ee-start-time" aria-label="Start time" />
+        </span>
+      </div>
+      <div class="ee-row">
+        <span class="ee-label" id="ee-ends">Ends</span>
+        <span class="ee-ctl">
+          <input type="date" data-field="ee-end-date" aria-labelledby="ee-ends" />
+          <input type="time" data-field="ee-end-time" aria-label="End time" />
+        </span>
+      </div>
+      <div class="ee-row">
+        <label class="ee-label" for="ee-repeat">Repeat</label>
+        <span class="ee-ctl ee-wrap">
+          <span class="ee-select">
+            <select id="ee-repeat" data-field="ee-repeat">
+              <option value="">Never</option>
+              <option value="DAILY">Daily</option>
+              <option value="WEEKLY">Weekly</option>
+              <option value="MONTHLY">Monthly</option>
+              <option value="YEARLY">Yearly</option>
+            </select>
+          </span>
+          <span class="ee-every" data-field="ee-repeat-more" hidden>
+            <span id="ee-every">every</span>
+            <input type="number" min="1" max="99" step="1" data-field="ee-interval" aria-labelledby="ee-every" />
+            <span class="ee-unit" data-field="ee-unit"></span>
+          </span>
+        </span>
+      </div>
+      <label class="ee-row" data-field="ee-until-field" hidden>
+        <span class="ee-label">Until</span>
+        <span class="ee-ctl">
+          <input type="date" data-field="ee-until" />
+          <span class="ee-hint">Optional</span>
+        </span>
+      </label>
+    </div>
+
+    <div class="ee-group">
+      <label class="ee-row">
+        <span class="ee-label">Calendar</span>
+        <span class="ee-ctl ee-select ee-calendar">
+          <span class="swatch" data-field="ee-swatch" aria-hidden="true"></span>
+          <select data-field="ee-calendar"></select>
+        </span>
+      </label>
+      <label class="ee-row">
+        <span class="ee-label">Location</span>
+        <span class="ee-ctl"><input type="text" data-field="ee-location" placeholder="Add a place" maxlength="4000" /></span>
+      </label>
+      <label class="ee-row">
+        <span class="ee-label">Link</span>
+        <span class="ee-ctl"><input type="url" data-field="ee-url" placeholder="https://" spellcheck="false" autocapitalize="off" /></span>
+      </label>
+      <label class="ee-row ee-row-top">
+        <span class="ee-label">Notes</span>
+        <span class="ee-ctl"><textarea rows="3" data-field="ee-notes" placeholder="Add notes" maxlength="4000"></textarea></span>
+      </label>
+    </div>
+
+    <p class="editor-error" role="alert" data-field="ee-error" hidden></p>
+  </div>
+
+  <div class="detail-actions">
+    <button type="button" class="link danger" data-action="ee-delete" hidden>Delete</button>
+    <span class="spacer"></span>
+    <button type="button" class="button" data-action="ee-cancel">Cancel</button>
+    <button type="button" class="button primary" data-action="ee-save">Save</button>
   </div>
 </dialog>

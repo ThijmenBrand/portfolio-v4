@@ -96,7 +96,10 @@ input[role="switch"]:checked::after { translate: 13px 0; background: var(--app-a
 
 .field { display: grid; gap: 3px; }
 .field > span { color: var(--app-text-dim); font-size: 11px; }
-.field input[type="url"], .field input[type="text"] {
+.field input[type="url"], .field input[type="text"], .field input[type="date"],
+.field input[type="time"], .field input[type="number"], .field select, .field textarea {
+  box-sizing: border-box;
+  min-width: 0;
   height: var(--app-control);
   padding: 0 8px;
   border: 1px solid var(--app-border-hi);
@@ -105,7 +108,9 @@ input[role="switch"]:checked::after { translate: 13px 0; background: var(--app-a
   color: var(--app-text);
   font: inherit;
 }
-.field input:focus-visible { border-color: var(--app-accent); }
+.field input[type="date"], .field input[type="time"], .field select { color-scheme: dark; }
+.field textarea { height: auto; padding: 5px 8px; resize: vertical; line-height: 1.4; }
+.field input:focus-visible, .field select:focus-visible, .field textarea:focus-visible { border-color: var(--app-accent); }
 .field input[aria-invalid="true"] { border-color: var(--app-danger); }
 
 /* ------------------------------------------------------------------- top -- */
@@ -329,6 +334,7 @@ input[role="switch"]:checked::after { translate: 13px 0; background: var(--app-a
   font-size: 11px;
   color: var(--app-text-faint);
 }
+.week[data-days="1"] .wday { padding-left: 8px; text-align: left; }
 .wday b { display: block; font-size: 15px; font-weight: 500; color: var(--app-text-dim); }
 .wday.is-today b {
   display: grid;
@@ -341,6 +347,7 @@ input[role="switch"]:checked::after { translate: 13px 0; background: var(--app-a
   color: #0b0b0e;
   font-weight: 600;
 }
+.week[data-days="1"] .wday.is-today b { margin-left: 0; }
 
 .week-allday {
   position: relative;
@@ -615,6 +622,243 @@ input[role="switch"]:checked::after { translate: 13px 0; background: var(--app-a
 .status { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 .status.is-error { color: var(--app-danger); }
 
+/* ----------------------------------------------------------------- todos -- */
+
+/* Todos come from the Todo app, not from a feed. They draw in the accent
+   colour and carry a tick box, so they read as something to do rather than
+   somewhere to be. */
+/* .side-head grows to fill the top row; down here it must not fill the column. */
+.side-sub { flex: none; margin: 14px 0 2px 6px; }
+.swatch.is-todo { border-radius: 50%; background: var(--app-accent); }
+
+.todo-tick {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid var(--app-accent);
+  border-radius: 50%;
+  background: transparent;
+  cursor: default;
+}
+.is-todo .todo-tick { color: #0b0b0e; }
+.todo-tick svg {
+  width: 10px;
+  height: 10px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 9;
+  stroke-dashoffset: 9;
+}
+.todo-tick:hover { background: var(--app-accent-soft); }
+.todo-tick:hover svg { stroke: var(--app-accent); stroke-dashoffset: 0; }
+.is-todo.is-done .todo-tick { background: var(--app-accent); }
+.is-todo.is-done .todo-tick svg { stroke: #0b0b0e; stroke-dashoffset: 0; }
+
+/* Ticked off a moment ago: the box squashes and springs back, the mark
+   draws in and the item glows once. */
+.just-ticked .todo-tick { animation: todo-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.just-ticked .todo-tick svg { animation: todo-draw 0.3s ease 0.1s backwards; }
+.chip.just-ticked, .box.just-ticked, .agenda-row.just-ticked { animation: todo-glow 0.8s ease-out; }
+@keyframes todo-pop {
+  30% { transform: scale(0.7); }
+  65% { transform: scale(1.3); }
+}
+@keyframes todo-draw { from { stroke-dashoffset: 9; } }
+@keyframes todo-glow {
+  20% { box-shadow: 0 0 0 3px color-mix(in oklab, var(--app-accent) 45%, transparent); }
+}
+
+.is-todo.is-done .chip-title,
+.is-todo.is-done b,
+.is-todo.is-done .what-title { color: var(--app-text-faint); text-decoration: line-through; }
+
+.chip.is-todo {
+  padding-left: 3px;
+  border-left: 0;
+  background: color-mix(in oklab, var(--app-accent) 20%, transparent);
+}
+.chip.is-todo:hover { background: color-mix(in oklab, var(--app-accent) 32%, transparent); }
+.chip.is-todo.is-done { background: color-mix(in oklab, var(--app-accent) 8%, transparent); }
+
+/* In the hour grid a timed todo sits at its time on one line -- tick, time,
+   title -- raised above the grid and outlined, so it stands out from the
+   meetings around it. */
+.box.is-todo {
+  z-index: 1;
+  flex-direction: row;
+  align-items: center;
+  gap: 5px;
+  padding: 0 6px;
+  border: 1px solid color-mix(in oklab, var(--app-accent) 75%, transparent);
+  background: color-mix(in oklab, var(--app-accent) 28%, var(--app-bg));
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+.box.is-todo:hover { background: color-mix(in oklab, var(--app-accent) 40%, var(--app-bg)); }
+.box.is-todo .todo-tick { width: 14px; height: 14px; }
+.box.is-todo span:not(.todo-tick) { flex: none; color: var(--app-accent); font-weight: 600; }
+.box.is-todo b { min-width: 0; }
+.box.is-todo.is-done {
+  border-style: dashed;
+  background: color-mix(in oklab, var(--app-accent) 10%, var(--app-bg));
+  box-shadow: none;
+}
+.box.is-todo.is-done span:not(.todo-tick) { color: var(--app-text-faint); }
+
+.agenda-row.is-todo .rule { background: var(--app-accent); }
+.agenda-row.is-todo .what { display: flex; align-items: center; gap: 7px; }
+.agenda-row.is-todo .todo-tick { width: 14px; height: 14px; }
+.agenda-row.is-todo .what-title { overflow: hidden; text-overflow: ellipsis; }
+
+.detail.is-todo .detail-bar { background: var(--app-accent); }
+.detail-actions .button.primary { height: 24px; }
+.detail-actions .button { height: 24px; }
+
+/* ---------------------------------------------------------- your events -- */
+
+/* The box a drag is drawing out, before it has become an event. */
+.box.is-ghost {
+  z-index: 2;
+  justify-content: flex-start;
+  border-left-color: var(--app-accent);
+  background: color-mix(in oklab, var(--app-accent) 30%, transparent);
+  color: var(--app-text);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+.week-cols { cursor: default; touch-action: pan-y; }
+.date { cursor: pointer; }
+.date:hover { text-decoration: underline; }
+
+/* Same display:none-unless-[open] rule as .detail, for the same reason. */
+.event-editor {
+  display: none;
+  width: min(420px, calc(100vw - 24px));
+  max-height: min(620px, calc(100vh - 24px));
+  padding: 0;
+  border: 1px solid var(--app-border-hi);
+  border-radius: var(--app-radius);
+  background: var(--app-surface);
+  color: var(--app-text);
+  box-shadow: var(--app-shadow);
+  overflow: hidden;
+}
+.event-editor[open] { display: flex; flex-direction: column; }
+.event-editor::backdrop { background: #0006; }
+
+.ee-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 14px 14px; }
+
+/* The event's own name is the heading; what the dialog is doing sits above it
+   in small caps, the way the detail popover labels its facts. */
+.ee-head { display: grid; gap: 4px; margin-bottom: 12px; }
+.ee-heading, .ee-label {
+  margin: 0;
+  color: var(--app-text-faint);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+/* Borderless until touched, so it reads as a title rather than a form field.
+   The negative margin keeps its text on the labels' left edge. */
+.ee-title {
+  box-sizing: border-box;
+  min-width: 0;
+  height: 34px;
+  margin: 0 -8px;
+  padding: 0 7px;
+  border: 1px solid transparent;
+  border-radius: var(--app-radius);
+  background: transparent;
+  color: var(--app-text);
+  font: inherit;
+  font-size: 17px;
+  font-weight: 600;
+}
+.ee-title::placeholder { color: var(--app-text-faint); }
+.ee-title:hover { background: var(--app-well); }
+.ee-title:focus-visible { background: var(--app-well); border-color: var(--app-accent); }
+
+/* A fixed label column, not max-content: each group is its own grid, and
+   "Calendar" would otherwise push the second group's controls out of line
+   with the first's. */
+.ee-group {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px 14px;
+  padding: 12px 0;
+  border-top: 1px solid var(--app-border);
+}
+.ee-group:last-of-type { padding-bottom: 2px; }
+.ee-row { display: contents; }
+.ee-row-top .ee-label { align-self: start; padding-top: 7px; }
+
+.ee-ctl { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.ee-wrap { flex-wrap: wrap; row-gap: 6px; }
+.ee-ctl > input[role="switch"] { margin: 5px 0; }
+
+.ee-ctl input[type="url"], .ee-ctl input[type="text"], .ee-ctl input[type="date"],
+.ee-ctl input[type="time"], .ee-ctl input[type="number"], .ee-ctl select, .ee-ctl textarea {
+  box-sizing: border-box;
+  flex: 1;
+  min-width: 0;
+  height: var(--app-control);
+  padding: 0 8px;
+  border: 1px solid var(--app-border-hi);
+  border-radius: var(--app-radius);
+  background: var(--app-well);
+  color: var(--app-text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  color-scheme: dark;
+}
+.ee-ctl ::placeholder { color: var(--app-text-faint); }
+.ee-ctl textarea { height: auto; min-height: 58px; padding: 5px 8px; resize: vertical; line-height: 1.4; }
+.ee-ctl input[type="time"] { flex: none; width: 96px; }
+.ee-ctl input[type="number"] { flex: none; width: 46px; padding-right: 4px; text-align: center; }
+.ee-ctl input[type="date"]::-webkit-calendar-picker-indicator,
+.ee-ctl input[type="time"]::-webkit-calendar-picker-indicator { opacity: 0.45; }
+.ee-ctl input:hover::-webkit-calendar-picker-indicator { opacity: 0.8; }
+.ee-ctl :is(input, select, textarea):hover { border-color: color-mix(in oklab, var(--app-border-hi), var(--app-text) 18%); }
+.ee-ctl :is(input, select, textarea):focus-visible { border-color: var(--app-accent); }
+.ee-ctl input[aria-invalid="true"] { border-color: var(--app-danger); }
+.ee-title[aria-invalid="true"] { border-color: var(--app-danger); }
+
+/* A select of our own drawing: the UA's chevron and padding differ from
+   every other control in the dialog. The chevron is two borders, not an
+   image, because the CSP keeps data: URLs out. */
+.ee-select { position: relative; display: flex; align-items: center; min-width: 0; }
+.ee-select select { appearance: none; flex: 1; padding-right: 24px; }
+.ee-select::after {
+  content: "";
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  margin-top: -4px;
+  border: solid var(--app-text-dim);
+  border-width: 0 1.5px 1.5px 0;
+  rotate: 45deg;
+  pointer-events: none;
+}
+.ee-wrap > .ee-select { flex: 1 1 96px; }
+.ee-calendar .swatch { position: absolute; left: 9px; pointer-events: none; }
+.ee-calendar select { padding-left: 26px; }
+
+.ee-every { display: flex; align-items: center; gap: 6px; color: var(--app-text-dim); }
+.ee-unit { min-width: 3.4em; }
+.ee-hint { flex: none; color: var(--app-text-faint); font-size: 11px; }
+
+.ee-scroll .editor-error { margin-top: 10px; }
+
 /* ----------------------------------------------------------------- phone -- */
 
 /* ------------------------------------------------------- narrow windows -- */
@@ -638,7 +882,7 @@ body.is-sheet .side-close, body.is-sheet .sheet-toggle { display: inline-flex; }
 
 /* Phone: the popover becomes a sheet on the bottom edge, within thumb reach.
    Keyed to the same query as isPhone(), not to a nearby one of its own. */
-body.is-phone .detail {
+body.is-phone .detail, body.is-phone .event-editor {
   width: 100%;
   /* The UA keeps a dialog clear of the viewport edge; a sheet wants the edge. */
   max-width: none;

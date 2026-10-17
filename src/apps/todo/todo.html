@@ -1,0 +1,129 @@
+<main class="todo">
+  <header class="top">
+    <div class="heading">
+      <h1 class="title">Todo</h1>
+      <p class="subtitle" data-field="subtitle"></p>
+    </div>
+    <button type="button" class="icon-button" data-action="sound" aria-pressed="true" aria-label="Sound" title="Sound when finishing a todo">
+      <svg viewBox="0 0 16 16" aria-hidden="true">
+        <path d="M2.5 6h2.5l3.5-3v10L5 10H2.5z" />
+        <path class="wave" d="M11 5.5a3.5 3.5 0 0 1 0 5M12.8 3.8a6 6 0 0 1 0 8.4" />
+        <path class="mute" d="M11 6l3.5 4M14.5 6L11 10" />
+      </svg>
+    </button>
+  </header>
+
+  <!-- Two tiers: what, then when. The when row folds away while the composer
+       is idle and empty, so the list stays the thing you look at. -->
+  <div class="composer" data-field="composer">
+    <div class="composer-line">
+      <span class="composer-plus" aria-hidden="true">
+        <svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" /></svg>
+      </span>
+      <input type="text" class="composer-title" data-field="new-title" placeholder="Add a todo" maxlength="200" autocomplete="off" aria-label="New todo" />
+    </div>
+    <div class="composer-details">
+      <div class="composer-bar">
+        <div class="composer-when">
+          <div class="quick" role="group" aria-label="Quick dates">
+            <button type="button" class="pill" data-quick="0" aria-pressed="false">Today</button>
+            <button type="button" class="pill" data-quick="1" aria-pressed="false">Tomorrow</button>
+          </div>
+          <label class="when-field" title="Date">
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <rect x="2.5" y="3.5" width="11" height="10" rx="2" />
+              <path d="M2.5 6.5h11M5.5 2v3M10.5 2v3" />
+            </svg>
+            <input type="date" data-field="new-date" aria-label="Date" />
+          </label>
+          <label class="when-field" title="Time">
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <circle cx="8" cy="8" r="5.5" />
+              <path d="M8 5v3l2 1.5" />
+            </svg>
+            <input type="time" data-field="new-time" aria-label="Time" />
+          </label>
+        </div>
+        <button type="button" class="button primary composer-add" data-action="add" disabled>
+          Add <kbd aria-hidden="true">&crarr;</kbd>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="scroll" data-field="scroll">
+    <section class="empty" data-field="empty" hidden>
+      <svg class="empty-art" viewBox="0 0 48 48" aria-hidden="true">
+        <circle cx="24" cy="24" r="15" />
+        <path d="M17.5 24.5l4.5 4.5 9-10" />
+      </svg>
+      <h2 data-field="empty-title"></h2>
+      <p data-field="empty-text"></p>
+    </section>
+    <div class="list" data-field="list" aria-label="Todos"></div>
+    <!-- Where the list is kept. Said the same way to everyone: the answer is
+         about storage, never about who is signed in. -->
+    <p class="storage" data-field="storage"></p>
+  </div>
+
+  <footer class="bar">
+    <p class="keys">
+      <span><kbd>N</kbd> new</span>
+      <span><kbd>&uarr;</kbd><kbd>&darr;</kbd> move</span>
+      <span><kbd>Space</kbd> done</span>
+      <span><kbd>E</kbd> edit</span>
+    </p>
+    <output class="status" aria-live="polite" data-field="status">
+      <span data-field="status-text"></span>
+      <button type="button" class="link" data-action="undo" hidden>Undo</button>
+    </output>
+  </footer>
+</main>
+
+<template id="todo-row">
+  <li class="item">
+    <button type="button" class="tick" role="checkbox" aria-checked="false">
+      <svg viewBox="0 0 20 20" aria-hidden="true">
+        <circle class="tick-ring" cx="10" cy="10" r="8" />
+        <path class="tick-mark" d="M6 10.3l2.8 2.8L14.2 7.6" />
+      </svg>
+    </button>
+    <button type="button" class="item-main" data-action="edit">
+      <span class="item-title" data-field="title"></span>
+      <span class="item-notes" data-field="notes"></span>
+    </button>
+    <span class="item-due" data-field="due"></span>
+    <button type="button" class="icon-button item-remove" data-action="remove" aria-label="Delete">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" /></svg>
+    </button>
+  </li>
+</template>
+
+<template id="todo-editor">
+  <li class="editor">
+    <input type="text" class="editor-title" name="title" maxlength="200" autocomplete="off" aria-label="Title" />
+    <textarea name="notes" rows="2" maxlength="2000" placeholder="Notes" aria-label="Notes"></textarea>
+    <div class="editor-when">
+      <label class="field">
+        <span>Date</span>
+        <input type="date" name="date" />
+      </label>
+      <label class="field">
+        <span>Time</span>
+        <input type="time" name="time" />
+      </label>
+      <div class="quick" role="group" aria-label="Quick dates">
+        <button type="button" class="pill" data-quick="0">Today</button>
+        <button type="button" class="pill" data-quick="1">Tomorrow</button>
+        <button type="button" class="pill" data-quick="none">No date</button>
+      </div>
+    </div>
+    <p class="editor-error" role="alert" hidden></p>
+    <div class="editor-actions">
+      <button type="button" class="link danger" data-action="editor-remove">Delete</button>
+      <span class="spacer"></span>
+      <button type="button" class="button" data-action="editor-cancel">Cancel</button>
+      <button type="button" class="button primary" data-action="editor-save">Save</button>
+    </div>
+  </li>
+</template>

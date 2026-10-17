@@ -31,6 +31,8 @@ export interface CalEvent {
   /** TRANSP:TRANSPARENT — free, not busy. The UI dims these. */
   transparent: boolean;
   sequence: number;
+  /** DTSTAMP (else LAST-MODIFIED) as an instant, 0 when absent. */
+  stamp: number;
 
   allDay: boolean;
   /** DTSTART as a wall clock. Never an instant: see zone.ts. */
@@ -160,6 +162,7 @@ function finish(draft: Draft, index: number, warnings: string[]): CalEvent | nul
   const rruleLine = props.get("RRULE");
   const status = text("STATUS").toUpperCase();
   const uid = text("UID");
+  const stamp = props.get("DTSTAMP") ?? props.get("LAST-MODIFIED");
 
   return {
     uid: uid || `no-uid-${index}`,
@@ -176,6 +179,7 @@ function finish(draft: Draft, index: number, warnings: string[]): CalEvent | nul
     status: STATUSES.has(status) ? (status as CalEvent["status"]) : "",
     transparent: text("TRANSP").toUpperCase() === "TRANSPARENT",
     sequence: Math.trunc(Number(text("SEQUENCE"))) || 0,
+    stamp: stamp ? (instantsOf([stamp], "UTC")[0] ?? 0) : 0,
 
     allDay,
     start,

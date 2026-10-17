@@ -38,8 +38,11 @@ for (const [file, source] of sources) {
   }
 }
 
-// action(`view-${view}`), over the three views main.ts iterates.
-for (const view of ["month", "week", "agenda"]) {
+// action(`view-${view}`), over VIEWS as store.ts declares them, so a view
+// added there without its button fails here rather than at launch.
+const views = read("store.ts").match(/export const VIEWS = \[([^\]]*)\]/);
+if (!views) throw new Error("store.ts no longer declares VIEWS; this check is now blind");
+for (const view of [...views[1].matchAll(/"([^"]+)"/g)].map((m) => m[1])) {
   count++;
   if (!names.action.has(`view-${view}`)) missing.push(`main.ts: action(\`view-${view}\`)`);
 }
@@ -64,7 +67,7 @@ count += 2;
 // part of the selector that follows it.
 const css = read("calendar.css").replace(/\/\*[\s\S]*?\*\//g, "");
 for (const [, selector, body] of css.matchAll(/([^{}]*)\{([^{}]*)\}/g)) {
-  if (!/(^|[\s,])(dialog|\.detail)(?![\w-])/.test(selector)) continue;
+  if (!/(^|[\s,])(dialog|\.detail|\.event-editor)(?![\w-])/.test(selector)) continue;
   count++;
   if (/(^|;)\s*display\s*:/.test(body) && !/\[open\]/.test(selector) && !/display\s*:\s*none/.test(body)) {
     throw new Error(`\`${selector.trim()}\` sets display outside [open]; the dialog will not hide on close()`);
