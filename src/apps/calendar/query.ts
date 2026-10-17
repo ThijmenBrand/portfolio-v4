@@ -1,7 +1,8 @@
 // What the views ask for: everything visible in a window, across every
-// subscribed calendar, in the order it should be drawn.
+// calendar, subscribed or your own, in the order it should be drawn.
 import { expandSeries, groupByUid, type Instance } from "./expand.ts";
 import type { CalEvent } from "./parse.ts";
+import type { Todo } from "../todo/store.ts";
 
 export interface QuerySource {
   /** The app's own id for the subscription; travels onto every occurrence. */
@@ -11,12 +12,18 @@ export interface QuerySource {
   hue: number;
   events: readonly CalEvent[];
   hidden?: boolean;
+  /** One of the calendars the app keeps itself (mine.ts), so its events can be edited. */
+  mine?: boolean;
 }
 
 export interface Occurrence extends Instance {
   sourceId: string;
   sourceName: string;
   hue: number;
+  /** Set when this is a todo from the Todo app rather than a feed's event. */
+  todo?: Todo;
+  /** From a calendar of your own, rather than a subscription. */
+  mine?: boolean;
 }
 
 /**
@@ -39,7 +46,7 @@ const collator = new Intl.Collator(undefined, { sensitivity: "base" });
  * events begin at local midnight and so already lead their own day, and a
  * global all-day-first sort would scramble chronology in the agenda.
  */
-function compare(a: Occurrence, b: Occurrence): number {
+export function compareOccurrences(a: Occurrence, b: Occurrence): number {
   return (
     a.start.getTime() - b.start.getTime() ||
     Number(b.allDay) - Number(a.allDay) ||
@@ -79,9 +86,10 @@ export function occurrencesIn(
           sourceId: source.id,
           sourceName: source.name,
           hue: source.hue,
+          ...(source.mine && { mine: true }),
         });
       }
     }
   }
-  return out.sort(compare);
+  return out.sort(compareOccurrences);
 }

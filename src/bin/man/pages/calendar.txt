@@ -1,8 +1,17 @@
 calendar [file.ics]
-  Your subscribed calendars, in a month, week or agenda view. Read-only:
-  Calendar shows other people's feeds, it does not create events.
+  Your calendars, in a month, week, day or agenda view: the ones you make
+  yourself, which you can write in, and the ones you subscribe to, which are
+  read-only.
 
-  Two kinds of source, both added from the sidebar:
+  Your own calendars are listed first in the sidebar; "+ New calendar" makes
+  one. Make an event with the + button (or N), by double-clicking a day or
+  an hour slot, or by dragging down the hour grid. Click an event to edit or
+  delete it. A repeating event is edited as a whole series. Each calendar is
+  one .ics file, in /mnt/cloud/calendar/mine/ where that mount will have you
+  and in ~/.config/calendar/mine/ otherwise. A subscribed event can be copied
+  into one of your calendars with "Copy to my calendar", and edited there.
+
+  Two kinds of subscription, both added from the sidebar:
     link   an https .ics address. webcal:// links are accepted too.
     file   an .ics file from this machine, chosen with the file picker.
   Given an .ics path on the command line, that file is imported on startup.
@@ -14,7 +23,12 @@ calendar [file.ics]
   which case every browser you sign in to shows the same list. The sidebar
   says which of the two you are looking at.
 
-  Keys: T today, arrows move, M/W/A switch view, R refresh, Esc close.
-  Event chips are reachable by pointer; the grid itself takes one tab stop.
+  Dated todos from the Todo app show up too: at their time of day if they
+  have one, as all-day items if not. Tick the box to mark one done. The
+  Todos switch in the sidebar hides them.
+
+  Keys: N new event, T today, arrows move, Enter open the focused day,
+  M/W/D/A switch view, R refresh, Esc close. Event chips are reachable by
+  pointer; the grid itself takes one tab stop.
 
   See also: upnext, for the same calendars in the top bar.

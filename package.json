@@ -8,7 +8,7 @@
     "build": "tsc && tsc -p server && vite build",
     "dev:api": "node --watch --env-file=.env server/main.ts",
     "preview": "vite preview",
-    "check": "node server/selftest.ts && node --import ./scripts/ts-resolve.js src/kernel/fs/remote.check.ts && node src/bin/sh/syntax.check.ts && node src/bin/lib/tools.check.ts && node src/bin/lib/dev.check.ts && node src/apps/shortcuts/schedule.check.ts && node src/apps/calendar/ics.check.ts && node src/apps/calendar/layout.check.ts && node --import ./scripts/ts-resolve.js src/apps/calendar/store.check.ts && node scripts/calendar-dom.check.js"
+    "check": "node server/selftest.ts && node --import ./scripts/ts-resolve.js src/kernel/fs/remote.check.ts && node src/bin/sh/syntax.check.ts && node src/bin/lib/tools.check.ts && node src/bin/lib/dev.check.ts && node src/apps/shortcuts/schedule.check.ts && node src/apps/calendar/ics.check.ts && node src/apps/calendar/layout.check.ts && node --import ./scripts/ts-resolve.js src/apps/calendar/store.check.ts && node --import ./scripts/ts-resolve.js src/apps/calendar/mine.check.ts && node scripts/calendar-dom.check.js && node --import ./scripts/ts-resolve.js src/apps/todo/store.check.ts && node scripts/todo-dom.check.js"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",

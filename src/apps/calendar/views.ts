@@ -1,4 +1,4 @@
-// Drawing the three views. DOM only: every measurement and every bit of
+// Drawing the views. DOM only: every measurement and every bit of
 // geometry comes from layout.ts, and every date comes in already decided.
 //
 // Everything that originates in a feed goes in through textContent. These
@@ -23,11 +23,15 @@ export interface ViewContext {
   dayMonth(at: Date): string;
   today: Date;
   focused: Date;
-  /** How many day columns the week view draws: 7, or 3 on a phone. */
-  weekDays: number;
   openDetail(occurrence: Occurrence): void;
+  /** Tick a todo off, or back on. */
+  toggleTodo(occurrence: Occurrence): void;
+  /** occKey of the todo ticked off just now, drawn with its little flourish. */
+  ticked: string;
   openDay(day: Date): void;
   focusDay(day: Date): void;
+  /** Open the event editor on a new event over [start, end). */
+  newEvent(start: Date, end: Date, allDay: boolean): void;
 }
 
 // --------------------------------------------------------------- dates --
@@ -101,12 +105,41 @@ function opens(node: HTMLElement, occurrence: Occurrence, ctx: ViewContext): voi
   });
 }
 
+/**
+ * The tick box on a todo. A span rather than a button, because it sits inside
+ * the chip's own button; the popover's "Mark as done" is the keyboard route.
+ */
+function tickFor(occurrence: Occurrence, ctx: ViewContext): HTMLSpanElement {
+  const done = occurrence.todo!.done;
+  const tick = el("span", "todo-tick");
+  tick.setAttribute("role", "checkbox");
+  tick.setAttribute("aria-checked", String(done));
+  tick.setAttribute("aria-label", occurrence.event.summary);
+  tick.title = done ? "Mark as not done" : "Mark as done";
+  tick.innerHTML = `<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 6.2l2 2L9 4" /></svg>`;
+  tick.addEventListener("click", (event) => {
+    event.stopPropagation();
+    ctx.toggleTodo(occurrence);
+  });
+  return tick;
+}
+
+/** Todo styling and its tick box, on any chip, box or agenda row. */
+function markTodo(node: HTMLElement, occurrence: Occurrence, ctx: ViewContext): void {
+  if (!occurrence.todo) return;
+  node.classList.add("is-todo");
+  if (occurrence.todo.done) node.classList.add("is-done");
+  if (occKey(occurrence) === ctx.ticked) node.classList.add("just-ticked");
+}
+
 function chipFor(occurrence: Occurrence, ctx: ViewContext, withTime: boolean): HTMLButtonElement {
   const chip = el("button", "chip");
   chip.type = "button";
   chip.tabIndex = -1;
   chip.style.setProperty("--hue", String(occurrence.hue));
   if (occurrence.event.transparent) chip.classList.add("is-free");
+  markTodo(chip, occurrence, ctx);
+  if (occurrence.todo) chip.append(tickFor(occurrence, ctx));
   if (withTime && !occurrence.allDay) {
     const time = el("span", "chip-time");
     time.textContent = ctx.time(occurrence.start);
@@ -168,8 +201,15 @@ export function renderMonth(root: HTMLElement, anchor: Date, ctx: ViewContext): 
       if (sameDay(date, ctx.focused)) cell.classList.add("is-focused");
       cell.dataset.date = String(date.getTime());
 
+      // The date opens its day; double-clicking the rest of the cell makes an
+      // event, which is what the empty space of a calendar is for.
       const number = el("span", "date");
       number.textContent = String(date.getDate());
+      number.title = "Open day";
+      number.addEventListener("click", (event) => {
+        event.stopPropagation();
+        ctx.openDay(date);
+      });
       cell.append(number);
 
       const here = entries
@@ -209,7 +249,12 @@ export function renderMonth(root: HTMLElement, anchor: Date, ctx: ViewContext): 
 
       cell.append(box);
       cell.addEventListener("click", () => ctx.focusDay(date));
-      cell.addEventListener("dblclick", () => ctx.openDay(date));
+      cell.addEventListener("dblclick", (event) => {
+        // Only the empty space: a chip, its tick, the date and "more" take
+        // their own clicks (the same rule gestures.ts keeps for the grid).
+        if ((event.target as HTMLElement).closest(".chip, .date, .more")) return;
+        ctx.newEvent(date, addDays(date, 1), true);
+      });
       frag.append(cell);
     }
   }
@@ -217,17 +262,20 @@ export function renderMonth(root: HTMLElement, anchor: Date, ctx: ViewContext): 
   root.replaceChildren(frag);
 }
 
-// -------------------------------------------------------------- week --
+// ---------------------------------------------------------- week, day --
 
+/**
+ * The hour grid behind both the week and the day view: `days` columns from
+ * `start`. The day view is this with a single column, so it gets the same
+ * all-day strip, overlap layout and now-line for free.
+ */
 export function renderWeek(
   root: HTMLElement,
   chrome: HTMLTemplateElement,
-  anchor: Date,
+  start: Date,
+  days: number,
   ctx: ViewContext,
 ): void {
-  const days = ctx.weekDays;
-  // On a phone the anchor day leads; a 7-column week starts on Monday.
-  const start = days === 7 ? startOfWeek(anchor) : midnight(anchor);
   const end = addDays(start, days);
 
   // The hour rows, gutter and column rules never change, so they are built
@@ -262,6 +310,7 @@ export function renderWeek(
   }
 
   root.style.setProperty("--days", String(days));
+  root.dataset.days = String(days);
 
   const heads = root.querySelector<HTMLElement>('[data-field="week-days"]')!;
   const headFrag = document.createDocumentFragment();
@@ -269,10 +318,11 @@ export function renderWeek(
     const date = addDays(start, day);
     const head = el("div", "wday");
     if (sameDay(date, ctx.today)) head.classList.add("is-today");
-    head.append(document.createTextNode(ctx.weekday(date)));
+    head.append(document.createTextNode(ctx.weekday(date, days === 1)));
     const number = el("b");
     number.textContent = String(date.getDate());
     head.append(number);
+    if (days > 1) head.addEventListener("click", () => ctx.openDay(date));
     headFrag.append(head);
   }
   heads.replaceChildren(headFrag);
@@ -341,12 +391,15 @@ export function renderWeek(
       box.style.setProperty("--start", String(span.start));
       box.style.setProperty("--len", String(Math.max(span.end - span.start, MIN_BOX_MINUTES)));
       if (occurrence.event.transparent) box.classList.add("is-free");
+      markTodo(box, occurrence, ctx);
 
       const title = el("b");
       title.textContent = occurrence.event.summary || "(no title)";
       const when = el("span");
       when.textContent = ctx.time(occurrence.start);
-      box.append(title, when);
+      // A todo is a moment, not a stretch: one line, tick first, at its time.
+      if (occurrence.todo) box.append(tickFor(occurrence, ctx), when, title);
+      else box.append(title, when);
       opens(box, occurrence, ctx);
       frag.append(box);
     });
@@ -366,11 +419,9 @@ export function renderWeek(
 }
 
 /** Moves the now-line without touching the DOM tree. */
-export function placeNowLine(root: HTMLElement, anchor: Date, ctx: ViewContext): void {
+export function placeNowLine(root: HTMLElement, start: Date, days: number): void {
   const line = root.querySelector<HTMLElement>('[data-field="week-now"]');
   if (!line) return;
-  const days = ctx.weekDays;
-  const start = days === 7 ? startOfWeek(anchor) : midnight(anchor);
   const now = new Date();
   const visible = now >= start && now < addDays(start, days);
   line.hidden = !visible;
@@ -427,15 +478,19 @@ export function renderAgenda(
       row.type = "button";
       row.style.setProperty("--hue", String(occurrence.hue));
 
+      markTodo(row, occurrence, ctx);
+
       const when = el("span", "when");
       if (occurrence.allDay) when.textContent = "All day";
+      else if (occurrence.todo) when.textContent = ctx.time(occurrence.start);
       else if (occurrence.start < date) when.textContent = `… ${ctx.time(occurrence.end)}`;
       else if (occurrence.end.getTime() === occurrence.start.getTime()) {
         when.textContent = ctx.time(occurrence.start);
       } else when.textContent = `${ctx.time(occurrence.start)} – ${ctx.time(occurrence.end)}`;
 
       const what = el("span", "what");
-      const title = document.createElement("span");
+      if (occurrence.todo) what.append(tickFor(occurrence, ctx));
+      const title = el("span", "what-title");
       title.textContent = occurrence.event.summary || "(no title)";
       what.append(title);
       if (occurrence.event.location) {

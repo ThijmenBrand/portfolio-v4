@@ -30,7 +30,7 @@ const CLOUD_FILE = `${CLOUD_DIR}/subscriptions.json`;
 /** Quiet after an edit before the shared copy is written. */
 const CLOUD_SAVE_MS = 600;
 
-export const VIEWS = ["month", "week", "agenda"] as const;
+export const VIEWS = ["month", "week", "day", "agenda"] as const;
 export type View = (typeof VIEWS)[number];
 
 export interface Source {
@@ -62,6 +62,10 @@ export interface Source {
 export interface Data {
   sources: Source[];
   view: View;
+  /** Draw the Todo app's dated todos alongside the calendars. */
+  todos: boolean;
+  /** The calendar of your own the last event was saved to, offered first next time. */
+  lastCalendar?: string;
 }
 
 export const MAX_SOURCES = 12;
@@ -307,6 +311,8 @@ export async function openStore(
   const data: Data = {
     sources: readSources(local),
     view: VIEWS.includes(local.view as View) ? (local.view as View) : "month",
+    todos: local.todos !== false,
+    ...(typeof local.lastCalendar === "string" && { lastCalendar: local.lastCalendar }),
   };
 
   // What the server holds, and when we last agreed with it. Reaching it at

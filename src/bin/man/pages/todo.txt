@@ -1,0 +1,16 @@
+todo
+  Things to do, some on a day and some at a time of day. Tick one off and
+  it plays a short chime and moves to Completed; the speaker button in the
+  corner turns the chime off.
+
+  Every todo with a date also appears in Calendar: at its time of day when
+  it has one, as an all-day item when it doesn't. Ticking it off there
+  ticks it off here, and the other way round.
+
+  The list lives in /mnt/cloud/todo/todos.json where that mount will have
+  you -- in which case every browser you sign in to shows the same list --
+  and in ~/.config/todo.json otherwise. The app says which one you have.
+
+  Keys: N new todo, Up/Down move, Space done, E edit, Delete remove.
+
+  See also: calendar.
