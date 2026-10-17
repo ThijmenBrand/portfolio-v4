@@ -25,6 +25,8 @@ export interface Occurrence extends Instance {
   todo?: Todo;
   /** Which of the todo's whens this is; see todos.ts. Set alongside `todo`. */
   todoPart?: TodoPart;
+  /** The colour of the project the todo is filed under (0..359); unset: the accent. */
+  todoHue?: number;
   /** From a calendar of your own, rather than a subscription. */
   mine?: boolean;
 }

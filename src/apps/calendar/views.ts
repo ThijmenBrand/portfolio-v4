@@ -163,6 +163,8 @@ function markTodo(node: HTMLElement, occurrence: Occurrence, ctx: ViewContext): 
   if (!todo) return;
   node.classList.add("is-todo", `is-${occurrence.todoPart ?? "plan"}`);
   node.dataset.todo = todo.id;
+  // Filed under a project: drawn in the project's colour (see .is-todo in calendar.css).
+  if (occurrence.todoHue !== undefined) node.style.setProperty("--todo", `oklch(0.7 0.14 ${occurrence.todoHue})`);
   if (todo.done) node.classList.add("is-done");
   if (occKey(occurrence) === ctx.ticked) node.classList.add("just-ticked");
   if (occurrence.todoPart === "deadline") {

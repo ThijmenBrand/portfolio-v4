@@ -63,11 +63,14 @@ export function todoOccurrences(
   to: Date,
   sourceName: string,
   now: Date = new Date(),
+  /** The colour a todo is drawn in, from its project; undefined for the accent. */
+  hueOfTodo: (todo: Todo) => number | undefined = () => undefined,
 ): Occurrence[] {
   const today = dateKey(now);
   const out: Occurrence[] = [];
   const add = (todo: Todo, part: TodoPart, key: string, start: Date, end: Date, allDay: boolean): void => {
     if (!(start < to && end > from)) return;
+    const hue = hueOfTodo(todo);
     out.push({
       event: eventFor(todo, start, allDay, end.getTime() - start.getTime()),
       start,
@@ -79,6 +82,7 @@ export function todoOccurrences(
       hue: 0, // drawn in the accent colour instead; see .is-todo in calendar.css
       todo,
       todoPart: part,
+      ...(hue !== undefined && { todoHue: hue }),
     });
   };
 

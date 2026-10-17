@@ -79,6 +79,7 @@ import {
 } from "./store.ts";
 import { due, IMPORT_HINT, syncMany, syncOne, type SyncDeps } from "./sync.ts";
 import { todoOccurrences } from "./todos.ts";
+import { projectFiles, readProjectHues } from "../projects/store.ts";
 import {
   addDays,
   AGENDA_DAYS,
@@ -121,6 +122,9 @@ let mineRev = 0;
 let todos: TodoStore;
 /** Bumped whenever the todo list changes, which invalidates the expansion. */
 let todoRev = 0;
+/** Each Projects project's colour, by id: what its todos are drawn in. */
+let projectHues = new Map<string, number>();
+let projectFileList: string[] = [];
 /** The todo ticked off a moment ago, drawn with a flourish on the next render. */
 let ticked = "";
 /**
@@ -248,7 +252,9 @@ function occurrences(from: Date, to: Date): Occurrence[] {
   if (!items) {
     items = occurrencesIn(enabledSources(), lo, hi);
     if (store.data.todos) {
-      const own = todoOccurrences(todos.data.todos, lo, hi, "Todos").filter(
+      const own = todoOccurrences(todos.data.todos, lo, hi, "Todos", new Date(), (todo) =>
+        todo.project ? projectHues.get(todo.project) : undefined,
+      ).filter(
         (o) => store.data.deadlines || o.todoPart !== "deadline",
       );
       items = [...items, ...own].sort(compareOccurrences);
@@ -914,6 +920,15 @@ function toggleTodo(occurrence: Occurrence): void {
 /** The Todo app (or another browser) changed the list. */
 async function pullTodos(): Promise<void> {
   if (!(await todos.reload().catch(() => false))) return;
+  todoRev++;
+  render();
+}
+
+/** The Projects app recoloured, added or removed a project. */
+async function pullProjectHues(): Promise<void> {
+  const next = await readProjectHues(os).catch(() => projectHues);
+  if (JSON.stringify([...next]) === JSON.stringify([...projectHues])) return;
+  projectHues = next;
   todoRev++;
   render();
 }
@@ -1698,6 +1713,8 @@ export async function main(appOs: AppInterface, args: string[] = []): Promise<vo
   store = await openStore(os, (message) => showStatus(message, true));
   mine = await openMine(os);
   todos = await openTodos(os);
+  projectHues = await readProjectHues(os).catch(() => new Map());
+  projectFileList = projectFiles((await os.process.env()).HOME ?? "/");
 
   // One SIGHUP handler, not followAccent's: a process gets a single handler
   // per signal, and we need the clock preference re-read as well as the
@@ -1855,6 +1872,7 @@ export async function main(appOs: AppInterface, args: string[] = []): Promise<vo
   await os.events.subscribe(["fs.changed"], (event) => {
     if (event.path === todos.path) void pullTodos();
     else if (event.path.startsWith(`${mine.dir}/`)) void pullMine();
+    else if (projectFileList.includes(event.path)) void pullProjectHues();
   });
 
   await os.timers.setInterval(() => {
@@ -1875,6 +1893,7 @@ export async function main(appOs: AppInterface, args: string[] = []): Promise<vo
     void pullShared();
     void pullMine(); // nor do another browser's edits
     void pullTodos(); // another browser's ticks raise no event here
+    void pullProjectHues();
   }, TICK_MS);
 }
 
