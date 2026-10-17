@@ -24,7 +24,8 @@ dist-ssr
 *.sln
 *.sw?
 
-# Local cloud filesystem database (CLOUD_DB in .env.example)
+# Local cloud filesystem database and documents (CLOUD_DB, CLOUD_DOCS in .env.example)
 cloud.db
+cloud-docs/
 cloud.db-wal
 cloud.db-shm

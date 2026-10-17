@@ -9,11 +9,12 @@
 // who is running the app, so nothing here asks who that is. The Calendar and
 // the Todo app open the same way and so always agree on which file it is.
 //
-// Two processes write the file -- the Todo app, and the Calendar when a todo
-// is ticked off there -- so every change is a read-modify-write of the latest
-// copy rather than a save of whatever this process last saw. Without that,
-// ticking a todo in the Calendar and then renaming another in the Todo app
-// would quietly untick the first.
+// Three processes write the file -- the Todo app, the Calendar when a todo is
+// ticked off there, and the Projects app, which files todos under projects
+// and goals (`project`, `goal`, `parent`) -- so every change is a
+// read-modify-write of the latest copy rather than a save of whatever this
+// process last saw. Without that, ticking a todo in the Calendar and then
+// renaming another in the Todo app would quietly untick the first.
 //
 // Nothing here trusts the file: someone may have edited it by hand.
 import type { AppInterface } from "../../kernel/syscalls/api";
@@ -59,6 +60,15 @@ export interface Todo {
   notes?: string;
   createdAt: number;
   doneAt?: number;
+  /**
+   * The Projects app's project this belongs to, by id. A todo made here has
+   * none; one whose project was deleted keeps a stale id, read as none.
+   */
+  project?: string;
+  /** A goal: a larger piece of work, whose deadline its parts are planned towards. */
+  goal?: boolean;
+  /** The goal (another todo's id) this is a part of. */
+  parent?: string;
 }
 
 export interface Data {
@@ -177,6 +187,9 @@ function cleanTodo(raw: unknown): Todo | null {
   const deadlineTime = deadline && isTime(text(given.deadlineTime)) ? text(given.deadlineTime) : "";
   const notes = text(given.notes).slice(0, MAX_NOTES);
   const done = given.done === true;
+  const ref = (value: unknown): string => (/^[a-z0-9]{1,16}$/i.test(text(value)) ? text(value) : "");
+  const project = ref(given.project);
+  const parent = ref(given.parent);
   return {
     id: /^[a-z0-9]{1,16}$/i.test(text(given.id)) ? text(given.id) : newId(),
     title,
@@ -189,6 +202,10 @@ function cleanTodo(raw: unknown): Todo | null {
     ...(notes && { notes }),
     createdAt: typeof given.createdAt === "number" ? given.createdAt : 0,
     ...(done && typeof given.doneAt === "number" && { doneAt: given.doneAt }),
+    ...(project && { project }),
+    ...(given.goal === true && { goal: true }),
+    // A goal is never a part of another one: one level, on purpose.
+    ...(parent && given.goal !== true && { parent }),
   };
 }
 

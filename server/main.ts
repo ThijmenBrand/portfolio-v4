@@ -2,6 +2,8 @@
 // run directly by Node (type stripping, no build step):
 //   node server/main.ts            (dev: pnpm dev:api, behind Vite's /api proxy)
 // In production only the container's Caddy reaches it (deploy/web/Caddyfile).
+import { createReadStream } from "node:fs";
+import { open } from "node:fs/promises";
 import {
   createServer,
   type IncomingMessage,
@@ -18,6 +20,7 @@ import {
   verifyPassword,
   verifyTotp,
 } from "./auth.ts";
+import { pipeline } from "node:stream/promises";
 import { requirePath } from "./fspath.ts";
 import * as cloud from "./fsstore.ts";
 import { netFetch } from "./net.ts";
@@ -113,9 +116,36 @@ async function readJson(
   throw new HttpError(400, "invalid JSON body");
 }
 
+/**
+ * A cloud file's bytes, written to a new file in the documents directory as
+ * they arrive, so an upload is never held whole in memory.
+ */
+async function receive(req: IncomingMessage): Promise<cloud.Content> {
+  const blob = cloud.newBlob();
+  const out = await open(cloud.blobPath(blob), "wx", 0o600);
+  let size = 0;
+  try {
+    for await (const chunk of req as AsyncIterable<Buffer>) {
+      size += chunk.length;
+      if (size > cloud.MAX_FILE)
+        throw new HttpError(413, `file is over ${cloud.MAX_FILE} bytes`, "EFBIG");
+      await out.write(chunk);
+    }
+    // On disk before the row that points at it commits.
+    await out.sync();
+    return { blob, size };
+  } catch (error) {
+    cloud.dropBlob(blob);
+    throw error;
+  } finally {
+    await out.close();
+  }
+}
+
 // A file upload is the only body here big enough to matter, and the API
 // container has 128 MiB (an OOM restart also resets the login rate limit).
-// Let a few land at once and make the rest wait rather than queue in memory.
+// receive() holds at most a chunk of each; let a few land at once and make
+// the rest wait rather than queue.
 const MAX_UPLOADS = 3;
 let uploads = 0;
 const waiting: (() => void)[] = [];
@@ -222,14 +252,14 @@ async function handle(
       return;
     }
     if (method === "GET" && pathname === "/api/private/fs/read") {
-      const { data, version } = cloud.read(owner, at());
-      res
-        .writeHead(200, {
-          "Content-Type": BYTES_TYPE,
-          "Content-Length": String(data.byteLength),
-          "X-Fs-Version": String(version),
-        })
-        .end(data);
+      const file = cloud.read(owner, at());
+      res.writeHead(200, {
+        "Content-Type": BYTES_TYPE,
+        "Content-Length": String(file.size),
+        "X-Fs-Version": String(file.version),
+      });
+      // A dropped download isn't the server's fault; pipeline closes the file.
+      await pipeline(createReadStream("", { fd: file.fd }), res).catch(() => {});
       return;
     }
     if (method === "POST" && pathname === "/api/private/fs/write") {
@@ -240,8 +270,8 @@ async function handle(
         throw new HttpError(400, "invalid baseVersion");
       // Read the body first: the store's checks are only race-free with no
       // await between them and the write they guard.
-      const data = await withUploadSlot(() => readBytes(req, cloud.MAX_FILE + 1024));
-      json(res, 200, { version: cloud.write(owner, path, data, base === null ? null : Number(base)) });
+      const content = await withUploadSlot(() => receive(req));
+      json(res, 200, { version: cloud.write(owner, path, content, base === null ? null : Number(base)) });
       return;
     }
     if (method === "POST" && pathname === "/api/private/fs/mkdir") {

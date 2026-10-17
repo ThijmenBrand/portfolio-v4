@@ -625,8 +625,9 @@ input[role="switch"]:checked::after { translate: 13px 0; background: var(--app-a
 /* ----------------------------------------------------------------- todos -- */
 
 /* Todos come from the Todo app, not from a feed. They draw in the accent
-   colour and carry a tick box, so they read as something to do rather than
-   somewhere to be. */
+   colour -- or, filed under a project in the Projects app, in that project's
+   (--todo, set per item) -- and carry a tick box, so they read as something
+   to do rather than somewhere to be. */
 /* .side-head grows to fill the top row; down here it must not fill the column. */
 .side-sub { flex: none; margin: 14px 0 2px 6px; }
 .swatch.is-todo { border-radius: 50%; background: var(--app-accent); }
@@ -638,7 +639,7 @@ input[role="switch"]:checked::after { translate: 13px 0; background: var(--app-a
   box-sizing: border-box;
   width: 12px;
   height: 12px;
-  border: 1.5px solid var(--app-accent);
+  border: 1.5px solid var(--todo, var(--app-accent));
   border-radius: 50%;
   background: transparent;
   cursor: default;
@@ -656,8 +657,8 @@ input[role="switch"]:checked::after { translate: 13px 0; background: var(--app-a
   stroke-dashoffset: 9;
 }
 .todo-tick:hover { background: var(--app-accent-soft); }
-.todo-tick:hover svg { stroke: var(--app-accent); stroke-dashoffset: 0; }
-.is-todo.is-done .todo-tick { background: var(--app-accent); }
+.todo-tick:hover svg { stroke: var(--todo, var(--app-accent)); stroke-dashoffset: 0; }
+.is-todo.is-done .todo-tick { background: var(--todo, var(--app-accent)); }
 .is-todo.is-done .todo-tick svg { stroke: #0b0b0e; stroke-dashoffset: 0; }
 
 /* Ticked off a moment ago: the box squashes and springs back, the mark
@@ -671,7 +672,7 @@ input[role="switch"]:checked::after { translate: 13px 0; background: var(--app-a
 }
 @keyframes todo-draw { from { stroke-dashoffset: 9; } }
 @keyframes todo-glow {
-  20% { box-shadow: 0 0 0 3px color-mix(in oklab, var(--app-accent) 45%, transparent); }
+  20% { box-shadow: 0 0 0 3px color-mix(in oklab, var(--todo, var(--app-accent)) 45%, transparent); }
 }
 
 .is-todo.is-done .chip-title,
@@ -681,10 +682,10 @@ input[role="switch"]:checked::after { translate: 13px 0; background: var(--app-a
 .chip.is-todo {
   padding-left: 3px;
   border-left: 0;
-  background: color-mix(in oklab, var(--app-accent) 20%, transparent);
+  background: color-mix(in oklab, var(--todo, var(--app-accent)) 20%, transparent);
 }
-.chip.is-todo:hover { background: color-mix(in oklab, var(--app-accent) 32%, transparent); }
-.chip.is-todo.is-done { background: color-mix(in oklab, var(--app-accent) 8%, transparent); }
+.chip.is-todo:hover { background: color-mix(in oklab, var(--todo, var(--app-accent)) 32%, transparent); }
+.chip.is-todo.is-done { background: color-mix(in oklab, var(--todo, var(--app-accent)) 8%, transparent); }
 
 /* In the hour grid a timed todo sits at its time on one line -- tick, time,
    title -- raised above the grid and outlined, so it stands out from the
@@ -694,19 +695,19 @@ input[role="switch"]:checked::after { translate: 13px 0; background: var(--app-a
   justify-content: center;
   gap: 3px;
   padding: 0 6px;
-  border: 1px solid color-mix(in oklab, var(--app-accent) 75%, transparent);
-  background: color-mix(in oklab, var(--app-accent) 28%, var(--app-bg));
+  border: 1px solid color-mix(in oklab, var(--todo, var(--app-accent)) 75%, transparent);
+  background: color-mix(in oklab, var(--todo, var(--app-accent)) 28%, var(--app-bg));
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
 }
 .box.is-todo.is-block { justify-content: flex-start; padding-top: 4px; }
-.box.is-todo:hover { background: color-mix(in oklab, var(--app-accent) 40%, var(--app-bg)); }
+.box.is-todo:hover { background: color-mix(in oklab, var(--todo, var(--app-accent)) 40%, var(--app-bg)); }
 .box.is-todo .todo-head { display: flex; align-items: center; gap: 5px; min-width: 0; color: var(--app-text); }
 .box.is-todo .todo-tick { width: 14px; height: 14px; }
-.box.is-todo .todo-head > span:not(.todo-tick) { flex: none; color: var(--app-accent); font-weight: 600; }
+.box.is-todo .todo-head > span:not(.todo-tick) { flex: none; color: var(--todo, var(--app-accent)); font-weight: 600; }
 .box.is-todo b { min-width: 0; }
 .box.is-todo.is-done {
   border-style: dashed;
-  background: color-mix(in oklab, var(--app-accent) 10%, var(--app-bg));
+  background: color-mix(in oklab, var(--todo, var(--app-accent)) 10%, var(--app-bg));
   box-shadow: none;
 }
 .box.is-todo.is-done .todo-head > span:not(.todo-tick) { color: var(--app-text-faint); }
@@ -720,7 +721,7 @@ input[role="switch"]:checked::after { translate: 13px 0; background: var(--app-a
 /* A plan whose day went by with the todo still open: left faint and dashed
    where it was, while a copy sits on today, where the work carried over to. */
 .chip.is-todo.is-missed, .box.is-todo.is-missed {
-  border: 1px dashed color-mix(in oklab, var(--app-accent) 55%, transparent);
+  border: 1px dashed color-mix(in oklab, var(--todo, var(--app-accent)) 55%, transparent);
   background: transparent;
   box-shadow: none;
   color: var(--app-text-dim);
@@ -807,12 +808,12 @@ input[role="switch"]:checked::after { translate: 13px 0; background: var(--app-a
 .detail-time.is-late { color: var(--app-danger); }
 .detail-props .is-warn { color: var(--app-warn); }
 
-.agenda-row.is-todo .rule { background: var(--app-accent); }
+.agenda-row.is-todo .rule { background: var(--todo, var(--app-accent)); }
 .agenda-row.is-todo .what { display: flex; align-items: center; gap: 7px; }
 .agenda-row.is-todo .todo-tick { width: 14px; height: 14px; }
 .agenda-row.is-todo .what-title { overflow: hidden; text-overflow: ellipsis; }
 
-.detail.is-todo .detail-bar { background: var(--app-accent); }
+.detail.is-todo .detail-bar { background: var(--todo, var(--app-accent)); }
 .detail-actions .button.primary { height: 24px; }
 .detail-actions .button { height: 24px; }
 
