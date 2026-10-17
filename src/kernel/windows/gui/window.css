@@ -251,6 +251,30 @@
     margin-left: auto;
 }
 
+/* Maximized (fullscreen): the app fills the window and the bar tucks away like
+   the topbar (taskbar.css), leaving a 2px hover strip at the top edge. When it
+   comes back it lies over the app instead of pushing it down. Not on phones:
+   no hover to bring it back. */
+@media not ((max-width: 700px) or ((pointer: coarse) and (max-width: 1024px))) {
+    .window.maximized > .top-bar,
+    .window.maximized.focused > .top-bar {
+        position: absolute;
+        inset: 0 0 auto;
+        z-index: 1;
+        /* Over the app's content, translucent and titlebar-hidden too: frosted, not see-through. */
+        background: rgba(22, 22, 26, 0.86);
+        -webkit-backdrop-filter: blur(24px) saturate(160%);
+        backdrop-filter: blur(24px) saturate(160%);
+        border-bottom: 1px solid var(--app-border);
+        transform: translateY(calc(-100% + 2px));
+        transition: transform 150ms ease;
+    }
+
+    .window.maximized > .top-bar:is(:hover, :has(:focus-visible)) {
+        transform: none;
+    }
+}
+
 /* While dragging/resizing, iframes must not swallow the mouse (interactions/shield.ts). */
 body.wm-interacting iframe {
     pointer-events: none;

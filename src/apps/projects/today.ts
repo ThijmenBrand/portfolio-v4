@@ -1,5 +1,6 @@
 // The two pages that cut across every area: Today (what to do now, beside a
 // calendar of the day or week) and Upcoming (the next two weeks, day by day).
+// An area's overview (area.ts) is Today again, for that area's todos only.
 import {
   addDays,
   dateKey,
@@ -27,7 +28,7 @@ import {
   todoRow,
 } from "./ui.ts";
 
-const open = (todo: Todo): void => {
+export const open = (todo: Todo): void => {
   if (todo.goal && projectOf(todo)) app.go({ view: "goal", id: todo.project!, goal: todo.id }, "page");
   else editTodo(todo);
 };
@@ -49,10 +50,10 @@ const byTime = (a: Todo, b: Todo): number =>
   (deadlineAt(a)?.getTime() ?? Infinity) - (deadlineAt(b)?.getTime() ?? Infinity);
 
 /** Goal and todo deadlines coming up, with how far along each goal is. */
-function deadlinesAhead(now: Date, days: number): HTMLElement {
+export function deadlinesAhead(now: Date, days: number, todos: readonly Todo[] = app.todos.data.todos): HTMLElement {
   const node = el("section", "deadlines");
   node.append(heading("Deadlines ahead"));
-  const soon = app.todos.data.todos
+  const soon = todos
     .filter((todo) => {
       // A part's deadline is its goal's business; one whose goal is gone is a todo again.
       if (todo.done || goalOf(todo)) return false;
@@ -93,26 +94,42 @@ function deadlinesAhead(now: Date, days: number): HTMLElement {
   return node;
 }
 
-export function renderToday(page: HTMLElement): void {
-  const now = new Date();
+/** What's on for today among these todos, in the sections Today lists them in. */
+export function dayLists(all: readonly Todo[], now: Date) {
   const today = dateKey(now);
-  const todos = app.todos.data.todos.filter((todo) => !todo.done);
+  const todos = all.filter((todo) => !todo.done);
   const late = todos.filter((todo) => deadlineState(todo, now) === "late").sort(byTime);
   const lateIds = new Set(late.map((todo) => todo.id));
   const forToday = todos.filter((todo) => !lateIds.has(todo.id) && !todo.goal && isForToday(todo, today));
-  const planned = forToday.filter((todo) => todo.date === today).sort(byTime);
-  const carried = forToday.filter((todo) => todo.date && todo.date < today).sort(byTime);
-  const dueOnly = forToday.filter((todo) => !todo.date);
-  const doneToday = app.todos.data.todos.filter((todo) => todo.done && todo.doneAt && dateKey(new Date(todo.doneAt)) === today);
-  const count = late.length + forToday.length;
+  return {
+    late,
+    planned: forToday.filter((todo) => todo.date === today).sort(byTime),
+    carried: forToday.filter((todo) => todo.date && todo.date < today).sort(byTime),
+    dueOnly: forToday.filter((todo) => !todo.date),
+    doneToday: all.filter((todo) => todo.done && todo.doneAt && dateKey(new Date(todo.doneAt)) === today),
+    count: late.length + forToday.length,
+  };
+}
 
-  const head = el("header", "page-head");
-  head.append(backButton("Areas", () => app.go(app.route, "rail")));
-  const titles = el("div", "page-titles");
-  titles.append(el("h1", "", "Today"));
-  titles.append(
-    el("p", "page-sub", [fmtFull(now), count ? `${count} to do` : "nothing to do", late.length ? `${late.length} overdue` : ""].filter(Boolean).join(" · ")),
-  );
+/** The sections of `dayLists`, or `none` when there's nothing to do, then what's done today. */
+export function daySections(lists: ReturnType<typeof dayLists>, now: Date, none: HTMLElement): HTMLElement[] {
+  const sections = [
+    section("Overdue", lists.late, now, { late: true }),
+    section("Planned for today", lists.planned, now, { noDay: true }),
+    section("Carried over", lists.carried, now),
+    section("Due today, not planned", lists.dueOnly, now),
+  ].filter((node): node is HTMLElement => node !== null);
+  if (!sections.length) sections.push(none);
+  const done = section(`Done today · ${lists.doneToday.length}`, lists.doneToday, now, { noDay: true });
+  if (done) {
+    done.classList.add("is-done-list");
+    sections.push(done);
+  }
+  return sections;
+}
+
+/** The Day / Week switch above the calendar beside today's todos. */
+export function rangeSwitch(): HTMLElement {
   const range = el("div", "segmented is-small");
   range.setAttribute("role", "radiogroup");
   range.setAttribute("aria-label", "Calendar shows");
@@ -125,29 +142,27 @@ export function renderToday(page: HTMLElement): void {
     pick.setAttribute("aria-checked", String(app.todayRange === value));
     range.append(pick);
   }
-  head.append(titles, range);
+  return range;
+}
+
+export function renderToday(page: HTMLElement): void {
+  const now = new Date();
+  const lists = dayLists(app.todos.data.todos, now);
+
+  const head = el("header", "page-head");
+  head.append(backButton("Areas", () => app.go(app.route, "rail")));
+  const titles = el("div", "page-titles");
+  titles.append(el("h1", "", "Today"));
+  titles.append(
+    el("p", "page-sub", [fmtFull(now), lists.count ? `${lists.count} to do` : "nothing to do", lists.late.length ? `${lists.late.length} overdue` : ""].filter(Boolean).join(" · ")),
+  );
+  head.append(titles, rangeSwitch());
 
   const left = el("div", "page-main");
   left.append(composer({ placeholder: "Add a todo, then # to file it", today: true }));
-  const sections = [
-    section("Overdue", late, now, { late: true }),
-    section("Planned for today", planned, now, { noDay: true }),
-    section("Carried over", carried, now),
-    section("Due today, not planned", dueOnly, now),
-  ].filter((node): node is HTMLElement => node !== null);
-  if (!sections.length) {
-    const none = el("div", "empty-state");
-    none.append(el("h2", "", "Nothing for today"), el("p", "", "Plan something on today, or drag a todo onto the calendar."));
-    left.append(none);
-  }
-  left.append(...sections);
-  if (doneToday.length) {
-    const done = section(`Done today · ${doneToday.length}`, doneToday, now, { noDay: true });
-    if (done) {
-      done.classList.add("is-done-list");
-      left.append(done);
-    }
-  }
+  const none = el("div", "empty-state");
+  none.append(el("h2", "", "Nothing for today"), el("p", "", "Plan something on today, or drag a todo onto the calendar."));
+  left.append(...daySections(lists, now, none));
 
   const side = el("aside", "page-side");
   const gridBox = el("div", "grid-box");

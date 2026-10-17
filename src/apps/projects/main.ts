@@ -3,8 +3,8 @@
 // parts planned before their deadline, todos and notes.
 //
 // Three columns: the areas (and Today and Upcoming, which cut across them),
-// the courses and projects in the area, and the page. On a phone, or in a
-// narrow window, they become a drill-down, one at a time.
+// the area's overview and its courses and projects, and the page. On a
+// phone, or in a narrow window, they become a drill-down, one at a time.
 //
 // The todos are the Todo app's (../todo/store.ts), filed by project, so the
 // Todo app and the Calendar show them too. Areas and projects are kept by
@@ -15,9 +15,11 @@ import type { AppInterface } from "../../kernel/syscalls/api";
 import { applyAccent, ensureConfigDir, loadSettings } from "../../utils/settings";
 import { ruleSpaceAt } from "../shortcuts/schedule";
 import { dateKey, deadlineState, isForToday, openTodos, type Todo } from "../todo/store.ts";
+import { listLine, renderArea } from "./area.ts";
 import { openCalendars } from "./calendars.ts";
-import { editArea, editProject } from "./dialogs.ts";
+import { canDeleteArea, deleteArea, deleteProject, editArea, editProject } from "./dialogs.ts";
 import { sessionNow } from "./match.ts";
+import { openMenu } from "./menu.ts";
 import { leaveNote, notesChanged, renderNote } from "./notes.ts";
 import { renderGoal, renderProject, startGoal } from "./project.ts";
 import {
@@ -35,7 +37,7 @@ import {
 } from "./state.ts";
 import { fromShortcuts, MAX_AREAS, openProjects, saveProblem, type Project } from "./store.ts";
 import { renderToday, renderUpcoming } from "./today.ts";
-import { button, buildFormats, dot, el, fmtTime, fmtWeekday, hueColor, ICONS, withIcon } from "./ui.ts";
+import { button, buildFormats, dot, el, hueColor, ICONS, withIcon } from "./ui.ts";
 import projectsHTML from "./projects.html?raw";
 import "../../ui/theme.css";
 import "../../utils/confirm.css";
@@ -93,7 +95,8 @@ function renderSoon(): void {
 function go(route: Route, pane?: Pane): void {
   if (app.route.view === "note" && JSON.stringify(route) !== JSON.stringify(app.route)) void leaveNote();
   app.route = route;
-  app.pane = pane ?? (route.view === "area" ? "list" : "page");
+  app.pane = pane ?? "page";
+  if (route.view === "area") app.lastIn.delete(route.id);
   if (route.view === "project" || route.view === "goal" || route.view === "note") {
     const project = projectById(route.id);
     if (project) app.lastIn.set(project.area, project.id);
@@ -101,12 +104,11 @@ function go(route: Route, pane?: Pane): void {
   render();
 }
 
-/** An area's page: the project last open in it, else its first open one. */
+/** An area's page: the project last open in it, else its overview. */
 function areaRoute(areaId: string): Route {
   const last = projectById(app.lastIn.get(areaId));
   if (last && last.area === areaId && !isEnded(last)) return { view: "project", id: last.id };
-  const first = app.projects.data.projects.find((project) => project.area === areaId && !isEnded(project));
-  return first ? { view: "project", id: first.id } : { view: "area", id: areaId };
+  return { view: "area", id: areaId };
 }
 
 // ------------------------------------------------------------------ rail --
@@ -158,9 +160,15 @@ function renderRail(): void {
   for (const each of app.projects.data.areas) {
     const swatch = el("span", "rail-swatch");
     swatch.style.background = hueColor(each.hue);
-    rail.append(
-      item(each.name, swatch, area === each.id, () => go(areaRoute(each.id), "list"), attention(todosInArea(each.id), now)),
+    const node = item(each.name, swatch, area === each.id, () => go(areaRoute(each.id), "list"), attention(todosInArea(each.id), now));
+    node.addEventListener("contextmenu", (event) =>
+      openMenu(event, node, [
+        { label: "Area settings…", action: () => editArea(each) },
+        null,
+        { label: "Delete area…", danger: true, disabled: !canDeleteArea(), action: () => void deleteArea(each) },
+      ]),
     );
+    rail.append(node);
   }
   const storage = el("p", "storage");
   storage.textContent =
@@ -169,34 +177,6 @@ function renderRail(): void {
 }
 
 // ------------------------------------------------------------------ list --
-
-/** The line under a project in the list: its next session, then its next deadline. */
-function listLine(project: Project, now: Date): HTMLElement {
-  const line = el("span", "list-sub");
-  const parts: (string | HTMLElement)[] = [];
-  const sessions = sessionsFor(project);
-  const next = sessions.find((session) => session.end > now);
-  if (next && next.start.getTime() - now.getTime() < 7 * 86_400_000) {
-    const on = next.start <= now;
-    parts.push(`${next.type || "Session"} ${on ? "now" : `${fmtWeekday(next.start)} ${fmtTime(next.start)}`}`);
-  }
-  const due = app.todos.data.todos
-    .filter((todo) => todo.project === project.id && !todo.done && todo.deadline)
-    .sort((a, b) => a.deadline!.localeCompare(b.deadline!) || (a.deadlineTime ?? "").localeCompare(b.deadlineTime ?? ""))[0];
-  if (due) {
-    const state = deadlineState(due, now) ?? "later";
-    const span = el("span", `is-${state}`);
-    const at = new Date(`${due.deadline}T00:00`);
-    span.textContent = state === "late" ? `${due.title} overdue` : `due ${at.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}`;
-    parts.push(span);
-  }
-  if (!parts.length) parts.push(project.kind === "course" && !sessions.length ? "Not linked to a calendar" : "No deadlines");
-  for (const [index, part] of parts.entries()) {
-    if (index) line.append(" · ");
-    line.append(part);
-  }
-  return line;
-}
 
 function renderList(areaId: string | undefined): void {
   const list = field("list");
@@ -216,6 +196,18 @@ function renderList(areaId: string | undefined): void {
   head.append(back, swatch, el("h2", "", area.name), settings);
   list.append(head);
 
+  const onOverview = app.route.view === "area";
+  const overview = button(`list-item is-overview${onOverview ? " is-on" : ""}`, "", () => go({ view: "area", id: area.id }));
+  const label = el("span", "list-name");
+  const icon = el("span", "list-icon");
+  icon.innerHTML = ICONS.overview;
+  label.append(icon, el("span", "", "Overview"));
+  const { count, late } = attention(todosInArea(area.id), now);
+  if (count) label.append(el("span", `rail-count${late ? " is-late" : ""}`, String(count)));
+  overview.append(label);
+  if (onOverview) overview.setAttribute("aria-current", "page");
+  list.append(overview);
+
   const projects = app.projects.data.projects.filter((project) => project.area === area.id);
   const open = projects.filter((project) => !isEnded(project, now));
   const ended = projects.filter((project) => isEnded(project, now));
@@ -230,6 +222,15 @@ function renderList(areaId: string | undefined): void {
       name.append(dot(project.hue), el("span", "", project.code ? `${project.code} · ${project.name}` : project.name));
       node.append(name, listLine(project, now));
       if (project.id === current) node.setAttribute("aria-current", "page");
+      const kind = project.kind === "course" ? "course" : "project";
+      node.addEventListener("contextmenu", (event) =>
+        openMenu(event, node, [
+          { label: "Open", action: () => go({ view: "project", id: project.id }) },
+          { label: `${kind === "course" ? "Course" : "Project"} settings…`, action: () => editProject(project) },
+          null,
+          { label: `Delete ${kind}…`, danger: true, action: () => void deleteProject(project) },
+        ]),
+      );
       list.append(node);
     }
   };
@@ -266,7 +267,7 @@ function renderPage(): void {
     case "area": {
       const area = areaById(route.id);
       if (!area) return go({ view: "today" });
-      renderArea(page, area.id);
+      renderArea(page, area);
       break;
     }
     case "project": {
@@ -293,25 +294,6 @@ function renderPage(): void {
   // A new page starts at the top; the same page drawn again stays put.
   page.scrollTop = key === drawnRoute ? scroll : 0;
   drawnRoute = key;
-}
-
-function renderArea(page: HTMLElement, areaId: string): void {
-  const area = areaById(areaId)!;
-  const box = el("div", "empty-state is-page");
-  const swatch = el("span", "rail-swatch is-big");
-  swatch.style.background = hueColor(area.hue);
-  box.append(
-    swatch,
-    el("h2", "", `Nothing in ${area.name} yet`),
-    el("p", "", "Add a course (it finds its lectures in your calendar by its code) or a project. Each gets its shortcuts, goals, todos and notes."),
-  );
-  const actions = el("div", "empty-actions");
-  actions.append(
-    button("button primary", withIcon(ICONS.plus, "New course or project"), () => editProject(undefined, area.id)),
-    button("button", withIcon(ICONS.gear, "Area settings"), () => editArea(area)),
-  );
-  box.append(actions);
-  page.replaceChildren(box);
 }
 
 function shortcutsOffer(): HTMLElement {

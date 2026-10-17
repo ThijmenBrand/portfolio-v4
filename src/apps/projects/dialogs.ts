@@ -10,6 +10,8 @@ import { nearMisses, sessionsOf, summarize, type TypeSummary } from "./match.ts"
 import {
   app,
   areaById,
+  currentArea,
+  currentProject,
   goalsOf,
   isEnded,
   partsOf,
@@ -356,33 +358,45 @@ export function editArea(area?: Area): void {
     else app.render();
   };
 
-  if (area && app.projects.data.areas.length > 1) {
+  if (area && canDeleteArea()) {
     s.footer.append(
-      actionButton("Delete area", "danger", async () => {
-        const count = app.projects.data.projects.filter((p) => p.area === area.id).length;
-        const todos = todosInArea(area.id).length;
-        const ok = await confirmDialog(
-          count
-            ? `${area.name} and its ${count} course${count === 1 ? "" : "s"} and projects go. Their ${todos} todo${todos === 1 ? "" : "s"} stay in the Todo app, and notes stay in their folders.`
-            : `${area.name} goes.`,
-          { title: `Delete ${area.name}?`, ok: "Delete", danger: true },
-        );
-        if (!ok) return;
-        s.close();
-        app.save(
-          app.projects.update((data) => {
-            data.areas = data.areas.filter((each) => each.id !== area.id);
-            data.projects = data.projects.filter((each) => each.area !== area.id);
-          }),
-          "projects",
-        );
-        app.go({ view: "today" }, "rail");
-      }),
+      actionButton("Delete area", "danger", () => void deleteArea(area, s.close)),
     );
   }
   s.footer.append(el("span", "spacer"), actionButton("Cancel", "", s.close), actionButton(area ? "Save" : "Add area", "primary", save));
   s.dialog.showModal();
   name.focus();
+}
+
+/** Whether an area may go: there's always one left. */
+export const canDeleteArea = (): boolean => app.projects.data.areas.length > 1;
+
+/**
+ * Asks, then deletes an area and its courses and projects (not their todos
+ * or notes). `onConfirmed` runs first, to close the sheet it was asked from.
+ */
+export async function deleteArea(area: Area, onConfirmed?: () => void): Promise<void> {
+  if (!canDeleteArea()) return;
+  const count = app.projects.data.projects.filter((p) => p.area === area.id).length;
+  const todos = todosInArea(area.id).length;
+  const ok = await confirmDialog(
+    count
+      ? `${area.name} and its ${count} course${count === 1 ? "" : "s"} and projects go. Their ${todos} todo${todos === 1 ? "" : "s"} stay in the Todo app, and notes stay in their folders.`
+      : `${area.name} goes.`,
+    { title: `Delete ${area.name}?`, ok: "Delete", danger: true },
+  );
+  if (!ok) return;
+  onConfirmed?.();
+  const wasOpen = currentArea() === area.id;
+  app.save(
+    app.projects.update((data) => {
+      data.areas = data.areas.filter((each) => each.id !== area.id);
+      data.projects = data.projects.filter((each) => each.area !== area.id);
+    }),
+    "projects",
+  );
+  if (wasOpen) app.go({ view: "today" }, "rail");
+  else app.render();
 }
 
 // --------------------------------------------------------------- project --
@@ -406,6 +420,29 @@ function slotText(summary: TypeSummary): string {
 }
 
 /** A new course or project in `areaId`, or an existing one's settings. */
+/**
+ * Asks, then deletes a course or project (not its todos or notes).
+ * `onConfirmed` runs first, to close the sheet it was asked from.
+ */
+export async function deleteProject(project: Project, onConfirmed?: () => void): Promise<void> {
+  const todos = app.todos.data.todos.filter((todo) => todo.project === project.id).length;
+  const ok = await confirmDialog(
+    `${todos ? `Its ${todos} todo${todos === 1 ? "" : "s"} stay in the Todo app, without a project. ` : ""}Its notes stay in their folder.`,
+    { title: `Delete ${project.name}?`, ok: "Delete", danger: true },
+  );
+  if (!ok) return;
+  onConfirmed?.();
+  const wasOpen = currentProject()?.id === project.id;
+  app.save(
+    app.projects.update((data) => {
+      data.projects = data.projects.filter((each) => each.id !== project.id);
+    }),
+    "projects",
+  );
+  if (wasOpen) app.go({ view: "area", id: project.area }, "list");
+  else app.render();
+}
+
 export function editProject(project?: Project, areaId?: string): void {
   const s = sheet(project ? (project.kind === "course" ? "Course settings" : "Project settings") : "New course or project", true);
   const draft = {
@@ -632,22 +669,7 @@ export function editProject(project?: Project, areaId?: string): void {
 
   if (project) {
     s.footer.append(
-      actionButton("Delete", "danger", async () => {
-        const todos = app.todos.data.todos.filter((todo) => todo.project === project.id).length;
-        const ok = await confirmDialog(
-          `${todos ? `Its ${todos} todo${todos === 1 ? "" : "s"} stay in the Todo app, without a project. ` : ""}Its notes stay in their folder.`,
-          { title: `Delete ${project.name}?`, ok: "Delete", danger: true },
-        );
-        if (!ok) return;
-        s.close();
-        app.save(
-          app.projects.update((data) => {
-            data.projects = data.projects.filter((each) => each.id !== project.id);
-          }),
-          "projects",
-        );
-        app.go({ view: "area", id: project.area }, "list");
-      }),
+      actionButton("Delete", "danger", () => void deleteProject(project, s.close)),
       endButton,
     );
   }

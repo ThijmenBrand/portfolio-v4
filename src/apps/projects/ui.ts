@@ -43,6 +43,7 @@ const svg = (body: string): string => `<svg viewBox="0 0 16 16" aria-hidden="tru
 
 export const ICONS = {
   today: svg(`<circle cx="8" cy="8" r="5.5"/><path d="M8 5v3l2 1.5"/>`),
+  overview: svg(`<rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1"/><rect x="9" y="2.5" width="4.5" height="4.5" rx="1"/><rect x="2.5" y="9" width="4.5" height="4.5" rx="1"/><rect x="9" y="9" width="4.5" height="4.5" rx="1"/>`),
   upcoming: svg(`<rect x="2.5" y="3.5" width="11" height="10" rx="2"/><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3"/>`),
   day: svg(`<rect x="2.5" y="3.5" width="11" height="10" rx="2"/><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3"/>`),
   clock: svg(`<circle cx="8" cy="8" r="5.5"/><path d="M8 5v3l2 1.5"/>`),

@@ -432,7 +432,7 @@ export class WindowManager implements WindowManagerInterface {
       .finally(() => record.root.classList.remove("minimizing"));
   }
 
-  /** Fullscreen: maximized windows cover the whole screen (topbar and dock auto-hide over them). */
+  /** Fullscreen: maximized windows cover the whole screen (topbar, dock and title bar auto-hide over them). */
   private maximizedFrame(): Rect {
     const area = this.workArea.get();
     // Touch has no hover to reveal the bars (taskbar.css keeps them out on phones): fit between them.
