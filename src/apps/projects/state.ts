@@ -79,11 +79,21 @@ export const partsOf = (goal: Todo): Todo[] =>
 export const looseOf = (projectId: string): Todo[] =>
   app.todos.data.todos.filter((todo) => todo.project === projectId && !todo.goal && !goalOf(todo));
 
-/** Every todo filed under any of an area's projects. */
+/** The area a todo is filed straight under (no project), if that area still exists. */
+export const areaOfLoose = (todo: Todo): Area | undefined => (todo.project ? undefined : areaById(todo.area));
+
+/** An area's own todos: filed under it, not under one of its projects. */
+export const areaTodos = (areaId: string): Todo[] =>
+  app.todos.data.todos.filter((todo) => !todo.project && todo.area === areaId);
+
+/** Every todo in an area: its own, and those of its projects. */
 export function todosInArea(areaId: string): Todo[] {
   const ids = new Set(app.projects.data.projects.filter((p) => p.area === areaId).map((p) => p.id));
-  return app.todos.data.todos.filter((todo) => todo.project && ids.has(todo.project));
+  return app.todos.data.todos.filter((todo) => (todo.project ? ids.has(todo.project) : todo.area === areaId));
 }
+
+/** The colour a todo is drawn in: its project's, else its area's. */
+export const hueOfTodo = (todo: Todo): number | undefined => (projectOf(todo) ?? areaOfLoose(todo))?.hue;
 
 /** The area the current page belongs to, if it belongs to one. */
 export function currentArea(): string | undefined {

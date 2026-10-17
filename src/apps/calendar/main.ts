@@ -253,7 +253,7 @@ function occurrences(from: Date, to: Date): Occurrence[] {
     items = occurrencesIn(enabledSources(), lo, hi);
     if (store.data.todos) {
       const own = todoOccurrences(todos.data.todos, lo, hi, "Todos", new Date(), (todo) =>
-        todo.project ? projectHues.get(todo.project) : undefined,
+        projectHues.get(todo.project ?? todo.area ?? ""),
       ).filter(
         (o) => store.data.deadlines || o.todoPart !== "deadline",
       );
@@ -924,7 +924,7 @@ async function pullTodos(): Promise<void> {
   render();
 }
 
-/** The Projects app recoloured, added or removed a project. */
+/** The Projects app recoloured, added or removed a project or area. */
 async function pullProjectHues(): Promise<void> {
   const next = await readProjectHues(os).catch(() => projectHues);
   if (JSON.stringify([...next]) === JSON.stringify([...projectHues])) return;

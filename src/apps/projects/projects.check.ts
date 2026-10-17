@@ -112,12 +112,13 @@ function fakeOs(files: Map<string, string>, cloud: boolean): AppInterface {
   const disk = parseData(files.get("/mnt/cloud/projects/projects.json")!);
   ok([disk.areas[0]!.name, disk.projects.map((p) => p.id)], ["University", ["a1"]], "two writers don't undo each other");
   ok(await app.reload(), true, "and each sees the other's change");
-  ok((await readProjectHues(fakeOs(files, true))).get("a1"), 1, "the Calendar reads each project's colour");
+  const hues = await readProjectHues(fakeOs(files, true));
+  ok([hues.get("a1"), hues.get(uni)], [1, 290], "the Calendar reads each project's and area's colour");
 
   const local = new Map<string, string>();
   const guest = await openProjects(fakeOs(local, false));
   ok([guest.backing, guest.path, guest.root], ["local", "/home/owner/.config/projects.json", "/home/owner/Projects"], "a refused mount keeps it in this browser");
-  ok((await readProjectHues(fakeOs(local, false))).size, 0, "and the Calendar reads that copy, without writing anything");
+  ok((await readProjectHues(fakeOs(local, false))).size, 3, "and the Calendar reads that copy (its three areas), without writing anything");
 }
 
 // -------------------------------------------------------- from Shortcuts --
@@ -151,11 +152,17 @@ function fakeOs(files: Map<string, string>, cloud: boolean): AppInterface {
       todos: [
         { id: "g", title: "Goal", done: false, createdAt: 1, project: "sos", goal: true, parent: "x" },
         { id: "p", title: "Part", done: false, createdAt: 1, project: "sos", parent: "g" },
-        { id: "q", title: "Bad refs", done: false, createdAt: 1, project: "../x", parent: 5 },
+        { id: "q", title: "Bad refs", done: false, createdAt: 1, project: "../x", parent: 5, area: "../y" },
+        { id: "a", title: "In an area", done: false, createdAt: 1, area: "priv" },
+        { id: "b", title: "Both", done: false, createdAt: 1, project: "sos", area: "priv" },
       ],
     }),
   );
-  ok(todos.map((t) => [t.project, t.goal, t.parent]), [["sos", true, undefined], ["sos", undefined, "g"], [undefined, undefined, undefined]], "the Todo app keeps project, goal and part; a goal is never a part");
+  ok(
+    todos.map((t) => [t.project, t.area, t.goal, t.parent]),
+    [["sos", undefined, true, undefined], ["sos", undefined, undefined, "g"], [undefined, undefined, undefined, undefined], [undefined, "priv", undefined, undefined], ["sos", undefined, undefined, undefined]],
+    "the Todo app keeps project, area, goal and part; a goal is never a part, and a project wins over an area",
+  );
 }
 
 // --------------------------------------------------------------- matching --

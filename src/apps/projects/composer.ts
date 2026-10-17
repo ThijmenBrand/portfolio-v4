@@ -1,15 +1,19 @@
 // The line a todo is added with. On a project's page the todo goes into that
-// project; elsewhere it has to be given one: type # and a project's code or
-// name (or a goal's title) and pick it. A todo is never left unfiled here.
+// project, and on an area's overview into the area itself, no project needed.
+// Elsewhere it has to be given a place: type # and an area's name, a
+// project's code or name, or a goal's title, and pick it. A todo is never
+// left unfiled here.
 import { dateKey } from "../todo/store.ts";
 import { addTodo } from "./actions.ts";
-import { app, currentArea, goalsOf, isEnded, projectById, todoById } from "./state.ts";
-import type { Project } from "./store.ts";
+import { app, areaById, currentArea, goalsOf, isEnded, projectById, todoById } from "./state.ts";
+import type { Area, Project } from "./store.ts";
 import { button, dot, el, ICONS, projectLabel } from "./ui.ts";
 
 export interface ComposerOptions {
   /** The project new todos go into; unset, one has to be picked. */
   project?: string;
+  /** The area new todos go into unless a project is picked with #. */
+  area?: string;
   /** The goal new todos are parts of. */
   goal?: string;
   placeholder: string;
@@ -19,15 +23,18 @@ export interface ComposerOptions {
   date?: string;
 }
 
-interface Choice {
-  project: Project;
-  goal?: string;
-  label: string;
-}
+/** Where a todo can go: an area on its own, a project, or one of its goals. */
+type Choice = { area: Area; label: string } | { project: Project; goal?: string; label: string };
 
-/** Remembered across renders, so a picked project stays picked. */
-let chosen: { project: string; goal?: string } | null = null;
+/**
+ * Remembered across renders, so a picked place stays picked -- on the page
+ * it was picked on: an area's overview starts out filing into that area.
+ */
+let chosen: { project?: string; goal?: string; area?: string } | null = null;
+let chosenOn = "";
 let todayPressed = true;
+
+const hueOf = (choice: Choice): number => ("area" in choice ? choice.area : choice.project).hue;
 
 function choices(query: string): Choice[] {
   const q = query.trim().toLocaleLowerCase();
@@ -40,9 +47,12 @@ function choices(query: string): Choice[] {
         p.area === area ? -1 : app.projects.data.areas.findIndex((each) => each.id === p.area);
       return rank(a) - rank(b);
     });
+  const hit = (text: string): boolean => !q || text.toLocaleLowerCase().includes(q);
   const out: Choice[] = [];
+  // Areas first when asked for by name, so "#priv" lands on Private itself.
+  const areas = app.projects.data.areas.filter((each) => hit(each.name));
+  if (q) out.push(...areas.map((each) => ({ area: each, label: each.name })));
   for (const project of projects) {
-    const hit = (text: string): boolean => !q || text.toLocaleLowerCase().includes(q);
     if (hit(project.code) || hit(project.name)) out.push({ project, label: projectLabel(project) });
     for (const goal of goalsOf(project.id)) {
       if (goal.done) continue;
@@ -51,7 +61,9 @@ function choices(query: string): Choice[] {
       }
     }
   }
-  return out.slice(0, 8);
+  // With nothing typed yet, the areas follow their projects.
+  if (!q) out.push(...areas.map((each) => ({ area: each, label: each.name })));
+  return out.slice(0, q ? 8 : 12);
 }
 
 export function composer(options: ComposerOptions): HTMLElement {
@@ -82,20 +94,33 @@ export function composer(options: ComposerOptions): HTMLElement {
   let list: Choice[] = [];
   let active = 0;
   const fixed = Boolean(options.project);
+  if (chosenOn !== (options.area ?? "")) chosen = null;
+  chosenOn = options.area ?? "";
+
+  /** What a todo added now goes into, if it can go anywhere yet. */
+  const target = (): { project?: Project; area?: Area; goal?: string } | null => {
+    if (options.project) return { project: projectById(options.project), goal: options.goal };
+    const project = projectById(chosen?.project);
+    if (project) return { project, goal: todoById(chosen?.goal) ? chosen!.goal : undefined };
+    const area = areaById(chosen?.area) ?? areaById(options.area);
+    return area ? { area } : null;
+  };
 
   const drawChip = (): void => {
     chip.replaceChildren();
+    // The page's own area says so already: a chip only for something picked.
     const project = projectById(chosen?.project);
-    chip.hidden = fixed || !project;
-    if (!project || fixed) return;
+    const area = project ? undefined : areaById(chosen?.area);
+    chip.hidden = fixed || !(project || (area && area.id !== options.area));
+    if (chip.hidden) return;
     const goal = todoById(chosen?.goal);
-    chip.append(dot(project.hue), el("span", "", goal ? goal.title : project.code || project.name));
+    chip.append(dot((project ?? area)!.hue), el("span", "", goal ? goal.title : project ? project.code || project.name : area!.name));
     const clear = button("chip-clear", ICONS.cross, () => {
       chosen = null;
       drawChip();
       input.focus();
     });
-    clear.setAttribute("aria-label", "Clear project");
+    clear.setAttribute("aria-label", options.area ? `Back to ${areaById(options.area)?.name ?? "this area"}` : "Clear where it goes");
     chip.append(clear);
   };
 
@@ -110,20 +135,23 @@ export function composer(options: ComposerOptions): HTMLElement {
     active = Math.min(active, Math.max(0, list.length - 1));
     picker.replaceChildren();
     if (!list.length) {
-      picker.append(el("p", "picker-empty", app.projects.data.projects.length ? "No project matches." : "Make a project first, from an area's column."));
+      picker.append(el("p", "picker-empty", "No area or project matches."));
     }
     for (const [index, choice] of list.entries()) {
-      const item = el("button", `picker-item${index === active ? " is-active" : ""}${choice.goal ? " is-goal" : ""}`);
+      const goal = "project" in choice && choice.goal;
+      const item = el("button", `picker-item${index === active ? " is-active" : ""}${goal ? " is-goal" : ""}`);
       item.type = "button";
       item.setAttribute("role", "option");
-      item.append(dot(choice.project.hue));
-      if (choice.goal) {
+      item.append(dot(hueOf(choice), "area" in choice ? "dot is-square" : "dot"));
+      if (goal) {
         const sub = el("span", "picker-sub");
         sub.innerHTML = ICONS.sub;
         item.append(sub);
       }
       item.append(el("span", "picker-label", choice.label));
-      item.append(el("small", "", choice.goal ? "goal" : app.projects.data.areas.find((a) => a.id === choice.project.area)?.name ?? ""));
+      item.append(
+        el("small", "", "area" in choice ? "area, no project" : goal ? "goal" : areaById(choice.project.area)?.name ?? ""),
+      );
       // Keep focus in the input, so picking never interrupts typing.
       item.addEventListener("pointerdown", (event) => event.preventDefault());
       item.addEventListener("click", () => pick(choice));
@@ -138,7 +166,7 @@ export function composer(options: ComposerOptions): HTMLElement {
   };
 
   const pick = (choice: Choice): void => {
-    chosen = { project: choice.project.id, ...(choice.goal && { goal: choice.goal }) };
+    chosen = "area" in choice ? { area: choice.area.id } : { project: choice.project.id, ...(choice.goal && { goal: choice.goal }) };
     // Take the "#sos" out of the title.
     const at = input.selectionStart ?? input.value.length;
     const before = input.value.slice(0, at).replace(/(^|\s)#[^\s#]*$/, "$1");
@@ -152,9 +180,9 @@ export function composer(options: ComposerOptions): HTMLElement {
   const add = (): void => {
     const title = input.value.replace(/(^|\s)#[^\s#]*$/, "$1").trim();
     if (!title) return;
-    const project = options.project ?? (projectById(chosen?.project) ? chosen!.project : "");
-    if (!project) {
-      hint.textContent = "Pick a project for it: type # and its name.";
+    const into = target();
+    if (!into) {
+      hint.textContent = "Pick where it goes: type # and an area or project.";
       hint.hidden = false;
       // A "#sos" that matched nothing is already there: look again for it
       // rather than adding another # on every Enter.
@@ -163,13 +191,18 @@ export function composer(options: ComposerOptions): HTMLElement {
       drawPicker(tail ? tail[1]! : "");
       return;
     }
-    const goal = options.goal ?? (options.project ? undefined : chosen?.goal);
+    const { project, area, goal } = into;
     const date = options.date ?? (options.today && todayPressed ? dateKey(new Date()) : undefined);
-    addTodo({ title, project, ...(goal && todoById(goal) && { parent: goal }), ...(date && { date }) });
-    // Off the project's own page it may land somewhere not on screen: say where.
-    if (!options.project) {
-      const target = projectById(project)!;
-      app.status(`Added to ${todoById(goal)?.title ?? (target.code || target.name)}${date ? "" : ", not planned yet"}.`);
+    addTodo({
+      title,
+      ...(project ? { project: project.id } : { area: area!.id }),
+      ...(goal && todoById(goal) && { parent: goal }),
+      ...(date && { date }),
+    });
+    // Off its own page it may land somewhere not on screen: say where.
+    if (!options.project && !(area && area.id === options.area)) {
+      const where = todoById(goal)?.title ?? (project ? project.code || project.name : area!.name);
+      app.status(`Added to ${where}${date ? "" : ", not planned yet"}.`);
     }
     input.value = "";
     hint.hidden = true;

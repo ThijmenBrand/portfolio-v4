@@ -24,7 +24,7 @@ import {
   fmtWeekday,
   heading,
   hueColor,
-  projectTag,
+  placeTag,
   todoRow,
 } from "./ui.ts";
 
@@ -33,13 +33,13 @@ export const open = (todo: Todo): void => {
   else editTodo(todo);
 };
 
-function section(title: string, todos: Todo[], now: Date, extra: { noDay?: boolean; late?: boolean } = {}): HTMLElement | null {
+function section(title: string, todos: Todo[], now: Date, extra: { noDay?: boolean; late?: boolean; area?: string } = {}): HTMLElement | null {
   if (!todos.length) return null;
   const node = el("section", "group-list");
   const head = heading(title);
   if (extra.late) head.classList.add("is-late");
   node.append(head);
-  for (const todo of todos) node.append(todoRow(todo, now, { tag: true, goal: true, noDay: extra.noDay, onOpen: open }));
+  for (const todo of todos) node.append(todoRow(todo, now, { tag: true, goal: true, noDay: extra.noDay, area: extra.area, onOpen: open }));
   return node;
 }
 
@@ -50,7 +50,7 @@ const byTime = (a: Todo, b: Todo): number =>
   (deadlineAt(a)?.getTime() ?? Infinity) - (deadlineAt(b)?.getTime() ?? Infinity);
 
 /** Goal and todo deadlines coming up, with how far along each goal is. */
-export function deadlinesAhead(now: Date, days: number, todos: readonly Todo[] = app.todos.data.todos): HTMLElement {
+export function deadlinesAhead(now: Date, days: number, todos: readonly Todo[] = app.todos.data.todos, area?: string): HTMLElement {
   const node = el("section", "deadlines");
   node.append(heading("Deadlines ahead"));
   const soon = todos
@@ -71,7 +71,8 @@ export function deadlinesAhead(now: Date, days: number, todos: readonly Todo[] =
     what.append(el("b", "", todo.title));
     const project = projectOf(todo);
     const meta = el("span", "deadline-meta");
-    if (project) meta.append(projectTag(project));
+    const tag = placeTag(todo, area);
+    if (tag) meta.append(tag);
     if (todo.goal) {
       const parts = partsOf(todo);
       const planned = parts.filter((part) => part.date || part.done).length;
@@ -111,16 +112,19 @@ export function dayLists(all: readonly Todo[], now: Date) {
   };
 }
 
-/** The sections of `dayLists`, or `none` when there's nothing to do, then what's done today. */
-export function daySections(lists: ReturnType<typeof dayLists>, now: Date, none: HTMLElement): HTMLElement[] {
+/**
+ * The sections of `dayLists`, or `none` when there's nothing to do, then
+ * what's done today. On an area's overview, `area` leaves its own tag off.
+ */
+export function daySections(lists: ReturnType<typeof dayLists>, now: Date, none: HTMLElement, area?: string): HTMLElement[] {
   const sections = [
-    section("Overdue", lists.late, now, { late: true }),
-    section("Planned for today", lists.planned, now, { noDay: true }),
-    section("Carried over", lists.carried, now),
-    section("Due today, not planned", lists.dueOnly, now),
+    section("Overdue", lists.late, now, { late: true, area }),
+    section("Planned for today", lists.planned, now, { noDay: true, area }),
+    section("Carried over", lists.carried, now, { area }),
+    section("Due today, not planned", lists.dueOnly, now, { area }),
   ].filter((node): node is HTMLElement => node !== null);
   if (!sections.length) sections.push(none);
-  const done = section(`Done today · ${lists.doneToday.length}`, lists.doneToday, now, { noDay: true });
+  const done = section(`Done today · ${lists.doneToday.length}`, lists.doneToday, now, { noDay: true, area });
   if (done) {
     done.classList.add("is-done-list");
     sections.push(done);
