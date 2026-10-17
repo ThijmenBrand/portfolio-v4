@@ -23,6 +23,7 @@ import {
   DEFAULT_LABELS,
   folderFor,
   HUES,
+  iconOf,
   labelOf,
   MAX_AREAS,
   MAX_CODE,
@@ -36,6 +37,7 @@ import {
   type Shortcut,
 } from "./store.ts";
 import {
+  areaMark,
   button,
   dot,
   dueText,
@@ -45,6 +47,7 @@ import {
   hueColor,
   ICONS,
   lengthText,
+  loadIcon,
   projectLabel,
   slotLine,
   withIcon,
@@ -423,7 +426,43 @@ export function editArea(area?: Area): void {
   const s = sheet(area ? "Area settings" : "New area");
   let hue = area?.hue ?? HUES[app.projects.data.areas.length % HUES.length]!;
   const name = input(area?.name ?? "", { maxLength: MAX_NAME, placeholder: "Uni, Work, Private…" });
-  s.body.append(labelled("Name", name), labelled("Colour", swatches(hue, (next) => (hue = next)), "field"));
+
+  // The icon: a link to an image, previewed in the tile as it's typed.
+  const icon = input(area?.icon ?? "", { type: "url", placeholder: "https://… (optional)" });
+  const iconRow = el("div", "icon-field");
+  const ABOUT_ICON = "A link to an image, shown in place of the coloured tile.";
+  const iconHint = el("p", "hint", ABOUT_ICON);
+  let mark = el("span");
+  let typing = 0;
+  const preview = (): void => {
+    const link = iconOf(icon.value);
+    const next = areaMark({ name: name.value || "?", hue, icon: link }, "rail-swatch is-big");
+    mark.replaceWith(next);
+    mark = next;
+    if (!icon.value.trim()) iconHint.textContent = ABOUT_ICON;
+    else if (!link) iconHint.textContent = "That isn't an https link.";
+    else {
+      iconHint.textContent = "Loading…";
+      void loadIcon(link).then((src) => {
+        if (iconOf(icon.value) === link) iconHint.textContent = src ? ABOUT_ICON : "There's no image at that link.";
+      });
+    }
+  };
+  icon.addEventListener("input", () => {
+    s.error.textContent = "";
+    clearTimeout(typing);
+    typing = window.setTimeout(preview, 400);
+  });
+  name.addEventListener("input", preview);
+  iconRow.append(mark, icon);
+  preview();
+
+  s.body.append(
+    labelled("Name", name),
+    labelled("Colour", swatches(hue, (next) => ((hue = next), preview())), "field"),
+    labelled("Icon", iconRow),
+    iconHint,
+  );
 
   const rules = el("ul", "rules");
   const rows: { node: HTMLLIElement; read: () => Rule | null }[] = [];
@@ -447,7 +486,25 @@ export function editArea(area?: Area): void {
   );
   s.body.append(group);
 
-  const save = (): void => {
+  // Its own calendar
+  const calendar = calendarSelect("No calendar", area?.calendar ?? "");
+  const openDuring = toggle("Open this area during its events", area?.openDuring ?? false, "a course's own sessions still come first");
+  const calendarHint = el("p", "hint");
+  const syncCalendar = (): void => {
+    openDuring.node.hidden = !calendar.value;
+    calendarHint.textContent = calendar.value
+      ? "Its events show in this area's colour, and new courses here look for their sessions in it."
+      : "A calendar for the whole area, such as work meetings or your uni timetable.";
+  };
+  calendar.addEventListener("change", syncCalendar);
+  syncCalendar();
+  const calendarGroup = el("section", "group");
+  calendarGroup.append(el("h3", "", "Calendar"), calendarHint, labelled("Events from", calendar), openDuring.node);
+  s.body.append(calendarGroup);
+
+  let saving = false;
+  const save = async (): Promise<void> => {
+    if (saving) return;
     const label = name.value.trim();
     if (!label) {
       s.error.textContent = "Give the area a name.";
@@ -459,7 +516,30 @@ export function editArea(area?: Area): void {
       s.error.textContent = "Each time needs at least one day, and a start and end.";
       return;
     }
-    const next: Area = { id: area?.id ?? newId(), name: label, hue, rules: read as Rule[] };
+    const link = iconOf(icon.value);
+    if (icon.value.trim() && !link) {
+      s.error.textContent = "The icon needs an https link.";
+      icon.focus();
+      return;
+    }
+    // Usually already loaded by the preview.
+    saving = true;
+    const loaded = !link || (await loadIcon(link)) !== null;
+    saving = false;
+    if (!loaded) {
+      s.error.textContent = "There's no image at the icon's link.";
+      icon.focus();
+      return;
+    }
+    const next: Area = {
+      id: area?.id ?? newId(),
+      name: label,
+      hue,
+      ...(link && { icon: link }),
+      rules: read as Rule[],
+      calendar: calendar.value,
+      openDuring: Boolean(calendar.value) && openDuring.box.checked,
+    };
     if (!area && app.projects.data.areas.length >= MAX_AREAS) {
       s.error.textContent = `That's the most areas there can be (${MAX_AREAS}).`;
       return;
@@ -482,7 +562,7 @@ export function editArea(area?: Area): void {
       actionButton("Delete area", "danger", () => void deleteArea(area, s.close)),
     );
   }
-  s.footer.append(el("span", "spacer"), actionButton("Cancel", "", s.close), actionButton(area ? "Save" : "Add area", "primary", save));
+  s.footer.append(el("span", "spacer"), actionButton("Cancel", "", s.close), actionButton(area ? "Save" : "Add area", "primary", () => void save()));
   s.dialog.showModal();
   name.focus();
 }
@@ -522,12 +602,18 @@ export async function deleteArea(area: Area, onConfirmed?: () => void): Promise<
 
 // --------------------------------------------------------------- project --
 
-/** The calendars a course can be linked to. */
-function calendarOptions(): { value: string; label: string }[] {
-  return [
-    { value: "", label: "All calendars" },
-    ...app.calendars.calendars.map((cal) => ({ value: cal.id, label: cal.name })),
-  ];
+/**
+ * A pick of the calendars, with `none` for "" first; one that's gone (hidden
+ * in the Calendar, or unsubscribed) stays picked, so saving keeps it.
+ */
+function calendarSelect(none: string, value: string): HTMLSelectElement {
+  const options = [{ value: "", label: none }, ...app.calendars.calendars.map((cal) => ({ value: cal.id, label: cal.name }))];
+  const node = select(options, value);
+  if (value && !options.some((option) => option.value === value)) {
+    node.append(Object.assign(el("option", "", "A calendar that's gone"), { value }));
+    node.value = value;
+  }
+  return node;
 }
 
 function slotText(summary: TypeSummary): string {
@@ -566,10 +652,14 @@ export async function deleteProject(project: Project, onConfirmed?: () => void):
 
 export function editProject(project?: Project, areaId?: string): void {
   const s = sheet(project ? (project.kind === "course" ? "Course settings" : "Project settings") : "New course or project", true);
+  const startArea = project?.area ?? areaId ?? app.projects.data.areas[0]?.id ?? "";
   const draft = {
     kind: project?.kind ?? ("course" as Project["kind"]),
-    hue: project?.hue ?? areaById(areaId ?? project?.area)?.hue ?? HUES[0]!,
-    link: structuredClone(project?.link ?? ({ calendar: "", skip: [], open: true, busy: true, end: true } satisfies Link)),
+    hue: project?.hue ?? areaById(startArea)?.hue ?? HUES[0]!,
+    link: structuredClone(
+      project?.link ??
+        ({ calendar: areaById(startArea)?.calendar ?? "", skip: [], open: true, busy: true, end: true } satisfies Link),
+    ),
     labels: { ...app.projects.data.labels },
     ended: project?.ended,
   };
@@ -594,7 +684,7 @@ export function editProject(project?: Project, areaId?: string): void {
   const code = input(project?.code ?? "", { maxLength: MAX_CODE, placeholder: "SOS", className: "mono" });
   const area = select(
     app.projects.data.areas.map((each) => ({ value: each.id, label: each.name })),
-    project?.area ?? areaId ?? app.projects.data.areas[0]?.id ?? "",
+    startArea,
   );
   const top = el("div", "field-row");
   const codeField = labelled("Code", code, "field is-code");
@@ -603,11 +693,7 @@ export function editProject(project?: Project, areaId?: string): void {
 
   // Sessions
   const sessions = el("section", "group");
-  const calendar = select(calendarOptions(), draft.link.calendar);
-  if (draft.link.calendar && !calendarOptions().some((option) => option.value === draft.link.calendar)) {
-    calendar.append(Object.assign(el("option", "", "A calendar that's gone"), { value: draft.link.calendar }));
-    calendar.value = draft.link.calendar;
-  }
+  const calendar = calendarSelect("All calendars", draft.link.calendar);
   const found = el("div", "found");
   const foundCount = el("span", "found-count");
   const how = el("p", "hint");
@@ -730,6 +816,16 @@ export function editProject(project?: Project, areaId?: string): void {
   code.addEventListener("input", refresh);
   name.addEventListener("input", refresh);
   calendar.addEventListener("change", refresh);
+  // A new course looks in its area's calendar until another is picked.
+  let areaCalendar = areaById(area.value)?.calendar ?? "";
+  area.addEventListener("change", () => {
+    const next = areaById(area.value)?.calendar ?? "";
+    if (!project && calendar.value === areaCalendar) {
+      calendar.value = next;
+      refresh();
+    }
+    areaCalendar = next;
+  });
 
   const endLabel = (): string => {
     const probe = { ...(project ?? ({} as Project)), ended: draft.ended };

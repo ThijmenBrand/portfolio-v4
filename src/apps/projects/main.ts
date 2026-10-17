@@ -27,6 +27,7 @@ import { renderGoal, renderProject, startGoal } from "./project.ts";
 import {
   app,
   areaById,
+  areaEventsIn,
   currentArea,
   currentProject,
   isEnded,
@@ -40,7 +41,7 @@ import {
 import { fromShortcuts, MAX_AREAS, openProjects, saveProblem, type Project } from "./store.ts";
 import { renderToday, renderUpcoming } from "./today.ts";
 import { isPhone, PHONE_QUERY } from "../../utils/phone.ts";
-import { button, buildFormats, dot, el, hueColor, ICONS, withIcon } from "./ui.ts";
+import { areaMark, button, buildFormats, dot, el, ICONS, withIcon } from "./ui.ts";
 import projectsHTML from "./projects.html?raw";
 import "../../ui/theme.css";
 import "../../utils/confirm.css";
@@ -175,18 +176,10 @@ function renderRail(compact: boolean): void {
     item("Today", icon(ICONS.today), route.view === "today", () => go({ view: "today" }), attention(app.todos.data.todos, now)),
     item("Upcoming", icon(ICONS.upcoming), route.view === "upcoming", () => go({ view: "upcoming" })),
   );
-  const head = el("h2", "rail-head", "Areas");
-  const add = button("icon-button", ICONS.plus, () => editArea());
-  add.setAttribute("aria-label", "New area");
-  add.title = "New area";
-  // As icons, the new area's button follows the areas rather than heading them.
-  if (!compact) head.append(add);
-  rail.append(head);
+  rail.append(el("h2", "rail-head", "Areas"));
   const area = currentArea();
   for (const each of app.projects.data.areas) {
-    const swatch = el("span", "rail-swatch");
-    swatch.style.background = hueColor(each.hue);
-    swatch.dataset.initial = [...each.name.trim()][0]?.toUpperCase() ?? "";
+    const swatch = areaMark(each);
     // The area you're in, picked again, brings its column back.
     const open = (): void => {
       if (area === each.id && app.listHidden) toggleList();
@@ -202,10 +195,10 @@ function renderRail(compact: boolean): void {
     );
     rail.append(node);
   }
-  if (compact) {
-    add.classList.add("rail-add");
-    rail.append(add);
-  }
+  // An empty tile after the areas, where the next one would go.
+  const add = item("New area", icon(ICONS.plus), false, () => editArea());
+  add.classList.add("rail-add");
+  rail.append(add);
   const storage = el("p", "storage");
   storage.textContent =
     app.projects.backing === "cloud" ? "Kept in cloud storage, the same in every browser." : "Kept in this browser.";
@@ -224,8 +217,7 @@ function renderList(areaId: string | undefined): void {
 
   const head = el("header", "list-head");
   const back = button("back-button", withIcon(ICONS.back, "Projects"), () => go(app.route, "rail"));
-  const swatch = el("span", "rail-swatch");
-  swatch.style.background = hueColor(area.hue);
+  const swatch = areaMark(area);
   const settings = button("icon-button", ICONS.gear, () => editArea(area));
   settings.setAttribute("aria-label", `${area.name} settings`);
   settings.title = "Area settings";
@@ -502,13 +494,20 @@ function onKey(event: KeyboardEvent): void {
 
 /**
  * Where the schedule says to be now: a course whose session is on (and asks
- * for it), else an area whose times say so, else Today.
+ * for it), else an area with an event on in its own calendar (and asking),
+ * else an area whose times say so, else Today.
  */
 function autoTarget(now: Date): { key: string; route: Route } {
   for (const project of app.projects.data.projects) {
     if (project.kind !== "course" || !project.link?.open || isEnded(project, now)) continue;
     const session = sessionNow(sessionsFor(project), now);
     if (session) return { key: `course:${project.id}:${session.key}`, route: { view: "project", id: project.id } };
+  }
+  for (const area of app.projects.data.areas) {
+    if (!area.openDuring) continue;
+    // An event marked free (a reminder, say) is no reason to switch.
+    const on = areaEventsIn(area, now, new Date(now.getTime() + 1)).find((each) => !each.event.transparent);
+    if (on) return { key: `event:${area.id}:${on.event.uid}:${on.start.getTime()}`, route: areaRoute(area.id) };
   }
   const area = ruleSpaceAt(app.projects.data.areas, now.getDay(), now.getHours() * 60 + now.getMinutes());
   if (area) return { key: `area:${area}`, route: areaRoute(area) };
@@ -558,7 +557,8 @@ export async function main(appOs: AppInterface): Promise<void> {
     settings,
     route: { view: "today" },
     pane: "page",
-    todayRange: "day",
+    calendarDays: 3,
+    calendarShift: 0,
     folded: new Set<string>(),
     lastIn: new Map<string, string>(),
     showDone: false,

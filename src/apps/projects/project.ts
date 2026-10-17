@@ -2,9 +2,9 @@
 //
 // The project page is one scrolling page: its shortcuts, its goals (each with
 // its parts, planned across the days before the deadline), its other todos
-// and its notes -- beside its sessions, when it's a course, and the coming
-// week to plan in. A goal's page lays the days up to its deadline out side by
-// side, to drag the parts onto.
+// and its notes -- beside its sessions, when it's a course, and a calendar of
+// the coming days to plan in. A goal's page lays the days up to its deadline
+// out side by side, to drag the parts onto.
 import { guessName, hostOf, hueOf, initialOf, toUrl } from "../shortcuts/site";
 import {
   addDays,
@@ -22,18 +22,18 @@ import { planTodo, saveTodo } from "./actions.ts";
 import { composer } from "./composer.ts";
 import { editProject, editTodo } from "./dialogs.ts";
 import { draftOpenFor, goalDraft, openGoalDraft } from "./goaldraft.ts";
-import { gridDays, renderGrid } from "./grid.ts";
+import { calendarPanel, gridDays } from "./grid.ts";
 import { nextSession, summarize, type Session } from "./match.ts";
 import { notesSection } from "./notes.ts";
 import {
   app,
   areaById,
-  courseOfEvent,
   currentProject,
   eventsIn,
   goalsOf,
   isEnded,
   looseOf,
+  ownerOfEvent,
   partsOf,
   sessionsFor,
 } from "./state.ts";
@@ -338,9 +338,7 @@ export function renderProject(page: HTMLElement, project: Project): void {
 
   const side = el("aside", "page-side");
   if (project.kind === "course") side.append(scheduleCard(project, sessions, now));
-  const gridBox = el("div", "grid-box");
-  side.append(heading("Next 7 days", "drag a todo onto a free slot"), gridBox);
-  renderGrid(gridBox, { days: gridDays(now, 7), now, hourPx: 30, onOpen: openTodo });
+  side.append(calendarPanel({ now, onOpen: openTodo }));
 
   const body = el("div", "page-cols");
   body.append(left, side);
@@ -418,9 +416,9 @@ function board(goal: Todo, parts: Todo[], project: Project, now: Date): HTMLElem
     head.append(el("small", "", fmtWeekday(day)), el("b", "", String(day.getDate())));
     col.append(head);
     for (const occurrence of events.filter((each) => dateKey(each.start) === key).slice(0, 4)) {
-      const course = courseOfEvent(occurrence);
-      const item = el("span", `board-event${course ? " is-session" : ""}`);
-      if (course) item.style.setProperty("--c", hueColor(course.hue));
+      const owner = ownerOfEvent(occurrence);
+      const item = el("span", `board-event${owner ? " is-session" : ""}`);
+      if (owner) item.style.setProperty("--c", hueColor(owner.hue));
       const hours = `${occurrence.start.getHours()}–${occurrence.end.getHours()}`;
       item.textContent = `${occurrence.event.summary || "(no title)"} ${hours}`;
       item.title = `${occurrence.event.summary}\n${fmtTime(occurrence.start)} – ${fmtTime(occurrence.end)}`;
