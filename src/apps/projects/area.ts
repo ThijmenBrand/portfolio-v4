@@ -1,4 +1,4 @@
-// An area's overview: Today for the area only -- what to do now, and what's
+// An area's overview: its shortcuts, then Today for the area only -- what to do now, and what's
 // next in the area's own calendar, beside the next few days -- then the area's own todos, the ones in no project (an area
 // needs no projects: Private can be just a list), and a card per course and
 // project with its next session, its open todos and how far along its goals are.
@@ -6,6 +6,7 @@ import { deadlineAt, deadlineState, type Todo } from "../todo/store.ts";
 import { composer } from "./composer.ts";
 import { editArea, editProject } from "./dialogs.ts";
 import { calendarPanel } from "./grid.ts";
+import { shortcutsSection } from "./sites.ts";
 import { app, areaEventsIn, areaTodos, goalsOf, isEnded, partsOf, sessionsFor, todosInArea } from "./state.ts";
 import type { Area, Project } from "./store.ts";
 import { dayLists, daySections, deadlinesAhead, open } from "./today.ts";
@@ -176,6 +177,7 @@ export function renderArea(page: HTMLElement, area: Area): void {
 
   const left = el("div", "page-main");
   left.append(
+    shortcutsSection(area),
     composer({
       area: area.id,
       placeholder: active.length ? `Add a todo to ${area.name}, or # for a project` : `Add a todo to ${area.name}`,

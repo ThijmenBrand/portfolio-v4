@@ -5,7 +5,6 @@
 // and its notes -- beside its sessions, when it's a course, and a calendar of
 // the coming days to plan in. A goal's page lays the days up to its deadline
 // out side by side, to drag the parts onto.
-import { guessName, hostOf, hueOf, initialOf, toUrl } from "../shortcuts/site";
 import {
   addDays,
   dateKey,
@@ -25,6 +24,7 @@ import { draftOpenFor, goalDraft, openGoalDraft } from "./goaldraft.ts";
 import { calendarPanel, gridDays } from "./grid.ts";
 import { nextSession, summarize, type Session } from "./match.ts";
 import { notesSection } from "./notes.ts";
+import { shortcutsSection } from "./sites.ts";
 import {
   app,
   areaById,
@@ -37,7 +37,7 @@ import {
   partsOf,
   sessionsFor,
 } from "./state.ts";
-import { labelOf, MAX_SHORTCUTS, type Project } from "./store.ts";
+import { labelOf, type Project } from "./store.ts";
 import {
   backButton,
   button,
@@ -74,71 +74,6 @@ function orderParts(parts: Todo[]): Todo[] {
 function plannedHours(parts: Todo[]): string {
   const minutes = parts.filter((part) => !part.done && part.time).reduce((sum, part) => sum + (part.minutes ?? 0), 0);
   return minutes ? `${lengthText(minutes)} planned` : "";
-}
-
-// ------------------------------------------------------------- shortcuts --
-
-/** The project whose "Add site" line is open; only ever one, on its own page. */
-let addingSite = "";
-
-function shortcutsSection(project: Project): HTMLElement {
-  const node = el("section", "group-list");
-  const count = project.shortcuts.length;
-  node.append(heading("Shortcuts", count > 1 ? `press 1–${count}` : count ? "press 1" : ""));
-  const row = el("div", "sites");
-  for (const [index, site] of project.shortcuts.entries()) {
-    const chip = button("site", "", () => void app.os.shell.openExternal(site.url).catch(() => app.status("Couldn't open that site.")));
-    const url = toUrl(site.url);
-    const mono = el("span", "site-mono", initialOf(site.name));
-    mono.style.background = `oklch(0.55 0.13 ${hueOf(url ? hostOf(url) : site.url)})`;
-    chip.append(mono, el("span", "", site.name), el("kbd", "", String(index + 1)));
-    chip.title = site.url;
-    row.append(chip);
-  }
-  if (addingSite === project.id) {
-    const form = el("div", "site-add");
-    const input = el("input");
-    input.type = "text";
-    input.placeholder = "Address, e.g. tuwel.tuwien.ac.at";
-    input.setAttribute("aria-label", "Site address");
-    input.spellcheck = false;
-    const done = (): void => {
-      addingSite = "";
-      app.render();
-    };
-    input.addEventListener("keydown", (event) => {
-      event.stopPropagation();
-      if (event.key === "Escape") done();
-      if (event.key !== "Enter") return;
-      const url = toUrl(input.value);
-      if (!url) {
-        app.status("That isn't an address that can be opened (https or mailto).");
-        return;
-      }
-      const site = { name: guessName(url), url: url.href };
-      app.save(
-        app.projects.update((data) => {
-          const found = data.projects.find((each) => each.id === project.id);
-          if (found && found.shortcuts.length < MAX_SHORTCUTS) found.shortcuts.push(site);
-        }),
-        "projects",
-      );
-      done();
-    });
-    input.addEventListener("blur", () => setTimeout(done, 100));
-    form.append(input);
-    row.append(form);
-    requestAnimationFrame(() => input.focus());
-  } else if (project.shortcuts.length < MAX_SHORTCUTS) {
-    row.append(
-      button("site is-add", withIcon(ICONS.plus, "Add site"), () => {
-        addingSite = project.id;
-        app.render();
-      }),
-    );
-  }
-  node.append(row);
-  return node;
 }
 
 // ----------------------------------------------------------------- goals --

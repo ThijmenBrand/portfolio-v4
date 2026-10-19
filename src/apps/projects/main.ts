@@ -24,6 +24,7 @@ import { sessionNow } from "./match.ts";
 import { openMenu } from "./menu.ts";
 import { leaveNote, notesChanged, renderNote } from "./notes.ts";
 import { renderGoal, renderProject, startGoal } from "./project.ts";
+import { openSite } from "./sites.ts";
 import {
   app,
   areaById,
@@ -401,6 +402,7 @@ function renderKeys(): void {
   const list = [hint("todo", "N"), hint("today", "T"), hint("upcoming", "U")];
   if (currentArea() !== undefined && !isPhone()) list.push(hint(app.listHidden ? "show list" : "hide list", "\\"));
   if (view === "project") list.unshift(hint("open site", "1", "9"), hint("goal", "G"));
+  if (view === "area") list.unshift(hint("open site", "1", "9"));
   if (view === "goal" || view === "note") list.unshift(hint("back", "Esc"));
   const area = currentArea();
   if (area && app.projects.data.projects.some((each) => each.area === area)) list.push(hint("project", "[", "]"));
@@ -437,11 +439,13 @@ function onKey(event: KeyboardEvent): void {
   if (busy()) return;
   const project = currentProject();
   const view = app.route.view;
-  if (/^[1-9]$/.test(event.key) && view === "project" && project) {
-    const site = project.shortcuts[Number(event.key) - 1];
+  // An area's sites on its overview, a project's on its page.
+  const owner = view === "project" ? project : view === "area" ? areaById(currentArea()) : undefined;
+  if (/^[1-9]$/.test(event.key) && owner) {
+    const site = owner.shortcuts[Number(event.key) - 1];
     if (site) {
       event.preventDefault();
-      void app.os.shell.openExternal(site.url).catch(() => status("Couldn't open that site."));
+      openSite(site.url);
     }
     return;
   }

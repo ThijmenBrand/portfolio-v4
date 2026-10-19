@@ -95,6 +95,8 @@ export interface Area {
   calendar: string;
   /** Open this area while one of its calendar's events is on. */
   openDuring: boolean;
+  /** Sites for the whole area, opened from its overview as a project's are from its page. */
+  shortcuts: Shortcut[];
 }
 
 export interface Data {
@@ -129,9 +131,9 @@ export function newId(): string {
 export function starter(): Data {
   return {
     areas: [
-      { id: newId(), name: "Uni", hue: 290, rules: [], calendar: "", openDuring: false },
-      { id: newId(), name: "Work", hue: 255, rules: [], calendar: "", openDuring: false },
-      { id: newId(), name: "Private", hue: 160, rules: [], calendar: "", openDuring: false },
+      { id: newId(), name: "Uni", hue: 290, rules: [], calendar: "", openDuring: false, shortcuts: [] },
+      { id: newId(), name: "Work", hue: 255, rules: [], calendar: "", openDuring: false, shortcuts: [] },
+      { id: newId(), name: "Private", hue: 160, rules: [], calendar: "", openDuring: false, shortcuts: [] },
     ],
     projects: [],
     labels: {},
@@ -214,7 +216,15 @@ function cleanArea(raw: unknown): Area | null {
     rules,
     calendar,
     openDuring: Boolean(calendar) && given.openDuring === true,
+    shortcuts: cleanShortcuts(given.shortcuts),
   };
+}
+
+function cleanShortcuts(raw: unknown): Shortcut[] {
+  return (Array.isArray(raw) ? raw : [])
+    .map(cleanShortcut)
+    .filter((shortcut): shortcut is Shortcut => shortcut !== null)
+    .slice(0, MAX_SHORTCUTS);
 }
 
 function cleanShortcut(raw: unknown): Shortcut | null {
@@ -256,10 +266,7 @@ function cleanProject(raw: unknown, areas: ReadonlySet<string>): Project | null 
     name,
     code: kind === "course" ? text(given.code, MAX_CODE) : "",
     hue: hueOf(given.hue, 255),
-    shortcuts: (Array.isArray(given.shortcuts) ? given.shortcuts : [])
-      .map(cleanShortcut)
-      .filter((shortcut): shortcut is Shortcut => shortcut !== null)
-      .slice(0, MAX_SHORTCUTS),
+    shortcuts: cleanShortcuts(given.shortcuts),
     ...(kind === "course" && { link: cleanLink(given.link) ?? cleanLink({})! }),
     ...(typeof given.ended === "boolean" && { ended: given.ended }),
     // One path segment, never "..": it is joined onto the root.
