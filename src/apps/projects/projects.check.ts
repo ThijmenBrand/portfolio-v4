@@ -105,6 +105,18 @@ function fakeOs(files: Map<string, string>, cloud: boolean): AppInterface {
     [["mine:abc123", true], ["", false], ["", false]],
     "an area's calendar is an id or nothing, and opens on its events only with one",
   );
+  ok(
+    parseData(
+      JSON.stringify({
+        areas: [
+          { name: "Work", shortcuts: [{ name: "Mail", url: "https://mail.example.com/" }, { name: "x", url: "javascript:alert(1)" }] },
+          { name: "Old" },
+        ],
+      }),
+    ).areas.map((a) => a.shortcuts.map((s) => s.url)),
+    [["https://mail.example.com/"], []],
+    "an area keeps its https and mailto shortcuts, and has none when the file has none",
+  );
 
   ok(
     parseData(

@@ -1,5 +1,5 @@
-// The editors, each a modal sheet: a todo (or goal), an area and its
-// schedule, and a project or course with its shortcuts and its link to the
+// The editors, each a modal sheet: a todo (or goal), an area with its
+// schedule and shortcuts, and a project or course with its shortcuts and its link to the
 // calendar its sessions are in.
 import { confirmDialog } from "../../utils/confirm";
 import { TIME, type Rule } from "../shortcuts/schedule";
@@ -422,6 +422,56 @@ function ruleRow(rule: Rule, onRemove: () => void): { node: HTMLLIElement; read:
 }
 
 /** A new area (no `area`), or an existing one's settings. */
+const BAD_SITE = "One of the sites isn't an address that can be opened (https or mailto).";
+
+/** An area's or project's sites, a row each; read() is null while one of them isn't an address. */
+function shortcutsEditor(given: Shortcut[], about: string): { node: HTMLElement; read: () => Shortcut[] | null } {
+  const node = el("section", "group");
+  const list = el("ul", "shortcut-edit");
+  const rows: { read: () => Shortcut | null | "bad"; node: HTMLLIElement }[] = [];
+  const add = (shortcut: Shortcut): void => {
+    const row = el("li", "shortcut-row");
+    const label = input(shortcut.name, { placeholder: "Name", maxLength: 40 });
+    const url = input(shortcut.url, { placeholder: "brightspace.example.edu", inputMode: "url", spellcheck: false });
+    const remove = button("icon-button", ICONS.cross, () => {
+      rows.splice(rows.findIndex((each) => each.node === row), 1);
+      row.remove();
+    });
+    remove.setAttribute("aria-label", "Remove shortcut");
+    row.append(url, label, remove);
+    list.append(row);
+    rows.push({
+      node: row,
+      read: () => {
+        if (!url.value.trim() && !label.value.trim()) return null;
+        const parsed = toUrl(url.value);
+        if (!parsed) return "bad";
+        return { name: label.value.trim() || guessName(parsed), url: parsed.href };
+      },
+    });
+  };
+  for (const shortcut of given) add(shortcut);
+  node.append(
+    el("h3", "", "Shortcuts"),
+    el("p", "hint", about),
+    list,
+    button("link", "+ Add a site", () => {
+      if (rows.length < MAX_SHORTCUTS) add({ name: "", url: "" });
+      list.querySelector<HTMLInputElement>("li:last-child input")?.focus();
+    }),
+  );
+  const read = (): Shortcut[] | null => {
+    const sites: Shortcut[] = [];
+    for (const row of rows) {
+      const site = row.read();
+      if (site === "bad") return null;
+      if (site) sites.push(site);
+    }
+    return sites;
+  };
+  return { node, read };
+}
+
 export function editArea(area?: Area): void {
   const s = sheet(area ? "Area settings" : "New area");
   let hue = area?.hue ?? HUES[app.projects.data.areas.length % HUES.length]!;
@@ -502,6 +552,9 @@ export function editArea(area?: Area): void {
   calendarGroup.append(el("h3", "", "Calendar"), calendarHint, labelled("Events from", calendar), openDuring.node);
   s.body.append(calendarGroup);
 
+  const shortcuts = shortcutsEditor(area?.shortcuts ?? [], "Sites for the whole area. On its overview, keys 1 to 9 open them in a new tab.");
+  s.body.append(shortcuts.node);
+
   let saving = false;
   const save = async (): Promise<void> => {
     if (saving) return;
@@ -514,6 +567,11 @@ export function editArea(area?: Area): void {
     const read = rows.map((row) => row.read());
     if (read.some((rule) => !rule)) {
       s.error.textContent = "Each time needs at least one day, and a start and end.";
+      return;
+    }
+    const sites = shortcuts.read();
+    if (!sites) {
+      s.error.textContent = BAD_SITE;
       return;
     }
     const link = iconOf(icon.value);
@@ -539,6 +597,7 @@ export function editArea(area?: Area): void {
       rules: read as Rule[],
       calendar: calendar.value,
       openDuring: Boolean(calendar.value) && openDuring.box.checked,
+      shortcuts: sites,
     };
     if (!area && app.projects.data.areas.length >= MAX_AREAS) {
       s.error.textContent = `That's the most areas there can be (${MAX_AREAS}).`;
@@ -708,41 +767,8 @@ export function editProject(project?: Project, areaId?: string): void {
   s.body.append(sessions);
 
   // Shortcuts
-  const shortcuts = el("section", "group");
-  const list = el("ul", "shortcut-edit");
-  const shortcutRows: { read: () => Shortcut | null | "bad"; node: HTMLLIElement }[] = [];
-  const addShortcut = (shortcut: Shortcut): void => {
-    const node = el("li", "shortcut-row");
-    const label = input(shortcut.name, { placeholder: "Name", maxLength: 40 });
-    const url = input(shortcut.url, { placeholder: "brightspace.example.edu", inputMode: "url", spellcheck: false });
-    const remove = button("icon-button", ICONS.cross, () => {
-      shortcutRows.splice(shortcutRows.findIndex((row) => row.node === node), 1);
-      node.remove();
-    });
-    remove.setAttribute("aria-label", "Remove shortcut");
-    node.append(url, label, remove);
-    list.append(node);
-    shortcutRows.push({
-      node,
-      read: () => {
-        if (!url.value.trim() && !label.value.trim()) return null;
-        const parsed = toUrl(url.value);
-        if (!parsed) return "bad";
-        return { name: label.value.trim() || guessName(parsed), url: parsed.href };
-      },
-    });
-  };
-  for (const shortcut of project?.shortcuts ?? []) addShortcut(shortcut);
-  shortcuts.append(
-    el("h3", "", "Shortcuts"),
-    el("p", "hint", "Sites for this project. On its page, keys 1 to 9 open them in a new tab."),
-    list,
-    button("link", "+ Add a site", () => {
-      if (shortcutRows.length < MAX_SHORTCUTS) addShortcut({ name: "", url: "" });
-      list.querySelector<HTMLInputElement>("li:last-child input")?.focus();
-    }),
-  );
-  s.body.append(shortcuts);
+  const shortcuts = shortcutsEditor(project?.shortcuts ?? [], "Sites for this project. On its page, keys 1 to 9 open them in a new tab.");
+  s.body.append(shortcuts.node);
 
   const refresh = (): void => {
     const course = draft.kind === "course";
@@ -844,14 +870,10 @@ export function editProject(project?: Project, areaId?: string): void {
       name.focus();
       return;
     }
-    const sites: Shortcut[] = [];
-    for (const row of shortcutRows) {
-      const read = row.read();
-      if (read === "bad") {
-        s.error.textContent = "One of the sites isn't an address that can be opened (https or mailto).";
-        return;
-      }
-      if (read) sites.push(read);
+    const sites = shortcuts.read();
+    if (!sites) {
+      s.error.textContent = BAD_SITE;
+      return;
     }
     const course = draft.kind === "course";
     const taken = new Set(app.projects.data.projects.filter((p) => p.id !== project?.id).map((p) => p.folder.toLowerCase()));
