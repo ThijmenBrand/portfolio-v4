@@ -80,7 +80,7 @@ export interface Settings {
 }
 
 export const DEFAULTS: Settings = {
-  wallpaper: "ascii",
+  wallpaper: "ocean",
   accent: "blue",
   clock24h: true,
   clockSeconds: false,
