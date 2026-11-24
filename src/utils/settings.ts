@@ -6,8 +6,6 @@ const photo = (file: string): string =>
   `url(/assets/wallpapers/${file}) center / cover, #111`;
 
 export const WALLPAPERS: Record<string, string> = {
-  ascii: `repeating-linear-gradient(0deg, #5a9cff22 0 1px, transparent 1px 6px),
-    radial-gradient(80% 80% at 50% 40%, #12203a 0%, #07090c 70%)`,
   forest: `radial-gradient(120% 90% at 20% 0%, #2b5c4c 0%, transparent 60%),
     radial-gradient(100% 80% at 100% 100%, #1d3550 0%, transparent 55%),
     linear-gradient(160deg, #16241f 0%, #0c1418 100%)`,
@@ -22,9 +20,6 @@ export const WALLPAPERS: Record<string, string> = {
   highlands: photo("highlands.jpg"),
   coast: photo("coast.jpg"),
 };
-
-/** Wallpapers a process draws; the desktop stays transparent over them. */
-export const LIVE_WALLPAPERS = new Set(["ascii"]);
 
 /** settings.wallpaper value for the image the user uploaded to ~/.config/wallpaper. */
 export const CUSTOM_WALLPAPER = "custom";

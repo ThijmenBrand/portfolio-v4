@@ -12,7 +12,6 @@ import {
   loadAutostart,
   loadIconLayout,
   loadPathList,
-  LIVE_WALLPAPERS,
   loadSettings,
   saveIconLayout,
   wallpaperCSS,
@@ -76,7 +75,7 @@ export async function main(os: SystemInterface): Promise<void> {
   const home = (await os.process.env()).HOME ?? "/";
   await os.process.chdir(home).catch(() => os.process.chdir("/"));
   // Created as the user, so they own them. Deleted ones come back next login, like XDG.
-  for (const dir of USER_DIRS) await os.fs.mkdir(`${home}/${dir}`).catch(() => {});
+  for (const dir of USER_DIRS) await os.fs.mkdir(`${home}/${dir}`).catch(() => { });
   await seedProjects(os, `${home}/Projects`).catch(logError);
   const folder = `${home}/Desktop`;
   await createDesktopFolder(os, folder);
@@ -246,7 +245,7 @@ class Desktop implements DesktopCommands {
     const dir = trashDir(this.home);
     void this.os.fs
       .mkdir(dir)
-      .catch(() => {})
+      .catch(() => { })
       .then(() => this.os.process.spawn("/ProgramFiles/files", [dir]))
       .catch(logError);
   }
@@ -312,9 +311,7 @@ class Desktop implements DesktopCommands {
 
   public async applySettings(): Promise<void> {
     const settings = await loadSettings(this.os);
-    this.surface.style.background = LIVE_WALLPAPERS.has(settings.wallpaper)
-      ? "transparent"
-      : await wallpaperCSS(this.os, settings);
+    await wallpaperCSS(this.os, settings);
     applyAccent(settings, this.root.ownerDocument);
 
     // Keep each icon on its cell while the cells change size.
@@ -748,42 +745,42 @@ class Desktop implements DesktopCommands {
 
     const items: MenuItem[] = icon
       ? [
-          {
-            label:
-              selection.length > 1 ? `Open ${selection.length} items` : "Open",
-            action: () => this.activateSelection(),
-          },
-          selection.every((selected) => selected.item.exec)
-            ? {
-                label: "Remove from desktop",
-                action: () => void this.removeShortcuts(selection).catch(logError),
-              }
-            : { label: "Show in Files", action: () => this.showInFiles() },
-          { label: "Move to Bin", action: () => this.trashSelection() },
-        ]
+        {
+          label:
+            selection.length > 1 ? `Open ${selection.length} items` : "Open",
+          action: () => this.activateSelection(),
+        },
+        selection.every((selected) => selected.item.exec)
+          ? {
+            label: "Remove from desktop",
+            action: () => void this.removeShortcuts(selection).catch(logError),
+          }
+          : { label: "Show in Files", action: () => this.showInFiles() },
+        { label: "Move to Bin", action: () => this.trashSelection() },
+      ]
       : [
-          { label: "Open Desktop folder", action: () => this.showInFiles() },
-          {
-            label: "Sort by name",
-            action: () =>
-              this.reflow(
-                [...this.icons].sort((a, b) =>
-                  a.item.label.localeCompare(b.item.label),
-                ),
+        { label: "Open Desktop folder", action: () => this.showInFiles() },
+        {
+          label: "Sort by name",
+          action: () =>
+            this.reflow(
+              [...this.icons].sort((a, b) =>
+                a.item.label.localeCompare(b.item.label),
               ),
+            ),
+        },
+        {
+          label: "Align to grid",
+          action: () => this.reflow(this.visualOrder()),
+        },
+        {
+          label: "Log out",
+          action: () => {
+            this.destroy();
+            void this.os.process.exit(0);
           },
-          {
-            label: "Align to grid",
-            action: () => this.reflow(this.visualOrder()),
-          },
-          {
-            label: "Log out",
-            action: () => {
-              this.destroy();
-              void this.os.process.exit(0);
-            },
-          },
-        ];
+        },
+      ];
 
     this.menu.open(x, y, items);
   }
