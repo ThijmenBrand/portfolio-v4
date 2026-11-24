@@ -34,6 +34,8 @@ function requestedApps(search: string): string[] {
 export async function main(os: AppInterface): Promise<void> {
   const { search } = await os.shell.location();
 
+  console.log("search: " + search)
+
   for (const id of requestedApps(search)) {
     const app = registry.find((entry) => entry.id === id);
     if (!app) {

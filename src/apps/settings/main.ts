@@ -34,7 +34,6 @@ import "./settings.css";
 const RELOAD_ON_HUP = [
   "/System/desktop",
   "/System/Taskbar",
-  "/System/wallpaper",
   ...["about", "admin", "aliases", "calendar", "code", "devtools", "files", "resume", "terminal", "upnext"].map((id) => `/ProgramFiles/${id}`),
 ];
 const DESKTOP = "/System/desktop";

@@ -311,7 +311,7 @@ class Desktop implements DesktopCommands {
 
   public async applySettings(): Promise<void> {
     const settings = await loadSettings(this.os);
-    await wallpaperCSS(this.os, settings);
+    this.surface.style.background = await wallpaperCSS(this.os, settings);
     applyAccent(settings, this.root.ownerDocument);
 
     // Keep each icon on its cell while the cells change size.

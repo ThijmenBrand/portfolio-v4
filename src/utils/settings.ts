@@ -134,6 +134,7 @@ export async function wallpaperCSS(
   os: AppInterface,
   settings: Settings,
 ): Promise<string> {
+
   if (settings.wallpaper !== CUSTOM_WALLPAPER)
     return WALLPAPERS[settings.wallpaper] ?? WALLPAPERS[DEFAULTS.wallpaper];
   try {

@@ -159,7 +159,7 @@ export function createKernel(screen: HTMLElement): {
       await fs.writeFile(
         "/etc/autostart",
         new TextEncoder().encode(
-          "/System/wallpaper\n/System/Taskbar\n/System/Spotlight\n/System/launcher\n",
+          "/System/Taskbar\n/System/Spotlight\n/System/launcher\n",
         ),
       );
       await os.process.spawn("/System/login");

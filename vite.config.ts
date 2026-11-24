@@ -28,6 +28,31 @@ const cors = {
  * Injected as <meta> so it ships with the page on any static host.
  */
 function realmCsp(): Plugin {
+  /**
+   * Worker hosts start their worker from a data: URL, which inherits this
+   * CSP. Firefox resolves the inherited 'self' against the data: URL (an
+   * opaque origin), blocking every import the worker makes. Naming the
+   * origin explicitly works everywhere. Dev: the server's own address.
+   * Production: set SITE_ORIGIN (e.g. https://example.com) at build time.
+   */
+  const workerOrigin = (
+    ctx: { server?: { httpServer: unknown } | undefined },
+    page: string,
+  ): string => {
+    if (!page.endsWith("worker-host")) return "";
+    const address = (
+      ctx.server?.httpServer as
+        | { address(): { port?: number } | string | null }
+        | null
+        | undefined
+    )?.address();
+    const dev =
+      address && typeof address === "object" && address.port
+        ? ` http://localhost:${address.port} http://127.0.0.1:${address.port}`
+        : "";
+    return dev || (process.env.SITE_ORIGIN ? ` ${process.env.SITE_ORIGIN}` : "");
+  };
+
   const hosts = /(?:^|\/)((?:user-)?(?:app|worker)-host)\.html$/;
   return {
     name: "realm-csp",
@@ -42,9 +67,9 @@ function realmCsp(): Plugin {
         const user = page.startsWith("user-");
         const policy = [
           "default-src 'none'",
-          `script-src 'self'${user ? " blob:" : ""}`,
+          `script-src 'self'${user ? " blob:" : ""}${workerOrigin(ctx, page)}`,
           // worker hosts build their worker from a data: URL; app iframes get none.
-          `worker-src ${page.endsWith("worker-host") ? "data:" : "'none'"}`,
+          `worker-src ${page.endsWith("worker-host") ? `data:${workerOrigin(ctx, page)}` : "'none'"}`,
           // Dev only: Vite's HMR client needs its websocket + ping.
           `connect-src ${dev ? "'self' ws: wss:" : "'none'"}`,
           // Vite injects CSS as <style> in dev; app-host has an inline <style>.
