@@ -13,6 +13,10 @@ COPY package.json pnpm-lock.yaml ./
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile
 COPY . .
+# Worker hosts must name the site origin in their CSP (vite.config.ts realmCsp);
+# without it Firefox blocks every worker program. Override with --build-arg.
+ARG SITE_ORIGIN=https://thijmenbrand.nl
+ENV SITE_ORIGIN=${SITE_ORIGIN}
 # `pnpm build` = tsc (type check, including the wire-safety checks, and server/) + vite build.
 RUN pnpm build
 # The API's one dependency. pnpm's node_modules/otpauth is a symlink, so copy it
