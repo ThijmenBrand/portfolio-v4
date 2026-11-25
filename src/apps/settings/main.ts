@@ -23,6 +23,8 @@ import {
   WALLPAPERS,
   type Settings,
 } from "../../utils/settings";
+import { mayFactoryReset } from "../../bin/lib/reboot";
+import { confirmDialog } from "../../utils/confirm";
 import { defaultAppFor, FILE_APPS, FILE_TYPES } from "../../utils/filetypes";
 import { allApps, menubarApps, registry } from "../registry";
 import settingsHTML from "./settings.html?raw";
@@ -433,4 +435,18 @@ async function showAccount(os: AppInterface): Promise<void> {
         logout.disabled = false;
       });
   });
+
+  const resetGroup = document.querySelector<HTMLElement>('[data-field="reset-group"]')!;
+  if (mayFactoryReset(await os.process.ids())) {
+    resetGroup.hidden = false;
+    resetGroup.querySelector('[data-action="reset"]')!.addEventListener("click", () => {
+      void (async () => {
+        const sure = await confirmDialog(
+          "Every file, app, user and setting on this device is deleted and the system is installed again. Your online drive is not touched. This cannot be undone.",
+          { title: "Factory reset?", ok: "Erase everything", danger: true },
+        );
+        if (sure) await os.system.reboot("reset");
+      })().catch(console.error);
+    });
+  }
 }
