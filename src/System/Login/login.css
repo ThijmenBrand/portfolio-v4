@@ -332,3 +332,99 @@
     font-size: 26px;
   }
 }
+
+/* First-boot console (boot.ts): black, monospace, newest line at the bottom. */
+.boot {
+  position: absolute;
+  inset: 0;
+  overflow: hidden auto;
+  padding: clamp(16px, 4vh, 40px) clamp(16px, 4vw, 48px);
+  background: #000;
+  color: #c9d1c9;
+  font: 13px/1.5 var(--app-mono, ui-monospace, Menlo, Consolas, monospace);
+  transition: opacity 450ms ease;
+}
+.boot.is-leaving {
+  opacity: 0;
+}
+.boot-log {
+  margin: 0;
+  font: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.boot-tag {
+  color: #5fd38d;
+}
+.boot-cursor {
+  display: inline-block;
+  width: 0.6em;
+  height: 1.1em;
+  vertical-align: text-bottom;
+  background: #c9d1c9;
+  animation: boot-blink 1s steps(1) infinite;
+}
+@keyframes boot-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* Reboot splash (boot.ts): wordmark and a progress bar on black. */
+.splash {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 32px;
+  background: #000;
+  color: #f4f7f5;
+  transition: opacity 450ms ease;
+}
+.splash.is-leaving {
+  opacity: 0;
+}
+.splash-mark {
+  font: 600 clamp(28px, 5vw, 44px) / 1 var(--app-sans, system-ui, sans-serif);
+  letter-spacing: 0.04em;
+  animation: splash-in 700ms ease both;
+}
+.splash-bar {
+  width: clamp(120px, 18vw, 180px);
+  height: 4px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.18);
+}
+.splash-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #f4f7f5;
+  transform-origin: left;
+  animation: splash-fill 2.4s cubic-bezier(0.5, 0, 0.3, 1) both;
+}
+@keyframes splash-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+@keyframes splash-fill {
+  from {
+    transform: scaleX(0.04);
+  }
+  60% {
+    transform: scaleX(0.7);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .splash-mark,
+  .splash-bar > span {
+    animation: none;
+  }
+}

@@ -1022,11 +1022,18 @@ class Shell {
     job.background = false;
     this.foregroundJob = job;
     if (this.tty) await this.os.io.tcsetpgrp(0, job.pgid).catch(() => {});
+    // A job killed mid-prompt (su/passwd on ^C) never restores what it changed.
+    // Only undo that on interrupt: `stty -echo` is meant to stick.
+    const saved = this.tty ? await this.os.io.tcgetattr(0).catch(() => null) : null;
     try {
       await this.monitor(job);
     } finally {
       this.foregroundJob = undefined;
       if (this.tty) await this.os.io.tcsetpgrp(0, this.pgid).catch(() => {});
+      if (saved && job.interrupted) {
+        await this.os.io.tcsetattr(0, saved).catch(() => {});
+        await this.write(1, "\x1b[28m"); // end a password prompt's concealed input
+      }
     }
 
     if (job.state === "stopped") await this.write(1, this.jobLine(job));
@@ -1147,7 +1154,7 @@ export const HELP = [
   "jobs:      cmd &   jobs   fg [%n]   bg [%n]   Ctrl-Z stops, Ctrl-C interrupts",
   "terminal:  stty [size | -a | [-]echo | [-]icanon | [-]isig]",
   "dev:       json [-m]  base64 [-d]  jwt  urlencode [-d]  uuid [-n N]  epoch [time]",
-  "misc:      date  whoami  uname  open <url>  bundle <app.js>  tar  curl  timer",
+  "misc:      date  whoami  uname  reboot  open <url>  bundle <app.js>  tar  curl  timer",
   "docs:      man <command>   (man sh for this list in full)",
   "programs:  anything on $PATH (export PATH=/home/bin:$PATH)",
   "scripts:   #!/ProgramFiles/sh, #!/ProgramFiles/node (JS), #!/ProgramFiles/jsapp (GUI)",

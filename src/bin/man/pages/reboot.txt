@@ -1,0 +1,19 @@
+reboot [--keep]
+reboot --factory-reset --yes
+  Log out and reload the page. Every program is closed (unsaved work
+  included), the sign-in to your online account is ended, and the system
+  starts again from the login step, like a restart of a real machine.
+
+  By default the saved window layout (~/.config/session.json) is deleted, so
+  nothing reopens except what autostart starts. With --keep (or -k) it is
+  left alone and session reopens your windows, like "Reopen windows" on macOS.
+  Local files and settings are kept either way.
+
+  --factory-reset erases everything stored in this browser: all users and
+  their files, installed apps, settings and caches. The next start installs
+  the system afresh, with only root and guest. It is irreversible, so it
+  needs --yes as well. Your online drive (/mnt/cloud) lives on the server and
+  is not touched. Only root or the admin group may do this.
+
+  The session menu has Restart, Restart and reopen windows, and (for admins)
+  Factory reset.

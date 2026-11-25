@@ -9,6 +9,8 @@ import {
   verifyPassword,
   type User,
 } from "../../bin/lib/users";
+import { bootConsole, markReboot, splashScreen, takeRebootMark } from "./boot";
+import { takeRebootRequest } from "../../bin/lib/reboot";
 import type { SystemInterface } from "../../kernel/syscalls/api";
 import { paintAvatar as paintPicture } from "../../utils/settings";
 import {
@@ -30,16 +32,35 @@ import "../../ui/theme.css";
  * also gives an authenticator code (2FA), checked by the backend.
  */
 export async function main(os: SystemInterface): Promise<void> {
-  await seedUsers(os);
   const root = await os.display.root();
+  // No user database yet: a fresh install (first visit or factory reset).
+  const freshInstall = !(await os.fs.stat("/etc/passwd").then(() => true, () => false));
+  const rebooted = takeRebootMark();
+  if (freshInstall) await bootConsole(root);
+  else if (rebooted) await splashScreen(root);
+  await seedUsers(os);
 
   // Boot goes straight in: as the owner if still signed in to the backend,
   // else as guest. Other users log out first and pick themselves at the prompt.
+  await takeRebootRequest(os); // a stale one must not reboot the first logout
   let user = (await ownerFromSession(os, root)) ?? userByName(await readUsers(os), "guest");
   for (;;) {
     user ??= await prompt(os, root);
     await runSession(os, user);
     if (user.gid === ADMIN_GID) await signOut(os, root);
+    // A reboot is a logout that also reloads the page. After signOut, so the
+    // cookie is gone first; if that fails we stay on its retry screen.
+    const rebooting = await takeRebootRequest(os);
+    if (rebooting) {
+      if (rebooting === "reset") await wipeEverything(root);
+      // Unless asked to keep them, forget which windows were open, or session reopens them.
+      else if (rebooting === "restart") {
+        await os.fs.unlink(`${user.home}/.config/session.json`).catch(() => {});
+      }
+      markReboot();
+      window.location.reload();
+      await new Promise<never>(() => {}); // nothing runs between now and the unload
+    }
     user = undefined;
   }
 }
@@ -62,19 +83,59 @@ async function signOut(os: SystemInterface, root: HTMLElement): Promise<void> {
   }
 }
 
+/**
+ * Factory reset: every byte this origin holds in the browser. Runs as the last
+ * thing before the reload, with the session gone, so nothing is left to write
+ * it back. Local only: the cloud drive (/mnt/cloud) is on the server and is
+ * not touched. The next boot finds an empty disk and installs from scratch.
+ */
+async function wipeEverything(root: HTMLElement): Promise<void> {
+  // The kernel saves owners and modes a moment after the last change; let that
+  // land first or it would recreate meta.json after the wipe.
+  await new Promise((done) => setTimeout(done, 800));
+  for (;;) {
+    try {
+      const opfs = await navigator.storage.getDirectory();
+      for await (const name of [...(await collect(opfs))]) {
+        await opfs.removeEntry(name, { recursive: true });
+      }
+      localStorage.clear();
+      sessionStorage.clear();
+      for (const db of (await indexedDB.databases?.()) ?? []) {
+        if (db.name) indexedDB.deleteDatabase(db.name);
+      }
+      for (const key of (await globalThis.caches?.keys()) ?? []) await caches.delete(key);
+      return;
+    } catch (error) {
+      console.error("[login] factory reset", error);
+      await signOutFailed(root, "Couldn't reset", "Some files are still in use. Try again.");
+    }
+  }
+}
+
+async function collect(dir: FileSystemDirectoryHandle): Promise<string[]> {
+  const names: string[] = [];
+  for await (const name of dir.keys()) names.push(name);
+  return names;
+}
+
 /** Blocks on a "try again" screen; resolves when the user asks to retry. */
-function signOutFailed(root: HTMLElement): Promise<void> {
+function signOutFailed(
+  root: HTMLElement,
+  heading = "Couldn't sign out",
+  message = "Your session is still active. Check the connection and try again.",
+): Promise<void> {
   const screen = document.createElement("div");
   screen.className = "login";
   const panel = document.createElement("div");
   panel.className = "login-panel";
   const title = document.createElement("h1");
   title.className = "login-name";
-  title.textContent = "Couldn't sign out";
+  title.textContent = heading;
   const detail = document.createElement("p");
   detail.className = "login-error";
   detail.setAttribute("role", "alert");
-  detail.textContent = "Your session is still active. Check the connection and try again.";
+  detail.textContent = message;
   const retry = document.createElement("button");
   retry.type = "button";
   retry.className = "login-user";
