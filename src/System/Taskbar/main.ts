@@ -21,7 +21,7 @@ import {
 } from "../../utils/settings";
 import { shortcutsTo } from "../../utils/filetypes";
 import { confirmDialog } from "../../utils/confirm";
-import { mayFactoryReset, reboot } from "../../bin/lib/reboot";
+import { mayFactoryReset } from "../../bin/lib/reboot";
 import { SnapAssist, type AppLook } from "./snapassist";
 
 const DEFAULT_ICON = "/assets/icons/default-app.svg";
@@ -182,7 +182,7 @@ class Taskbar {
     });
     for (const [id, kind] of [["#session-reboot", "restart"], ["#session-reboot-keep", "keep"]] as const) {
       this.root.querySelector(id)?.addEventListener("click", () => {
-        void reboot(this.os, kind).catch(logError);
+        void this.os.system.reboot(kind).catch(logError);
       });
     }
     const reset = this.root.querySelector<HTMLElement>("#session-reset");
@@ -195,7 +195,7 @@ class Taskbar {
             "Every file, app, user and setting on this device is deleted and the system is installed again. Your online drive is not touched. This cannot be undone.",
             { title: "Factory reset?", ok: "Erase everything", danger: true },
           );
-          if (sure) await reboot(this.os, "reset");
+          if (sure) await this.os.system.reboot("reset");
         })().catch(logError);
       });
     }

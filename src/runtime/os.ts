@@ -107,6 +107,11 @@ export function buildAppInterface(client: WireClient, pid: Pid): AppInterface {
         client.callWithDisposer("events.subscribe", [types, handler]),
     },
 
+    system: {
+      reboot: (kind) => call("system.reboot", kind),
+      sync: () => call("system.sync"),
+    },
+
     shell: {
       openExternal: (url) => call("shell.openExternal", url),
       location: () => call("shell.location"),

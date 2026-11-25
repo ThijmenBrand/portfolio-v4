@@ -54,6 +54,8 @@ export class Terminal {
   private disposed = false;
   /** A program asked to hide input (ESC[8m): a password prompt. */
   private concealed = false;
+  /** Highlight the next text gets (an editor's cursor / selection); "" for none. */
+  private style = "";
   /**
    * A full-screen program (less) is on the alternate screen: keys go to the
    * pty one by one, and `saved` holds the normal screen to put back.
@@ -79,6 +81,12 @@ export class Terminal {
     this.hints = selectElementFromTemplate(root, '[data-field="hints"]');
 
     this.bindInput();
+    // A full-screen program has no input box to paste into: hand it the text as keys.
+    this.input.addEventListener("paste", (event) => {
+      if (!this.raw) return;
+      event.preventDefault();
+      void this.send((event.clipboardData?.getData("text") ?? "").replace(/\r?\n/g, "\r"));
+    });
     root.addEventListener("mouseup", () => {
       if (window.getSelection()?.isCollapsed !== false) this.input.focus();
     });
@@ -334,12 +342,17 @@ export class Terminal {
       if (segment.kind === "clear") this.clearScreen(false);
       else if (segment.kind === "conceal") this.conceal(segment.on);
       else if (segment.kind === "altscreen") this.altScreen(segment.on);
+      else if (segment.kind === "style") this.style = segment.style;
       else this.append(segment.text);
     }
     if (chunk.endsWith("$ ") || chunk.endsWith("# ")) {
       this.markPrompted();
-      // A program that died on the alternate screen never switched back.
-      if (this.raw) this.altScreen(false);
+      // A program that died on the alternate screen never switched back. Only a whole
+      // prompt counts: an editor's text can end a chunk with "# " or "$ ".
+      if (this.raw && /(^|\n|:)\/\S* [$#] $/.test(chunk)) {
+        this.style = "";
+        this.altScreen(false);
+      }
     }
   }
 
@@ -369,6 +382,7 @@ export class Terminal {
       ArrowDown: "\x1b[B",
       ArrowRight: "\x1b[C",
       ArrowLeft: "\x1b[D",
+      Delete: "\x1b[3~",
       Home: "\x1b[H",
       End: "\x1b[F",
       PageUp: "\x1b[5~",
@@ -424,7 +438,15 @@ export class Terminal {
       this.out.scrollTop + this.out.clientHeight >= this.out.scrollHeight - 4;
 
     // Before the input, so typing always continues right after the prompt.
-    this.out.insertBefore(document.createTextNode(text), this.input);
+    let node: Node;
+    if (this.style) {
+      node = document.createElement("span");
+      (node as HTMLElement).className = `term-${this.style}`;
+      node.textContent = text;
+    } else {
+      node = document.createTextNode(text);
+    }
+    this.out.insertBefore(node, this.input);
 
     if ((this.out.textContent?.length ?? 0) > MAX_CHARS) {
       this.setText(this.text().slice(-MAX_CHARS));

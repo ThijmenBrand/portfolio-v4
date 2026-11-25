@@ -1,0 +1,5 @@
+sync
+  Write out anything the system still holds in memory. File contents are
+  saved at once, but owners and modes (chmod, chown) are saved a moment
+  after the last change; sync makes that moment now. reboot does this by
+  itself.

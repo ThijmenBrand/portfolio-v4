@@ -154,6 +154,9 @@ export const WIRE_CALLS = {
   "io.getWinsize": "getWinsize",
   "io.setWinsize": "setWinsize",
 
+  "system.reboot": "reboot",
+  "system.sync": "syncStorage",
+
   "shell.openExternal": "openExternal",
   "shell.location": "getLocation",
   "shell.download": "download",

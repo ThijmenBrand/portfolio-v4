@@ -1154,7 +1154,7 @@ export const HELP = [
   "jobs:      cmd &   jobs   fg [%n]   bg [%n]   Ctrl-Z stops, Ctrl-C interrupts",
   "terminal:  stty [size | -a | [-]echo | [-]icanon | [-]isig]",
   "dev:       json [-m]  base64 [-d]  jwt  urlencode [-d]  uuid [-n N]  epoch [time]",
-  "misc:      date  whoami  uname  reboot  open <url>  bundle <app.js>  tar  curl  timer",
+  "misc:      date  whoami  uname  reboot  sync  open <url>  bundle <app.js>  tar  curl  timer",
   "docs:      man <command>   (man sh for this list in full)",
   "programs:  anything on $PATH (export PATH=/home/bin:$PATH)",
   "scripts:   #!/ProgramFiles/sh, #!/ProgramFiles/node (JS), #!/ProgramFiles/jsapp (GUI)",

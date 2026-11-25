@@ -2,6 +2,7 @@ import type { DisplayInterface } from "./display/display";
 import type { EventBusInterface } from "./events/bus";
 import type { VFS } from "./fs/vfs";
 import type { FdTable } from "./proc/fdTable";
+import type { Power } from "./power";
 import type { ProcessManagerInterface } from "./proc/manager";
 import type { Signal } from "./proc/signals";
 import type { FaultInfo } from "./proc/types";
@@ -15,6 +16,7 @@ export interface KernelContext {
   display: DisplayInterface;
   events: EventBusInterface;
   fs: VFS;
+  power: Power;
   createOs(pid: Pid): SystemInterface;
   serve(port: MessagePort, pid: Pid): PortServer;
 }

@@ -1,0 +1,29 @@
+vim [file]
+  Modal text editor. Opens file (a missing one is created on :w).
+
+  Modes
+    Esc / ^C        back to normal mode
+    i a I A o O     insert before / after / at line start / at line end / new line below / above
+    v V             visual (characters / lines)
+    : / ?           command line, search forward / backward
+
+  Moving         h j k l  arrows  w W b B e E  0 ^ $  gg G  {count}G  f t F T {char}
+                 { }  paragraph    n N  next / previous match    *  word under cursor
+                 ^D ^U ^F ^B  half / full page
+  Operators      d delete   c change   y yank   > <  indent / outdent (two spaces)
+                 followed by a motion, an object (iw aw i" a" i( a( i{ i[ ...) or itself: dd cc yy >>
+                 e.g.  d2w   ci"   >j   d$
+  Short forms    x X D C s S Y   p P paste   J join   ~ toggle case   r{char} replace
+  Other          u undo   ^R redo   . repeat last change   {count} before most commands
+  Visual         move, then d y c < > ~ u U   o swaps ends
+
+  Command line
+    :w [file]  :q  :q!  :wq  :x  ZZ (save and quit)  ZQ (quit)
+    :{n}  :$           go to line
+    :s/old/new/[gi]    substitute on this line;  :%s/...  all lines;  :3,9s/...  a range
+    :set nu / nonu     line numbers
+
+  Tab inserts two spaces. Registers, marks, macros and splits are not supported;
+  there is a single unnamed register.
+
+  vim notes.txt

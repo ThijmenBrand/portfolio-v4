@@ -54,6 +54,7 @@ Then, in the terminal: `echo hi | upper` or `upper notes.txt`.
 | `path.ts` | path helpers for tools |
 | `users.ts` | read/write `/etc/passwd`, `group`, `shadow` (used by `su`, `sudo`, `useradd`, `passwd`, Settings) |
 | `diff.ts`, `sed.ts`, `ustar.ts`, `size.ts`, `dev.ts` | the pure engines behind `diff`, `sed`, `tar`, `du/df`, the dev tools |
+| `vim.ts` | the editor engine behind `vim`: keys in, a screenful out. Full-screen programs (`less`, `vim`) use the alternate screen (`ESC[?1049h`), `tcsetattr` with `icanon:false` for single keys, and may use SGR 7 / 100 for cursor / selection |
 
 Put the **logic in a pure module** with no `os` and no DOM, and keep
 `main.ts` thin. That's what makes the `*.check.ts` self-tests possible (they

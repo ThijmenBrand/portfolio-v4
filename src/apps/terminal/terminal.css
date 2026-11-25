@@ -49,6 +49,16 @@
   pointer-events: none;
 }
 
+/* An editor's cursor (SGR 7) and selection (SGR 100). */
+.term-inv {
+  background: var(--app-text);
+  color: var(--app-well);
+}
+
+.term-sel {
+  background: color-mix(in srgb, var(--app-accent) 40%, transparent);
+}
+
 .term-input:disabled {
   color: var(--app-text-dim);
 }

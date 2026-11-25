@@ -11,6 +11,7 @@ import { ADMIN_GID } from "./fs/perm";
 import { VFS } from "./fs/vfs";
 import { KernelError } from "./errors";
 import { faultProcess } from "./proc/faultproc";
+import { createPower } from "./power";
 import { ProcessManager } from "./proc/manager";
 import { bindSyscalls, type SystemInterface } from "./syscalls/api";
 import { createSyscallTable } from "./syscalls/table";
@@ -84,7 +85,12 @@ export function createKernel(screen: HTMLElement): {
     events.emit({ type: "display.workAreaChanged", area: display.workArea() });
   });
 
+  const saver = persistent
+    ? debounce(() => saveMeta(fs.attrsUnder(["/home", "/etc"])), 300)
+    : undefined;
+
   const ctx: KernelContext = {
+    power: createPower(fs, saver),
     processes,
     display,
     windows,
@@ -145,10 +151,7 @@ export function createKernel(screen: HTMLElement): {
       if (persistent) {
         await migrateLegacyHome("guest");
         fs.loadAttrs(await loadMeta());
-        fs.onAttrsChange = debounce(
-          () => saveMeta(fs.attrsUnder(["/home", "/etc"])),
-          300,
-        );
+        if (saver) fs.onAttrsChange = saver;
       } else {
         await fs.mkdir("/home");
         await fs.mkdir("/etc");

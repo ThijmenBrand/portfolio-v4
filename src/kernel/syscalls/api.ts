@@ -3,6 +3,7 @@ import type { EventHandler, EventType } from "../events/types";
 import type { DirEntry, Stat, StatResult } from "../fs/types";
 import type { FdInfo, OpenFlags, PipeFds, Whence } from "../io/openfile";
 import type { Termios, Winsize } from "../io/pty";
+import type { RebootKind } from "../power";
 import type { Signal } from "../proc/signals";
 import type {
   Bytes,
@@ -84,6 +85,10 @@ export interface AppInterface {
       handler: EventHandler<T>,
     ): Promise<() => void>;
   };
+  system: {
+    reboot(kind: RebootKind): Promise<void>;
+    sync(): Promise<void>;
+  };
   shell: {
     openExternal(url: string): Promise<void>;
     location(): Promise<LocationInfo>;
@@ -140,6 +145,10 @@ export interface AppInterface {
 export interface SystemInterface extends AppInterface {
   api: AppInterface["api"] & {
     bindSession(uid: number | undefined): Promise<void>;
+  };
+  system: AppInterface["system"] & {
+    takeReboot(): Promise<RebootKind | undefined>;
+    erase(): Promise<void>;
   };
   display: AppInterface["display"] & {
     root(): Promise<HTMLElement>;
@@ -217,6 +226,12 @@ export function bindSyscalls(target: SyscallTable, pid: Pid): SystemInterface {
     },
     events: {
       subscribe: (types, handler) => target.subscribe(pid, types, handler),
+    },
+    system: {
+      reboot: (kind) => target.reboot(pid, kind),
+      sync: () => target.syncStorage(pid),
+      takeReboot: () => target.takeReboot(pid),
+      erase: () => target.eraseStorage(pid),
     },
     shell: {
       openExternal: (url) => target.openExternal(pid, url),

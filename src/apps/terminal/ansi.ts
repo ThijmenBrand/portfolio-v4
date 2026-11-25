@@ -2,7 +2,8 @@
  * Minimal escape-sequence handling for an append-only screen.
  *
  * The terminal renders plain text, so it only acts on "erase display"
- * (ESC[2J / ESC[3J), full reset (ESC c) and conceal (ESC[8m on, ESC[28m or
+ * (ESC[2J / ESC[3J), full reset (ESC c), inverse / selection highlight (SGR 7 / 100,
+ * for the cursor of a full-screen editor) and conceal (ESC[8m on, ESC[28m or
  * ESC[0m off), which su/passwd use to hide a password. Every other CSI sequence
  * (cursor moves, colours) is consumed and dropped, so programs that emit
  * them don't print garbage.
@@ -15,7 +16,9 @@ export type Segment =
   | { kind: "text"; text: string }
   | { kind: "clear" }
   | { kind: "conceal"; on: boolean }
-  | { kind: "altscreen"; on: boolean };
+  | { kind: "altscreen"; on: boolean }
+  /** SGR 7 -> "inv" (a cursor), SGR 100 -> "sel" (a selection), reset -> "". */
+  | { kind: "style"; style: "" | "inv" | "sel" };
 
 const ESC = "\x1b";
 /** Longest incomplete sequence we hold back before giving up on it. */
@@ -86,6 +89,16 @@ export class AnsiParser {
           } else if (codes.some((c) => c === "28" || c === "0" || c === "")) {
             flush();
             out.push({ kind: "conceal", on: false });
+          }
+          let style: "" | "inv" | "sel" | undefined;
+          for (const code of codes) {
+            if (code === "" || code === "0" || code === "27" || code === "49") style = "";
+            else if (code === "7") style = "inv";
+            else if (code === "100") style = "sel";
+          }
+          if (style !== undefined) {
+            flush();
+            out.push({ kind: "style", style });
           }
         }
         i = j + 1;

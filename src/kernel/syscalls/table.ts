@@ -26,6 +26,8 @@ import type {
   WindowPolicy,
 } from "../windows/types";
 import type { SnapTarget } from "../windows/snap";
+import { powerSyscalls } from "./power";
+import type { RebootKind } from "../power";
 import { apiSyscalls, type ApiRequest, type ApiResponse } from "./api-fetch";
 import type { DialogOptions } from "../dialog/list";
 import { clipboardSyscalls } from "./clipboard";
@@ -178,6 +180,10 @@ export interface SyscallTable {
   download(callerPid: Pid, path: string): Promise<void>;
   apiFetch(callerPid: Pid, path: string, request?: ApiRequest): Promise<ApiResponse>;
   setSessionUser(callerPid: Pid, uid: number | undefined): Promise<void>;
+  reboot(callerPid: Pid, kind: RebootKind): Promise<void>;
+  syncStorage(callerPid: Pid): Promise<void>;
+  takeReboot(callerPid: Pid): Promise<RebootKind | undefined>;
+  eraseStorage(callerPid: Pid): Promise<void>;
   netFetch(callerPid: Pid, url: string, request?: NetRequest): Promise<NetResponse>;
   openDialog(callerPid: Pid, options: DialogOptions): Promise<string | null>;
   clipboardWrite(callerPid: Pid, text: string): Promise<void>;
@@ -195,6 +201,7 @@ export function createSyscallTable(ctx: KernelContext): SyscallTable {
     ...fdSyscalls(ctx),
     ...shellSyscalls(ctx),
     ...apiSyscalls(ctx),
+    ...powerSyscalls(ctx),
     ...netSyscalls(ctx),
     ...dialogSyscalls(ctx),
     ...clipboardSyscalls(ctx),

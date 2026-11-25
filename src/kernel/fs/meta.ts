@@ -28,13 +28,37 @@ export async function saveMeta(attrs: Record<string, Attr>): Promise<void> {
   await writable.close();
 }
 
+export interface Debounced {
+  (): void;
+  flush(): Promise<void>;
+  cancel(): void;
+}
+
 /** Calls `save` once things go quiet, instead of on every chmod/mkdir. */
-export function debounce(save: () => Promise<void>, ms: number): () => void {
+export function debounce(save: () => Promise<void>, ms: number): Debounced {
   let timer: ReturnType<typeof setTimeout> | undefined;
-  return () => {
-    clearTimeout(timer);
-    timer = setTimeout(() => void save().catch(console.error), ms);
+  let inflight: Promise<void> = Promise.resolve();
+  const run = () => {
+    timer = undefined;
+    inflight = inflight.then(save).catch(console.error);
+    return inflight;
   };
+  const schedule = (() => {
+    clearTimeout(timer);
+    timer = setTimeout(run, ms);
+  }) as Debounced;
+  schedule.flush = async () => {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      run();
+    }
+    await inflight;
+  };
+  schedule.cancel = () => {
+    clearTimeout(timer);
+    timer = undefined;
+  };
+  return schedule;
 }
 
 /**
