@@ -16,28 +16,32 @@ export function openSite(url: string): void {
 /** Sites whose icon is fetched or being fetched this run, so a miss isn't retried on every render. */
 const tried = new Set<string>();
 
-/** Fetches /favicon.ico once and keeps it with the shortcut. */
+/** One icon candidate as a data: URI, or null when it isn't a small image. */
+async function pull(address: string): Promise<string | null> {
+  const { status, contentType, body } = await app.os.net.fetch(address);
+  if (status !== 200 || !contentType.startsWith("image/") || !body.length || body.length > 28_000) return null;
+  let bin = "";
+  for (const byte of body) bin += String.fromCharCode(byte);
+  return `data:${contentType.split(";")[0].trim()};base64,${btoa(bin)}`;
+}
+
+/** Fetches the site's favicon once (its own, else Google's cache of it) and keeps it with the shortcut. */
 function fetchIcon(owner: Area | Project, site: Shortcut): void {
   const url = toUrl(site.url);
   if (!url || url.protocol !== "https:" || tried.has(site.url)) return;
   tried.add(site.url);
-  void app.os.net
-    .fetch(`https://${url.host}/favicon.ico`)
-    .then(({ status, contentType, body }) => {
-      if (status !== 200 || !contentType.startsWith("image/") || !body.length || body.length > 28_000) return;
-      let bin = "";
-      for (const byte of body) bin += String.fromCharCode(byte);
-      const icon = `data:${contentType.split(";")[0].trim()};base64,${btoa(bin)}`;
-      app.save(
-        app.projects.update((data) => {
-          const found = [...data.areas, ...data.projects].find((each) => each.id === owner.id);
-          const match = found?.shortcuts.find((each) => each.url === site.url);
-          if (match) match.icon = icon;
-        }),
-        "projects",
-      );
-    })
-    .catch(() => {});
+  void (async () => {
+    const icon =
+      (await pull(`https://${url.host}/favicon.ico`).catch(() => null)) ??
+      (await pull(`https://www.google.com/s2/favicons?domain=${url.hostname}&sz=64`).catch(() => null));
+    if (!icon) return;
+    await app.projects.update((data) => {
+      const found = [...data.areas, ...data.projects].find((each) => each.id === owner.id);
+      const match = found?.shortcuts.find((each) => each.url === site.url);
+      if (match) match.icon = icon;
+    });
+    app.render();
+  })().catch((error: unknown) => console.error("[projects] icon", error));
 }
 
 export function shortcutsSection(owner: Area | Project): HTMLElement {
