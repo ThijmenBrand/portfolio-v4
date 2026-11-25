@@ -1,4 +1,5 @@
 import { allApps, registry } from "../../apps/registry";
+import { hasSession } from "../../bin/session/model.ts";
 import { isAppFile, readManifest } from "../../utils/appfile";
 import { dirname } from "../../kernel/fs/path";
 import { confirmDialog } from "../../utils/confirm";
@@ -154,11 +155,27 @@ export function autostartEntries(text: string): string[] {
  */
 async function autostart(os: SystemInterface): Promise<void> {
   const system = autostartEntries(await os.fs.readTextFile("/etc/autostart").catch(() => ""));
-  for (const path of [...system, ...(await loadAutostart(os))]) {
+  // A saved session (bin/session) already says which windows come back, so the
+  // user's own autostart apps are left to it: starting them here too would
+  // only open a window that the session then closes again a moment later.
+  // Background programs in the list are not windows and still start.
+  const sessionDecides = await savedSessionWins(os);
+  const user = (await loadAutostart(os)).filter(
+    (path) => !(sessionDecides && registry.some((app) => app.exec === path)),
+  );
+  for (const path of [...system, ...user]) {
     await os.process.spawn(path).catch((error) =>
       console.error(`[desktop] autostart ${path} failed:`, error),
     );
   }
+}
+
+/** The same rule bin/session applies: a link that names apps overrides it; otherwise a saved session wins. */
+async function savedSessionWins(os: SystemInterface): Promise<boolean> {
+  const { search } = await os.shell.location().catch(() => ({ search: "" }));
+  if (new URLSearchParams(search).has("launch")) return false;
+  const home = (await os.process.env()).HOME ?? "/";
+  return hasSession(await os.fs.readTextFile(`${home}/.config/session.json`).catch(() => null));
 }
 
 /** SIGCHLD only says "a child died" — find out which ones. */

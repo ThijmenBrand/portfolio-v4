@@ -1,5 +1,5 @@
 import { einval, enosys, eperm, kernelError } from "../errors";
-import type { KernelContext, Pid, Process, WindowId } from "../types";
+import type { KernelContext, Pid, Process, Rect, WindowId } from "../types";
 import { closeSurface } from "../windows/windowPolicy";
 import { isTileZone, type SnapTarget } from "../windows/snap";
 import type { WindowOptions, WindowPolicy } from "../windows/types";
@@ -37,6 +37,7 @@ export function windowSyscalls(
   | "tileWindow"
   | "setWindowPolicy"
   | "setWindowSize"
+  | "setWindowFrame"
   | "setWindowVisible"
 > &
   WindowHandleCommands {
@@ -50,6 +51,7 @@ export function windowSyscalls(
     | "tileWindow"
     | "setWindowPolicy"
     | "setWindowSize"
+    | "setWindowFrame"
     | "setWindowVisible"
   > &
     WindowHandleCommands = {
@@ -158,6 +160,17 @@ export function windowSyscalls(
         );
       },
     ),
+    setWindowFrame: alive(ctx, (pid: Pid, windowId: WindowId, frame: Rect) => {
+      const proc = requireAlive(ctx, pid);
+      const info = ctx.windows.listWindows().find((w) => w.windowId === windowId);
+      if (!info) throw kernelError("ENODEV", `Window with ID ${windowId} not found`);
+      if (!mayArrange(ctx, proc, info.pid)) throw eperm(pid, "windows.setFrame");
+      const { x, y, width, height } = frame ?? ({} as Partial<Rect>);
+      if (![x, y, width, height].every((n) => typeof n === "number" && Number.isFinite(n))) {
+        throw einval("windows.setFrame: x, y, width and height must be numbers");
+      }
+      ctx.windows.resizeWindow(windowId, { x: x!, y: y!, width: width!, height: height! });
+    }),
     setWindowVisible: alive(ctx, (pid: Pid, windowId: WindowId, visible: boolean) => {
       ctx.windows.validateWindowOwnership(windowId, pid);
       ctx.windows.setVisible(windowId, visible === true);

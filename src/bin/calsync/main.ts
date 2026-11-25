@@ -43,7 +43,8 @@ export async function main(os: AppInterface, args: string[]): Promise<void> {
   // closing the terminal doesn't end the sync.
   if (args[0] !== "--bg") {
     await os.process.spawn("/ProgramFiles/calsync", ["--bg"]);
-    await print(os, 1, "calsync: syncing calendars in the background\n");
+    // Started by autostart there is no terminal on fd 1: say it only if someone is listening.
+    await print(os, 1, "calsync: syncing calendars in the background\n").catch(() => {});
     return os.process.exit(0);
   }
   await os.process.setsid().catch(() => {});

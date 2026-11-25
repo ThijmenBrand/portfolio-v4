@@ -107,6 +107,7 @@ export const WIRE_CALLS = {
   "windows.close": "closeWindow",
   "windows.onCloseRequest": "onWindowCloseRequest",
   "windows.setSize": "setWindowSize",
+  "windows.setFrame": "setWindowFrame",
   "windows.setVisible": "setWindowVisible",
 
   "process.onSignal": "onSignal",

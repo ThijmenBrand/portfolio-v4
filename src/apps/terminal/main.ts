@@ -14,6 +14,9 @@ import { complete } from "./complete";
 
 const SHELL_PATH = "/ProgramFiles/sh";
 const MAX_CHARS = 200_000;
+/** Up-arrow history, kept across reloads in ~/.sh_history (one command per line). */
+const HISTORY_FILE = ".sh_history";
+const MAX_HISTORY = 1000;
 
 function errorCode(error: unknown): string | undefined {
   if (typeof error !== "object" || error === null || !("code" in error)) {
@@ -35,6 +38,10 @@ export class Terminal {
 
   private readonly history: string[] = [];
   private historyIndex = 0;
+  /** Where the history is kept; unset until start() knows HOME (and without one, in memory only). */
+  private historyPath?: string;
+  /** Writes to the history file go one after another, so a fast typist can't reorder them. */
+  private historySaving: Promise<void> = Promise.resolve();
 
   private shell: Pid = 0 as Pid;
 
@@ -79,6 +86,7 @@ export class Terminal {
 
   /** Everything that can fail lives here, so main() can report it. */
   public async start(): Promise<void> {
+    await this.loadHistory();
     const { master, slave } = await this.os.io.openpty();
     this.master = master;
 
@@ -132,11 +140,35 @@ export class Terminal {
     await this.prompted;
     // The pty's line discipline echoes it (unless a password prompt turned
     // echo off). A password also stays out of the history.
-    if (!this.concealed) {
-      this.history.push(line);
-      this.historyIndex = this.history.length;
-    }
+    if (!this.concealed) this.remember(line);
     await this.send(`${line}\n`);
+  }
+
+  /** What earlier sessions typed, so Up-arrow works straight after a reload. */
+  private async loadHistory(): Promise<void> {
+    const home = (await this.os.process.env().catch(() => ({}) as Record<string, string>)).HOME;
+    if (!home || home === "/") return;
+    this.historyPath = `${home}/${HISTORY_FILE}`;
+    const text = await this.os.fs.readTextFile(this.historyPath).catch(() => "");
+    this.history.unshift(...text.split("\n").filter(Boolean).slice(-MAX_HISTORY));
+    this.historyIndex = this.history.length;
+  }
+
+  /** Into memory for Up-arrow, and onto disk for the next session. */
+  private remember(line: string): void {
+    const entry = line.replace(/[\r\n]+/g, " ").trim();
+    if (!entry || this.history.at(-1) === entry) return;
+    this.history.push(entry);
+    this.historyIndex = this.history.length;
+    const path = this.historyPath;
+    if (!path) return;
+    // Read-modify-write rather than append: other terminals share the file,
+    // and this is what keeps theirs from being overwritten with a stale copy.
+    this.historySaving = this.historySaving.then(async () => {
+      const text = await this.os.fs.readTextFile(path).catch(() => "");
+      const lines = [...text.split("\n").filter(Boolean), entry].slice(-MAX_HISTORY);
+      await this.os.fs.writeTextFile(path, `${lines.join("\n")}\n`);
+    }).catch((error: unknown) => console.warn("[terminal] history:", error));
   }
 
   /** Master -> screen. Ends when the shell exits and its slave end closes. */

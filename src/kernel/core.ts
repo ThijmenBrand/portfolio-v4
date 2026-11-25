@@ -164,9 +164,12 @@ export function createKernel(screen: HTMLElement): {
 
 const AUTOSTART = "/etc/autostart";
 const AUTOSTART_DEFAULT =
-  "/System/Taskbar\n/System/Spotlight\n/System/launcher\n/ProgramFiles/calsync\n";
+  "/System/Taskbar\n/System/Spotlight\n/System/launcher\n/ProgramFiles/calsync\n/ProgramFiles/session\n";
 /** Every default this file has shipped with before, so an untouched one can be upgraded. */
-const AUTOSTART_PREVIOUS = ["/System/Taskbar\n/System/Spotlight\n/System/launcher\n"];
+const AUTOSTART_PREVIOUS = [
+  "/System/Taskbar\n/System/Spotlight\n/System/launcher\n",
+  "/System/Taskbar\n/System/Spotlight\n/System/launcher\n/ProgramFiles/calsync\n",
+];
 
 /**
  * /etc lives in browser storage, so the file survives reloads and is the

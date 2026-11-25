@@ -54,7 +54,6 @@ export interface SyscallTable {
     callerPid: Pid,
     options: WindowOptions,
   ): Promise<ElementWindowHandle>;
-  /** Over-the-wire `windows.create`: claim the window made at exec. */
   claimWindow(callerPid: Pid, options: WindowOptions): Promise<WindowId>;
   setWindowTitle(
     callerPid: Pid,
@@ -68,22 +67,19 @@ export interface SyscallTable {
     windowId: WindowId,
     minimized: boolean,
   ): Promise<void>;
-  /** Snap a window into a tile, maximize it or restore it (`windows.tile`). */
   tileWindow(
     callerPid: Pid,
     windowId: WindowId,
     target: SnapTarget | "restore",
   ): Promise<void>;
-  /** System processes only: user-space policy over snapping. */
   setWindowPolicy(callerPid: Pid, policy: WindowPolicy): Promise<void>;
   closeWindow(callerPid: Pid, windowId: WindowId): Promise<void>;
-  /** Your own window's size; an overlay is re-centred at it (`windows.setSize`). */
   setWindowSize(
     callerPid: Pid,
     windowId: WindowId,
     size: { width?: number; height?: number },
   ): Promise<void>;
-  /** Show or hide your own overlay (`windows.setVisible`). */
+  setWindowFrame(callerPid: Pid, windowId: WindowId, frame: Rect): Promise<void>;
   setWindowVisible(
     callerPid: Pid,
     windowId: WindowId,
@@ -112,7 +108,6 @@ export interface SyscallTable {
   removeStatusItem(callerPid: Pid, id: number): Promise<void>;
   listStatusItems(callerPid: Pid): Promise<StatusItemInfo[]>;
   activateStatusItem(callerPid: Pid, id: number, menuId: string): Promise<void>;
-  /** Privileged: be the one process a system hotkey goes to. */
   claimHotkey(callerPid: Pid, name: Hotkey, onPress: () => void): Promise<void>;
   list(callerPid: Pid): Promise<ProcessInfo[]>;
   getSignal(callerPid: Pid): ProcessSignal;

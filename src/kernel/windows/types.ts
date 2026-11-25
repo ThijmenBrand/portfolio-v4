@@ -126,6 +126,7 @@ export interface WindowInfo {
   state: WindowState;
   tile?: TileZone;
   frame: Rect;
+  restoreFrame?: Rect;
   focused: boolean;
 }
 

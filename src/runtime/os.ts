@@ -61,6 +61,7 @@ export function buildAppInterface(client: WireClient, pid: Pid): AppInterface {
       onCloseRequest: (windowId, callback) =>
         call("windows.onCloseRequest", windowId, callback),
       setSize: (windowId, size) => call("windows.setSize", windowId, size),
+      setFrame: (windowId, frame) => call("windows.setFrame", windowId, frame),
       setVisible: (windowId, visible) =>
         call("windows.setVisible", windowId, visible),
     },

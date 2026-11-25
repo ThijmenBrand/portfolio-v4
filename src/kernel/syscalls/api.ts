@@ -42,10 +42,6 @@ export interface AppInterface {
     ): Promise<number>;
     updateStatusItem(id: number, patch: Partial<StatusItemSpec>): Promise<void>;
     removeStatusItem(id: number): Promise<void>;
-    /**
-     * Privileged: be the process a system hotkey goes to (Ctrl/Cmd+K is
-     * "palette"), wherever the keyboard is. Held until exit; EBUSY if taken.
-     */
     claimHotkey(name: Hotkey, onPress: () => void): Promise<void>;
   };
   windows: {
@@ -53,25 +49,18 @@ export interface AppInterface {
     list(): Promise<WindowInfo[]>;
     focus(windowId: WindowId): Promise<void>;
     setMinimized(windowId: WindowId, minimized: boolean): Promise<void>;
-    /**
-     * Snap a window into a tile (left, top-right…), maximize it, or restore
-     * its floating frame. Yours, or any window of a process running as you.
-     */
     tile(windowId: WindowId, target: SnapTarget | "restore"): Promise<void>;
-    /** Id-based handle operations: what a WindowHandle is built from over the wire. */
     setTitle(windowId: WindowId, title: string): Promise<void>;
     close(windowId: WindowId): Promise<void>;
     onCloseRequest(windowId: WindowId, callback: () => void): Promise<void>;
-    /** Resize your own window. An overlay stays centred and fits the screen. */
     setSize(windowId: WindowId, size: { width?: number; height?: number }): Promise<void>;
-    /** Show or hide your own overlay (`surface: "overlay"`; it starts hidden). */
+    setFrame(windowId: WindowId, frame: Rect): Promise<void>;
     setVisible(windowId: WindowId, visible: boolean): Promise<void>;
   };
   process: {
     readonly signal: ProcessSignal;
     readonly pid: Pid;
     onSignal(signal: Signal, handler: () => void): Promise<() => void>;
-    /** `untraced`: also return when the child stops (reason "stopped"). */
     wait(pid: Pid, options?: WaitOptions): Promise<WaitStatus>;
     spawn(path: string, args?: string[], options?: SpawnOptions): Promise<Pid>;
     exit(code?: number): Promise<void>;
@@ -83,7 +72,6 @@ export interface AppInterface {
     env(): Promise<Record<string, string>>;
     setenv(name: string, value?: string): Promise<void>;
     ids(): Promise<Ids>;
-    /** New session and process group, led by this process. EPERM for a group leader. */
     setsid(): Promise<Pid>;
   };
   timers: {
@@ -97,11 +85,8 @@ export interface AppInterface {
     ): Promise<() => void>;
   };
   shell: {
-    /** Open an https: or mailto: link outside the OS (kernel-mediated). */
     openExternal(url: string): Promise<void>;
-    /** Read-only copy of the page URL. Untrusted: the link's author chose it. */
     location(): Promise<LocationInfo>;
-    /** Save a file the caller can read to the user's real Downloads. */
     download(path: string): Promise<void>;
   };
   api: {
@@ -143,24 +128,17 @@ export interface AppInterface {
     listFds(): Promise<FdInfo[]>;
     pipe(): Promise<PipeFds>;
     openpty(): Promise<{ master: number; slave: number }>;
-    /** Terminal control, on either end of a pty. ENOTTY on anything else. */
     tcgetattr(fd: number): Promise<Termios>;
     tcsetattr(fd: number, changes: Partial<Termios>): Promise<void>;
-    /** The group ^C, ^Z and resizes go to; null until someone sets it. */
     tcgetpgrp(fd: number): Promise<Pid | null>;
     tcsetpgrp(fd: number, pgid: Pid): Promise<void>;
     getWinsize(fd: number): Promise<Winsize>;
-    /** Sends SIGWINCH to the foreground group when the size changes. */
     setWinsize(fd: number, size: Winsize): Promise<void>;
   };
 }
 
 export interface SystemInterface extends AppInterface {
   api: AppInterface["api"] & {
-    /**
-     * Record who the backend session belongs to, by real uid, or clear it
-     * with undefined. Login's to call: everything private is gated on it.
-     */
     bindSession(uid: number | undefined): Promise<void>;
   };
   display: AppInterface["display"] & {
@@ -173,7 +151,6 @@ export interface SystemInterface extends AppInterface {
   };
   windows: Omit<AppInterface["windows"], "create"> & {
     create(options: WindowOptions): Promise<ElementWindowHandle>;
-    /** Policy over the kernel's snapping (the Taskbar sets it from Settings). */
     setPolicy(policy: WindowPolicy): Promise<void>;
   };
 }
@@ -209,6 +186,7 @@ export function bindSyscalls(target: SyscallTable, pid: Pid): SystemInterface {
       onCloseRequest: (windowId, callback) =>
         target.onWindowCloseRequest(pid, windowId, callback),
       setSize: (windowId, size) => target.setWindowSize(pid, windowId, size),
+      setFrame: (windowId, frame) => target.setWindowFrame(pid, windowId, frame),
       setVisible: (windowId, visible) =>
         target.setWindowVisible(pid, windowId, visible),
     },

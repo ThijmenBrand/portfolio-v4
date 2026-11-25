@@ -1,0 +1,24 @@
+session
+  Reopen your windows after the page is reloaded. A reload ends every
+  program, like a reboot; session remembers which ones had a window, where it
+  was, and whether it was maximized or tiled, and opens them again at login.
+
+  It starts by itself from /etc/autostart. While it runs it looks at your
+  desktop every couple of seconds and keeps ~/.config/session.json current.
+
+  Rules:
+    - A link with ?launch= names the apps to open, so nothing is restored.
+    - Windows your own ~/.config/autostart opened that were not in the saved
+      session are closed again: once a session is saved it wins, so a window
+      you closed stays closed. Ones that were saved are kept, not duplicated.
+    - With no saved session (a first visit, or after the file is deleted)
+      autostart decides what opens. A saved session with no windows is still
+      a session: everything stays closed.
+    - Frames are pulled back onto the screen if it is smaller than before.
+    - System programs (taskbar, launcher) are never saved: autostart owns them.
+    - Logging out does not overwrite the saved session.
+
+  To start fresh, delete ~/.config/session.json. To turn it off, remove its
+  line from /etc/autostart.
+
+  See also: wm, to arrange windows by hand.

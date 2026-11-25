@@ -11,7 +11,7 @@ export interface WindowManagerInterface {
   createWindow(options: WindowOptions, ownerPid: Pid): WindowRecord;
   setTitle(windowId: WindowId, title: string): void;
   resizeTo(windowId: WindowId, width: number, height: number): void;
-  /** Overlays only: show or hide it (EINVAL for a window). */
+  resizeWindow(windowId: WindowId, frame: Rect): void;
   setVisible(windowId: WindowId, visible: boolean): void;
   frameOf(windowId: WindowId): Rect;
   setAppearance(windowId: WindowId, options: WindowOptions): void;

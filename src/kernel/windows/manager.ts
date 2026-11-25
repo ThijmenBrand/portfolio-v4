@@ -590,6 +590,7 @@ export class WindowManager implements WindowManagerInterface {
       state: record.state,
       tile: record.tile,
       frame: { ...record.frame },
+      ...(record.restoreFrame && { restoreFrame: { ...record.restoreFrame } }),
       focused: this.focusedId === record.id,
     }));
   }
