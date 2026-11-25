@@ -110,6 +110,22 @@ dependency (dependencies first) and `import()`s the entry. That is why the
 **user** realm hosts have `blob:` in their `script-src` and the system hosts
 don't.
 
+## Autocomplete in Code
+
+Code completes the OS-specific parts of a program ([`apps/code/complete.ts`](../src/apps/code/complete.ts)):
+
+- `os.` → namespaces, `os.fs.` → calls with their signatures; `win.` for a
+  `const win = await os.windows.create(…)`.
+- `h`, `html`, `mount` anywhere in a `jsapp` file; accepting one adds it to the
+  `import { … } from "os:ui"` line (or creates the line).
+- Inside `from "…"`: `os:ui` and the files next to the current one.
+- `jsapp` / `nodeapp` in an empty file: the whole skeleton.
+
+Browser globals (`document.…`) come from CodeMirror itself. The `os` table is
+typed against `AppInterface`, so adding a syscall fails `tsc` until it is listed.
+It is not a type checker: values returned by calls (`document.querySelector(…)`)
+are untyped.
+
 ## The manifest
 
 Two equivalent forms; the build step turns the second into the first.

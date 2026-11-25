@@ -10,6 +10,7 @@ import { Terminal } from "../terminal/main";
 
 import { basicSetup } from "codemirror";
 import { indentWithTab } from "@codemirror/commands";
+import { acceptCompletion } from "@codemirror/autocomplete";
 import { EditorView, keymap, type ViewUpdate } from "@codemirror/view";
 import {
   EditorState,
@@ -25,6 +26,7 @@ import { html } from "@codemirror/lang-html";
 import { markdown } from "@codemirror/lang-markdown";
 import { python } from "@codemirror/lang-python";
 
+import { osCompletions } from "./complete";
 import codeHTML from "./code.html?raw";
 import { ensureConfigDir, followAccent } from "../../utils/settings";
 import { extOf, IMAGE_TYPES } from "../../utils/filetypes";
@@ -306,8 +308,15 @@ class Editor {
 
     this.shared = [
       basicSetup,
+      osCompletions({
+        currentPath: () => this.active?.path ?? null,
+        readdir: (path) => this.os.fs.readdir(path),
+      }),
       // basicSetup leaves Tab alone so it can still move focus; a code editor
       // wants it to indent, and Ctrl-m (Shift-Alt-m on Mac) frees it again.
+      // Tab accepts the open completion; with none open acceptCompletion
+      // returns false and Tab falls through to indenting.
+      Prec.high(keymap.of([{ key: "Tab", run: acceptCompletion }])),
       keymap.of([indentWithTab]),
       oneDark,
       Prec.highest(
