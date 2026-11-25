@@ -644,6 +644,8 @@ kbd {
 }
 .site:hover { border-color: var(--app-border-hi); background: var(--app-surface-hi); }
 .site-mono { display: grid; place-items: center; width: 21px; height: 21px; border-radius: 50%; color: #fff; font-size: 10.5px; font-weight: 700; }
+.site-mono.has-icon { background: #fff; }
+.site-mono img { width: 70%; height: 70%; object-fit: contain; }
 .site.is-add { padding: 0 11px; border-style: dashed; background: none; color: var(--app-text-dim); }
 .site.is-add svg { width: 11px; height: 11px; }
 .site-add input {

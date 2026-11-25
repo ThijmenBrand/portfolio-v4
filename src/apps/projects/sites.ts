@@ -2,7 +2,7 @@
 // a chip per site, keys 1 to 9 to open them, and a line to add one.
 import { guessName, hostOf, hueOf, initialOf, toUrl } from "../shortcuts/site";
 import { app } from "./state.ts";
-import { MAX_SHORTCUTS, type Area, type Project } from "./store.ts";
+import { MAX_SHORTCUTS, type Area, type Project, type Shortcut } from "./store.ts";
 import { button, el, heading, ICONS, withIcon } from "./ui.ts";
 
 /** The area or project whose "Add site" line is open; only ever one, on its own page. */
@@ -11,6 +11,33 @@ let addingSite = "";
 /** Opens an area's or project's site in a new tab. */
 export function openSite(url: string): void {
   void app.os.shell.openExternal(url).catch(() => app.status("Couldn't open that site."));
+}
+
+/** Sites whose icon is fetched or being fetched this run, so a miss isn't retried on every render. */
+const tried = new Set<string>();
+
+/** Fetches /favicon.ico once and keeps it with the shortcut. */
+function fetchIcon(owner: Area | Project, site: Shortcut): void {
+  const url = toUrl(site.url);
+  if (!url || url.protocol !== "https:" || tried.has(site.url)) return;
+  tried.add(site.url);
+  void app.os.net
+    .fetch(`https://${url.host}/favicon.ico`)
+    .then(({ status, contentType, body }) => {
+      if (status !== 200 || !contentType.startsWith("image/") || !body.length || body.length > 28_000) return;
+      let bin = "";
+      for (const byte of body) bin += String.fromCharCode(byte);
+      const icon = `data:${contentType.split(";")[0].trim()};base64,${btoa(bin)}`;
+      app.save(
+        app.projects.update((data) => {
+          const found = [...data.areas, ...data.projects].find((each) => each.id === owner.id);
+          const match = found?.shortcuts.find((each) => each.url === site.url);
+          if (match) match.icon = icon;
+        }),
+        "projects",
+      );
+    })
+    .catch(() => {});
 }
 
 export function shortcutsSection(owner: Area | Project): HTMLElement {
@@ -22,7 +49,14 @@ export function shortcutsSection(owner: Area | Project): HTMLElement {
     const chip = button("site", "", () => openSite(site.url));
     const url = toUrl(site.url);
     const mono = el("span", "site-mono", initialOf(site.name));
-    mono.style.background = `oklch(0.55 0.13 ${hueOf(url ? hostOf(url) : site.url)})`;
+    if (site.icon) {
+      mono.classList.add("has-icon");
+      mono.textContent = "";
+      mono.append(Object.assign(document.createElement("img"), { src: site.icon, alt: "" }));
+    } else {
+      mono.style.background = `oklch(0.55 0.13 ${hueOf(url ? hostOf(url) : site.url)})`;
+      fetchIcon(owner, site);
+    }
     chip.append(mono, el("span", "", site.name), el("kbd", "", String(index + 1)));
     chip.title = site.url;
     row.append(chip);

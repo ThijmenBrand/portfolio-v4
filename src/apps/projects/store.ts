@@ -42,6 +42,8 @@ export interface Shortcut {
   name: string;
   /** https: or mailto:, as toUrl() in ../shortcuts/site.ts accepts. */
   url: string;
+  /** The site's favicon as a data: URI, fetched once so the chip needs no network. */
+  icon?: string;
 }
 
 /** A course's tie to the calendar its sessions are in. */
@@ -233,7 +235,8 @@ function cleanShortcut(raw: unknown): Shortcut | null {
   // The Shortcuts app's own reading: only what openExternal will open survives.
   const url = toUrl(text(given.url, 2000))?.href;
   if (!url) return null;
-  return { name: text(given.name, 40) || url, url };
+  const icon = typeof given.icon === "string" && /^data:image\/[a-z.+-]+;base64,[\w+/=]+$/i.test(given.icon) && given.icon.length <= 40_000 ? given.icon : undefined;
+  return { name: text(given.name, 40) || url, url, ...(icon && { icon }) };
 }
 
 function cleanLink(raw: unknown): Link | undefined {

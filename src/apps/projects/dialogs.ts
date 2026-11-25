@@ -446,7 +446,8 @@ function shortcutsEditor(given: Shortcut[], about: string): { node: HTMLElement;
         if (!url.value.trim() && !label.value.trim()) return null;
         const parsed = toUrl(url.value);
         if (!parsed) return "bad";
-        return { name: label.value.trim() || guessName(parsed), url: parsed.href };
+        // The stored icon stays while the address does.
+        return { name: label.value.trim() || guessName(parsed), url: parsed.href, ...(parsed.href === shortcut.url && shortcut.icon && { icon: shortcut.icon }) };
       },
     });
   };
