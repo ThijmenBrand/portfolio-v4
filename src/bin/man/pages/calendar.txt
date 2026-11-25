@@ -38,4 +38,5 @@ calendar [file.ics]
   M/W/D/A switch view, R refresh, Esc close. Event chips are reachable by
   pointer; the grid itself takes one tab stop.
 
-  See also: upnext, for the same calendars in the top bar.
+  See also: upnext, for the same calendars in the top bar, and calsync, to
+  keep subscriptions synced in the background while this app is closed.

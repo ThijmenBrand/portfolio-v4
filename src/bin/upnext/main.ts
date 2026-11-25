@@ -4,7 +4,7 @@
 // and src/apps/<name> at the same /ProgramFiles/<name>, with the apps spread
 // last, so a src/bin/calendar would be silently shadowed by the Calendar app.
 //
-// Read-only. It never fetches: the Calendar app owns syncing, and this just
+// Read-only. It never fetches: the Calendar app (or calsync) owns syncing, and this just
 // reads what the app has already cached, plus the calendars of your own the
 // app keeps (see apps/calendar/mine.ts).
 import type { AppInterface } from "../../kernel/syscalls/api";

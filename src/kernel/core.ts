@@ -156,15 +156,31 @@ export function createKernel(screen: HTMLElement): {
       // System-wide startup programs, read by the desktop session (like
       // /etc/xdg/autostart or HKLM\...\Run). Per-user ones go in
       // ~/.config/autostart. One path per line, started in order.
-      await fs.writeFile(
-        "/etc/autostart",
-        new TextEncoder().encode(
-          "/System/Taskbar\n/System/Spotlight\n/System/launcher\n",
-        ),
-      );
+      await seedAutostart(fs);
       await os.process.spawn("/System/login");
     },
   };
+}
+
+const AUTOSTART = "/etc/autostart";
+const AUTOSTART_DEFAULT =
+  "/System/Taskbar\n/System/Spotlight\n/System/launcher\n/ProgramFiles/calsync\n";
+/** Every default this file has shipped with before, so an untouched one can be upgraded. */
+const AUTOSTART_PREVIOUS = ["/System/Taskbar\n/System/Spotlight\n/System/launcher\n"];
+
+/**
+ * /etc lives in browser storage, so the file survives reloads and is the
+ * user's to edit. Written only when it is missing, or still exactly an older
+ * default (so existing browsers pick up new system programs); an edited file
+ * is never touched.
+ */
+async function seedAutostart(fs: VFS): Promise<void> {
+  const current = await fs
+    .readFile(AUTOSTART)
+    .then((bytes) => new TextDecoder().decode(bytes))
+    .catch(() => null);
+  if (current !== null && !AUTOSTART_PREVIOUS.includes(current)) return;
+  await fs.writeFile(AUTOSTART, new TextEncoder().encode(AUTOSTART_DEFAULT));
 }
 
 /**

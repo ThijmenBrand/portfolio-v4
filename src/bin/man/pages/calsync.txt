@@ -1,0 +1,14 @@
+calsync
+  Keep your calendar subscriptions up to date in the background, so they are
+  fresh when you open the Calendar app and the top bar's upnext is never
+  showing yesterday's events. It has no window and no icon. It detaches from
+  the shell, so closing the terminal keeps it.
+
+  It starts at login on its own, from /etc/autostart; remove its line there
+  to stop that. Every minute it syncs the subscriptions that are due, by
+  the same schedule the Calendar app uses (the feed's own refresh interval,
+  with a longer wait after failures), and any that have no cached copy yet.
+
+  It reads the same subscription list and writes the same cache as the
+  Calendar app. Subscribe, rename and remove calendars in the app (see
+  `man calendar`); stop calsync with `kill` or from the Task Manager.

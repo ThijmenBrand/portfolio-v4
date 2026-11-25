@@ -5,4 +5,5 @@ upnext
   Calendar app.
 
   Read-only: it shows what Calendar has already fetched and never syncs on
-  its own. Subscribe to calendars in the Calendar app (see `man calendar`).
+  its own. Subscribe to calendars in the Calendar app (see `man calendar`),
+  and run calsync to keep them fetched while the app is closed.
