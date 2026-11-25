@@ -2,7 +2,7 @@
 // and a signed session cookie.
 //
 // ponytail: stateless sessions. Logout only clears the cookie; a stolen cookie
-// stays valid until it expires (12 hours). A new password, TOTP secret or SESSION_SECRET
+// stays valid until it expires (30 days). A new password, TOTP secret or SESSION_SECRET
 // kills every session at once (both key the HMAC); add a server-side session
 // store if single sessions ever need revoking.
 import { createHmac, timingSafeEqual } from "node:crypto";
@@ -49,7 +49,7 @@ if (!checkTotp) console.warn("OWNER_TOTP_SECRET not set: 2FA disabled (node serv
 /** True if the code is valid, or if 2FA isn't configured. */
 export const verifyTotp = (code: string) => checkTotp?.(code) ?? true;
 
-export const SESSION_MAX_AGE = 12 * 60 * 60; // seconds
+export const SESSION_MAX_AGE = 30 * 24 * 60 * 60; // seconds (30 days)
 
 // One scrypt at a time: each takes 16 MiB, and a few in parallel would push the
 // API past its container memory limit (an OOM restart also resets the login
